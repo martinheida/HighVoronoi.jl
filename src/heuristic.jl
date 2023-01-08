@@ -117,7 +117,7 @@ function heuristic_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,neigh,
         AREA_Int.*=0
         _Center = midpoint(bufferlist,emptylist,empty_vector,vector)
         _Center .+= vector # midpoint shifts the result by -vector, so we have to correct that ....
-        cout = 0
+        count = 0
         while !(isempty(bufferlist))
             _,r=pop!(bufferlist)
             AREA_Int .+= _function(r)
