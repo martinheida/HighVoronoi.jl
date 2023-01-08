@@ -117,11 +117,13 @@ function heuristic_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,neigh,
         AREA_Int.*=0
         _Center = midpoint(bufferlist,emptylist,empty_vector,vector)
         _Center .+= vector # midpoint shifts the result by -vector, so we have to correct that ....
+        cout = 0
         while !(isempty(bufferlist))
             _,r=pop!(bufferlist)
             AREA_Int .+= _function(r)
+            count += 1
         end
-        AREA_Int .*= (dim-1)/dim
+        AREA_Int .*= (dim-1)/(dim*count)
         AREA_Int .+= (1/dim).*_function(_Center) 
         thisarea = Full_Matrix.area[_Cell][k]
         AREA_Int .*= thisarea
