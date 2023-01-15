@@ -200,16 +200,11 @@ afterwards it calls the true integration function that is provided by the Integr
 function integrate_cell(vol::Bool,ar::Bool,bulk::Bool,inter::Bool, domain, _Cell, iterate, calculate, data, Integrator)
     new_neighbors=neighbors_of_cell(_Cell,Integrator.Integral.MESH.All_Verteces[_Cell],Integrator.Integral.MESH.Buffer_Verteces[_Cell])
     old_neighbors=Integrator.Integral.neighbors[_Cell]
-    #println(old_neighbors)
-    #println(new_neighbors)
     I=Integrator.Integral
     #isdefined(I.area,_Cell) && println("$(I.area[_Cell])")
     proto_bulk=prototype_bulk(Integrator)
     proto_interface=prototype_interface(Integrator)
     if (length(old_neighbors)>0)
-        #print(" ho  ")
-        k=1
-        lnn=length(new_neighbors)
         if bulk && (!(isdefined(I.bulk_integral,_Cell)) || length(I.bulk_integral[_Cell])!=length(proto_bulk))
             I.bulk_integral[_Cell]=proto_bulk
         end
@@ -219,27 +214,38 @@ function integrate_cell(vol::Bool,ar::Bool,bulk::Bool,inter::Bool, domain, _Cell
                 (I.interface_integral[_Cell])[i]=copy(proto_interface) 
             end
         end
-        while k<=lnn
-            if length(old_neighbors)<k || old_neighbors[k]>new_neighbors[k]
-                insert!(old_neighbors,k,new_neighbors[k])
-                ar && insert!((I.area[_Cell]),k,0)
-                inter && insert!((I.interface_integral[_Cell]),k,copy(proto_interface))
-                continue
-            end
-            if old_neighbors[k]==new_neighbors[k] 
-                if inter && length(I.interface_integral[_Cell][k])!=length(proto_interface) 
-                    I.interface_integral[_Cell][k]=copy(proto_interface)
-                end
-                k+=1
-                continue
-            end
-            if old_neighbors[k]<new_neighbors[k]
-                deleteat!(old_neighbors,k)
-                ar && deleteat!((I.area[_Cell]),k)
-                inter && deleteat!((I.interface_integral[_Cell]),k)
-            end
+        knn = 0
+        for n in new_neighbors
+            knn += (n in old_neighbors) ? 0 : 1
         end
-        deleteat!(old_neighbors,(lnn+1):(length(old_neighbors)))
+        if (knn>0) 
+            a_neighbors = zeros(Int64,knn)
+            a_areas = zeros(Int64,knn)
+            n_interface = Vector{Vector{Float64}}(undef,inter ? knn : 0)
+            for i in 1:(inter ? knn : 0)
+                n_interface[i]=copy(proto_interface) 
+            end
+            knn2 = 1
+            for n in new_neighbors
+                if !(n in old_neighbors)
+                    a_neighbors[knn2] = n
+                    knn2 += 1
+                end
+            end
+            areas = I.area[_Cell]
+            append!(old_neighbors,a_neighbors)
+            append!(areas,a_areas)
+            inter && append!(I.interface_integral[_Cell],n_interface)
+            for k in 1:length(old_neighbors)
+                if !(old_neighbors[k] in new_neighbors)
+                    old_neighbors[k] = length(data.extended_xs)+data.size
+                end
+            end
+            quicksort!(old_neighbors, ar ? areas : old_neighbors, inter ? I.interface_integral[_Cell] : old_neighbors)
+            lnn = length(new_neighbors)
+            resize!(old_neighbors,lnn)
+            resize!(areas,lnn)
+            inter && resize!(I.interface_integral[_Cell],lnn)
     else
         old_neighbors=new_neighbors
         Integrator.Integral.neighbors[_Cell]=new_neighbors
