@@ -1,3 +1,30 @@
+function _old_neighbors_of_cell(_Cell,verteces,condition = r->true)
+    neighbors = zeros(Int64,10)
+#    counts = zeros(Int64,10)
+    position = 1
+    __max = 10
+    for (sigma,r) in verteces
+        for i in sigma
+            if i!=_Cell && (condition(r))
+                f = findfirst(x->(x==i),neighbors)
+                if typeof(f)==Nothing
+                    f = position
+                    neighbors[position] = i
+                    position += 1
+                    if position>__max
+                        __max += 10
+                        append!(neighbors,zeros(Int64,10))
+#                        append!(counts,zeros(Int64,10))
+                    end
+                end
+            end
+        end
+    end
+    resize!(neighbors, findfirst(x->(x==0),neighbors)-1)
+    sort!(neighbors)
+    return neighbors
+end
+
 function polygon_volume_strong(area,volume,dim,maxindex,alllists,child_indeces,boundaries,emptydict)
     # flexible data structure to store the sublists of verteces at each iteration step 1...dim-1
     listarray=(typeof(emptydict))[] # will store to each remaining neighbor N a sublist of verteces 
@@ -26,7 +53,7 @@ function polygon_volume_strong(area,volume,dim,maxindex,alllists,child_indeces,b
             sub=subs[i]
             taboo.*=0
             verteces=alllists[_Cell][sub]
-            neigh=neighbors_of_cell(_Cell,verteces)
+            neigh=_old_neighbors_of_cell(_Cell,verteces)
             #println("$_Cell,$sub, $neigh, $(keys(boundaries[_Cell])), $(keys(boundaries[sub]))")
             _length=length(neigh)
             iterative_polygon_volume_strong(area,dists,volume,_Cell,sub,dim,maxindex,neigh,_length,verteces,emptydict,child_indeces,subs,boundaries,all_determinants,all_dd,empty_vector,taboo)
@@ -48,7 +75,7 @@ function polygon_volume_strong(area,volume,dim,maxindex,alllists,child_indeces,b
         end
         volumes[count] = sparsevec( allsubs[_Cell], my_volumes )
     end
-    return sparsevec(copy(child_indeces),volumes)
+    return copy(child_indeces),volumes
 end
 
 

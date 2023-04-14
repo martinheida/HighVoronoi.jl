@@ -121,7 +121,7 @@ function heuristic_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,neigh,
         while !(isempty(bufferlist))
             _,r=pop!(bufferlist)
             AREA_Int .+= _function(r)
-            count += 1
+            count+=1
         end
         AREA_Int .*= (dim-1)/(dim*count)
         AREA_Int .+= (1/dim).*_function(_Center) 

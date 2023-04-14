@@ -30,12 +30,12 @@ function vp_delete_line_content()
 end
 
 function vp_line_up()
-    print("\u1b[2K\u1b[1F")
+    print("\u1b[2K\u1b[1A\u1b[200D")
 end
 
 function vp_line_up(K)
     for i in 1:K
-        print("\u1b[2K\u1b[1F")
+        print("\u1b[2K\u1b[1A\u1b[200D")
     end
 end
 
@@ -48,7 +48,8 @@ end
 
 function vp_print(o1::Int,c;crayon=nothing)
     if typeof(crayon)==Nothing
-        print("\u1b[0E\u1b[$(o1)C")    
+#        print("\u1b[0E\u1b[$(o1)C")    
+        print("\u1b[200D\u1b[$(o1)C")    
         print(c)
     else
         print(crayon)

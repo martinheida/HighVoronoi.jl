@@ -1,3 +1,6 @@
+#function remove_symbol(sym, kwargs)
+
+
 function FVevaluate_boundary(f)
     result(;kw...)=f(kw[:x_j])
     return result
@@ -40,7 +43,7 @@ function VoronoiFVProblem_validate(;discretefunctions=nothing, integralfunctions
     typeof(discretefunctions)!=Nothing && !(typeof(discretefunctions)<:NamedTuple) && error("The field 'discretefunctions' must be given as a NamedTuple")
 end
 
-function VoronoiFVProblem(Geo::VoronoiGeometry; discretefunctions=nothing, integralfunctions=nothing, fluxes=nothing, rhs_functions=nothing, parent=nothing, integrator=Integrator_Type(Geo.Integrator), mc_accurate=(1000,100,20))
+function VoronoiFVProblem(Geo::VoronoiGeometry; discretefunctions=nothing, integralfunctions=nothing, fluxes=nothing, rhs_functions=nothing, parent=nothing, integrator=Integrator_Type(Geo.Integrator), kwargs...)
     VoronoiFVProblem_validate(discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions)
     if !(Integrator_Type(Geo.Integrator) in [VI_HEURISTIC,VI_MONTECARLO,VI_POLYGON])
         error("The Geometry comes up with an integrator of type $(Integrator_Name(Geo.Integrator)). This type does not provide relyable volume or area data.")
@@ -108,12 +111,12 @@ function VoronoiFVProblem(Geo::VoronoiGeometry; discretefunctions=nothing, integ
 
     coefficients = VoronoiFVProblemCoefficients(data, Geo.domain.boundary, fluxes=fluxes, functions=rhs_functions, my_data_i=my_data_i, my_data_j=my_data_j)
 
-    parameters = (discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions, integrator=integrator, mc_accurate=mc_accurate)
+    parameters = (; kwargs..., discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions, integrator=integrator)
 
     return VoronoiFVProblem{typeof(coefficients),typeof(parent),typeof(pd),typeof(pu),typeof(parameters),typeof(my_data_i),typeof(my_data_j)}(Geo,coefficients,parent,pd,pu,parameters,data,my_data_i,my_data_j)
 end
 
-function VoronoiFVProblem(points, boundary; discretefunctions=nothing, integralfunctions=nothing, fluxes=nothing, rhs_functions=nothing, integrator=VI_POLYGON, mc_accurate=(1000,100,20))
+function VoronoiFVProblem(points, boundary=Boundary(); discretefunctions=nothing, integralfunctions=nothing, fluxes=nothing, rhs_functions=nothing, integrator=VI_POLYGON, integrand=nothing, kwargs...)
     VoronoiFVProblem_validate(discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions)
     !(integrator in [VI_POLYGON,VI_MONTECARLO]) && error("Calculating area or volume is not provided by $(Integrator_Name(integrator)).")
     i_functions = nothing
@@ -124,18 +127,19 @@ function VoronoiFVProblem(points, boundary; discretefunctions=nothing, integralf
         i_functions = i_composer.functions
     end
 
-    Geo=VoronoiGeometry(points,boundary,integrand=i_functions,integrator=integrator,mc_accurate=mc_accurate)
+    Geo = VoronoiGeometry(points,boundary; kwargs..., integrand=i_functions, integrator=integrator)
 
-    return VoronoiFVProblem(Geo,discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions, mc_accurate=mc_accurate)
+    return VoronoiFVProblem(Geo,discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions ; kwargs..., integrand=i_functions, integrator=integrator)
 end
 
 
 """
     VoronoiFVProblem(Geo::VoronoiGeometry; parent = nothing)  # first variant
-    VoronoiFVProblem(points, boundary; integrator = VI_POLYGON, mc_accurate = (1000,100,20))      # second variant
+    VoronoiFVProblem(points, boundary; integrator = VI_POLYGON, kwargs...)      # second variant
     
 Generates Finite Volume data for fluxes and right hand sides given either a `VoronoiGeometry` object or a set of points and a boundary, 
 which will serve to internally create a `VoronoiGeometry`. Allows for the following parameters:
+- `kwargs...` : arguments that are not listed explicitly below will be passed to the VoronoiGeometry. `integrand` will be overwritten. 
 - `parent`: If `parent` is generated from `Geo_p` and `Geo` is a refined version of `Geo_p` this parameter will initiate the calculation 
     of an ``L^{1}`` projection operator between the spaces of piecewise constant functions on the respective Voronoi Tessellations.  
 - `discretefunctions=nothing` : A named tuple of form `(alpha=x->norm(x),f=x->-x,)`. Will be evaluated pointwise.
@@ -151,7 +155,7 @@ which will serve to internally create a `VoronoiGeometry`. Allows for the follow
             # some code
             return something_i, something_j
         end
-    Refer to the examples in the documentation. 
+    Refer to the examples in the documentation.
 !!! note "standard settings"
     if the array of Neumann-planes is not provided, the standard list given in `boundary` resp. the boundary in `Geo` will be used. 
 - `rhs_functions=nothing`: same as for fluxes. However, functions can only access the variables\n

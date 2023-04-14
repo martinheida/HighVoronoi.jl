@@ -345,26 +345,48 @@ function reduce_to_periodic(B::Boundary)
     return Boundary(new_planes,B.convex)
 end
 
-function extend_periodic_part(B::Boundary,xs::Points)
-    new_planes=Vector{Plane}(undef,length(B.planes))
-    lxs=length(xs)
-
+function remove_periodicity(B::Boundary)
+    new_planes = Vector{Plane}(undef,length(B.planes))
     for i in 1:length(B.planes)
-        if B.planes[i].BC>0
-            bestpos=0
-            d=0.0
-            for j in 1:lxs
-                d=max(d,dot(B.planes[i].normal, xs[j] - (bestpos==0 ? B.planes[i].base : xs[bestpos])))
-            end
-            newbase=copy(B.planes[i].base)
-            #newbase .*= 0
-            newbase .+= (1.01*d) .* B.planes[i].normal
-            new_planes[i]=Plane(newbase,B.planes[i].normal,B.planes[i].BC) 
-        else
-            new_planes[i]=B.planes[i]
-        end
+        new_planes[i]=Plane(B.planes[i].base ,B.planes[i].normal,0) 
     end
-    return Boundary(new_planes,B.convex)    
+    return Boundary(new_planes,B.convex)   
+end
+
+function extend_periodic_part(B::Boundary,xs::Points,indeces = false)
+    if indeces
+        lxs = length(xs)
+        _indeces = collect(1:length(B)) 
+        for i in 1:length(B.planes)
+            if B.planes[i].BC>0
+                #bestpos=0
+                d=0.0
+                for j in 1:lxs
+                    #d=max(d,dot(B.planes[i].normal, xs[j] - (bestpos==0 ? B.planes[i].base : xs[bestpos])))
+                    d=max(d,dot(B.planes[i].normal, xs[j] - B.planes[i].base ))
+                end
+                if d>0.0
+                    B.planes[i].base .+= (1.01*d) .* B.planes[i].normal
+                else
+                    _indeces[i] = 0
+                end
+            else
+                _indeces[i] = 0
+            end
+        end
+        return keepat!(_indeces,map(x->(x!=0),_indeces))        
+    else
+        new_planes = Vector{Plane}(undef,length(B.planes))
+        for i in 1:length(B.planes)
+            if B.planes[i].BC>0
+                new_base = B.planes[i].base+B.planes[i].normal*dot(B.planes[i].normal,B.planes[i].base-B.planes[B.planes[i].BC].base)
+                new_planes[i]=Plane(new_base ,B.planes[i].normal,B.planes[i].BC) 
+            else
+                new_planes[i]=B.planes[i]
+            end
+        end
+        return Boundary(new_planes,B.convex)   
+    end 
 end
 
 
@@ -374,6 +396,32 @@ function in(x,B::Boundary)
     for i in 1:l
         plane=B.planes[i]
         if dot(plane.base-x,plane.normal)<0 return false end
+    end
+    return true
+end
+
+function adjust_boundary_vertex(x,B::Boundary,sig,lmesh,lsig=length(sig),tolerance=1.0E-10)
+    x2 = x
+    for i in lsig:-1:1
+        sig[i]<=lmesh && break
+        plane=B.planes[sig[i]-lmesh]
+        my_prod = dot(plane.base-x2,plane.normal)
+        if my_prod<0 && my_prod>-tolerance 
+            x2 = x2 + 2*my_prod*plane.normal 
+        end
+    end
+    return x2
+end
+
+function show_in(x,B::Boundary)
+    l=length(B.planes)
+    l==0 && return true
+    for i in 1:l
+        plane=B.planes[i]
+        if dot(plane.base-x,plane.normal)<0 
+            println(i,": ",plane.base-x," , ",plane.normal," , ",dot(plane.base-x,plane.normal))
+            return false 
+        end
     end
     return true
 end

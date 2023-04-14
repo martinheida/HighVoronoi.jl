@@ -9,12 +9,14 @@ using SparseArrays
 using StaticArrays
 using Crayons
 using JLD2
+using Polyhedra
+using GLPK
 
 # data storage
 include("composer.jl")
 include("mesh.jl")
-include("integral.jl")
 include("boundary.jl")
+include("integral.jl")
 
 # handling mesh on the level of the user
 include("domain.jl")
@@ -32,9 +34,12 @@ include("heuristic.jl")
 include("mcintegrator.jl")
 
 # calculate voronoi mesh on the very lowes levels
+include("edgeiterate.jl")
 include("raycast.jl")
 include("sysvoronoi.jl")
 include("meshrefine.jl")
+include("periodicmesh.jl")
+include("cubicmesh.jl")
 
 # needed for exact and fast volume calculation in the polyintegrator algorithms
 include("Leibnitzrule.jl")
@@ -42,7 +47,9 @@ include("Leibnitzrule.jl")
 # L1 projection onto subgrids
 include("polygonvolume.jl")
 include("l1projection.jl")
+include("l1projection_fast.jl")
 include("finitevolume.jl")
+include("statistics.jl")
 
 # What will be exported:
 export VoronoiNodes
@@ -57,6 +64,9 @@ export VoronoiFV
 
 export refine!
 export refine
+export indeces_in_subset
+export substitute!
+export interactionmatrix
 
 export Boundary
 export cuboid
@@ -74,4 +84,8 @@ export FunctionComposer
 export VoronoiFVProblem
 export linearVoronoiFVProblem
 export FVevaluate_boundary
+
+export SearchGeneral
+export SearchExpectRandom
+export SearchRandom
 end # module

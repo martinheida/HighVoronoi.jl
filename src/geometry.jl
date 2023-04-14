@@ -20,8 +20,9 @@ struct VoronoiGeometry{T,TT}
     domain::Discrete_Domain
     integrand::TT
     refined::Vector{Bool}
-    function VoronoiGeometry{T,TT}(a1,a2,a3,a4,a5,a6) where {T,TT}
-        return new(a1,a2,a3,a4,a5,a6,[false])
+    searcher::NamedTuple
+    function VoronoiGeometry{T,TT}(a1,a2,a3,a4,a5,a6,a7) where {T,TT}
+        return new(a1,a2,a3,a4,a5,a6,[false],a7)
     end
 end
 
@@ -44,6 +45,7 @@ You have the following optional commands:
     * `VI_HEURISTIC`:
 - `integrand`: This is a function `f(x)` depending on one spatial variable `x` returning a `Vector{Float64}`. 
     The integrated values will be provided for each cell and for each pair of neighbors, i.e. for each interface
+- `periodic_grid`: This will initiate a special internal routine to fastly create a periodic grid. Look up the section in the documentation. 
 
 # Advanced methods
 
@@ -53,6 +55,8 @@ You have the following optional commands:
 Loads a Voronoi mesh from the `file` or copies it from the original data `VG`. If `integrator` is not provided, it will use the original integrator stored to the file. 
 In the second case, if integrand is not provided explicitly, it will use `integrand = VG.integrand` as standard.
 Additionally it has the following options:
+- `_myopen=jldopen`: the method to use to open the file. See the section on `write_jld`.
+- `offset`: See the section on `write_jld`.
 - `integrate=false`: This will or will not call the integration method after loading/copying the data. Makes sense for using `VI_HEURISTIC` together with
         `volume=true`, `area=true` and providing values for `integrand` and `integrand`. If `integrand != nothing` but `bulk==false` or `interface==false` 
         this parameter will internally be set `true`.
@@ -63,68 +67,69 @@ Additionally it has the following options:
 - `interface=false`: Load integrated function values on the interfaces. When set `true` and `integrand=f` is provided 
     the method  will compare the dimension of `f` and of the stored data.
 
-    VoronoiGeometry(matrix_data,p::PeriodicVoronoiBasis) 
-    
-Takes `matrix_data`, which is a matrix with `dimension` rows and `numberOfNodes` points and `p=PeriodicVoronoiBasis()`. It then requires the following keyword arguments:
-- `dimensions = ones(Float64,size(matrix_data,1))`: all points in `matrix_data` are assumed to be placed inside the box given by the origin and this point.
-- `stretchfactors = ones(Float64,size(matrix_data,1)))`: the data is internally multiplied by `diagm(stretchfactors)`
-
-The overall purpose of this method is to generate a periodized version of the block `dimensions` with points `matrix_data` in each space dimension. The resulting data lies within 
-the box given by the origin and `2 * diagm(stretchfactors) * dimensions`. Furthermore, a Voronoi tessellation of this box is calculated with fixed (Dirichlet-) boundary. Volumes and areas 
-are obtained using VI_POLYGON.
-
-The result can serve as initial data for the following method:
-
 
 """
 VoronoiGeometry()
 
-function VoronoiGeometry(xs::Points,b=Boundary(); integrator=VI_GEOMETRY,integrand=nothing,mc_accurate=(1000,100,20),periodic_grid=nothing)
+function VoronoiGeometry(xs::Points,b=Boundary(); search_settings=[], integrator=VI_GEOMETRY,integrand=nothing,mc_accurate=(1000,100,20),periodic_grid=nothing)
     if typeof(periodic_grid)!=Nothing
-        return PeriodicVoronoiGeometry(xs,integrator=integrator,integrand=integrand,mc_accurate=mc_accurate;adjust_periodic(points=xs,domain=b,parameter=periodic_grid)...)
+        return PeriodicVoronoiGeometry(xs,integrator=integrator,integrand=integrand,mc_accurate=mc_accurate,search_settings=search_settings;periodic_grid...)
     else
+        integrator = integrator in [VI_HEURISTIC_INTERNAL,VI_HEURISTIC_CUBE] ? VI_POLYGON : integrator
         println(Crayon(foreground=:red,underline=true), "Initialize bulk mesh with $(length(xs)) points",Crayon(reset=true))
-        I,_=voronoi(xs,searcher=Raycast(xs,domain=b),intro="")
+        search=RaycastParameter(search_settings,(domain=b,))
+        I,searcher=voronoi(xs,searcher=Raycast(xs;search...),intro="")
+        #println(plausible(I.Integral.MESH,searcher))
         println(Crayon(foreground=:red,underline=true), "Initialize mesh on boundary based on boundary conditions",Crayon(reset=true))
-        _domain,_Inte=Create_Discrete_Domain(I.Integral,b,intro="") # periodized version including all boundary data 
+        _domain,_Inte,search = Create_Discrete_Domain(I.Integral,b,intro="",search_settings=search) # periodized version including all boundary data 
+        #println(I.Integral.MESH.nodes)
         I2=Integrator(I.Integral.MESH,type=integrator,integrand=integrand,mc_accurate=mc_accurate)
         integrate(backup_Integrator(I2,true),domain=b,relevant=(1+length(_domain.references)):(length(I.Integral)+length(b)))
-        return VoronoiGeometry{typeof(I2),typeof(integrand)}(I2,Int64[],xs,I.Integral.MESH,_domain,integrand)
+        return VoronoiGeometry{typeof(I2),typeof(integrand)}(I2,Int64[],xs,I.Integral.MESH,_domain,integrand,search)
     end
 end
 
-function VoronoiGeometry(file::String; integrate=false, volume=true,area=true,bulk=false,interface=false,integrator=-1,integrand=nothing,mc_accurate=(1000,100,20))
+function VoronoiGeometry(file::String; _myopen=jldopen, offset="", search_settings=[], integrate=false, volume=true,area=true,bulk=false,interface=false,integrator=-1,integrand=nothing,mc_accurate=(1000,100,20),periodic_grid=nothing)
+    if typeof(periodic_grid)!=Nothing
+        println("The parameter 'periodic_grid' makes no sense when a geometry is loaded...")
+    end
     println(Crayon(foreground=:red,underline=true), "Load geometry from file $file:",Crayon(reset=true))
+    integrator = integrator in [VI_HEURISTIC_INTERNAL,VI_HEURISTIC_CUBE] ? VI_POLYGON : integrator
     _integrator=integrator
     _integrate = integrate || (typeof(integrand)!=Nothing && (bulk==false || interface==false))
-    jldopen(file, "r") do myfile
-        VI=read(myfile, "type")
+    I2=UndefInitializer
+    _domain=UndefInitializer
+    xs=UndefInitializer
+    mesh=UndefInitializer
+    _myopen(file, "r") do myfile
+        VI=read(myfile, offset*"type")
         if integrator<0
             _integrator=VI
             println("    take Integrator type $(Integrator_Name(VI)) from stored file...")
         elseif (VI!=integrator)
             println("    WARNING: stored Integrator type $(Integrator_Name(VI)) does not match new type $(Integrator_Name(integrator)).")
         end
+        mesh=load_MESH(myfile,offset)
+        xs=mesh.nodes
+        println("    mesh with $(length(xs)) nodes loaded")
+        _domain=load_Domain(myfile,offset)
+        vp_print(_domain.boundary,offset=4)
+        println("    Load Data: ", volume ? "volumes, " : "", area ? "areas, " : "", bulk ? "bulk integrals, " : "", interface ? "interface integrals, " : "")
+        I2=Integrator(mesh,type=_integrator,integrand=integrand,mc_accurate=mc_accurate)
+        load_Integral(myfile,I2,volume,area,bulk,interface,offset)
     end
-    mesh=load_MESH(file)
-    xs=mesh.nodes
-    println("    mesh with $(length(xs)) nodes loaded")
-    _domain=load_Domain(file)
-    vp_print(_domain.boundary,offset=4)
-    println("    Load Data: ", volume ? "volumes, " : "", area ? "areas, " : "", bulk ? "bulk integrals, " : "", interface ? "interface integrals, " : "")
-    I2=Integrator(mesh,type=_integrator,integrand=integrand,mc_accurate=mc_accurate)
-    load_Integral(file,I2,volume,area,bulk,interface)
     if (_integrate)
         println("    Start manual integration:")
         HighVoronoi.integrate(I2,domain=_domain.boundary,relevant=(1+length(_domain.references)):(length(I2.Integral)+length(_domain.boundary)))
     end
-    return VoronoiGeometry{typeof(I2),typeof(integrand)}(I2,Int64[],xs,mesh,_domain,integrand)
+    return VoronoiGeometry{typeof(I2),typeof(integrand)}(I2,Int64[],xs,mesh,_domain,integrand,RaycastParameter(search_settings,(domain=_domain.internal_boundary,)))
 end
 
-function VoronoiGeometry(VG::VoronoiGeometry; periodic_grid=nothing, integrate=false, volume=true,area=true,bulk=false,interface=false,integrator=Integrator_Type(VG.Integrator),integrand=VG.integrand,mc_accurate=(1000,100,20))
+function VoronoiGeometry(VG::VoronoiGeometry; search_settings=[], periodic_grid=nothing, integrate=false, volume=true,area=true,bulk=false,interface=false,integrator=Integrator_Type(VG.Integrator),integrand=VG.integrand,mc_accurate=(1000,100,20))
     if typeof(periodic_grid)!=Nothing
         return VG #PeriodicVoronoiGeometry(VG,integrator=integrator,integrand=integrand,mc_accurate=mc_accurate;adjust_periodic(points=VoronoiData(VG).nodes,domain=VG.domain.boundary,parameter=periodic_grid)...)
     else
+        integrator = integrator in [VI_HEURISTIC_INTERNAL,VI_HEURISTIC_CUBE] ? VI_POLYGON : integrator
         println(Crayon(foreground=:red,underline=true), "Copy geometry ...",Crayon(reset=true))
         mesh = copy(VG.Integrator.Integral.MESH)
         xs=mesh.nodes
@@ -140,60 +145,10 @@ function VoronoiGeometry(VG::VoronoiGeometry; periodic_grid=nothing, integrate=f
             println("    Start manual integration:")
             HighVoronoi.integrate(I2,domain=_domain.boundary,relevant=(1+length(_domain.references)):(length(I2.Integral)+length(_domain.boundary)))
         end
-        return VoronoiGeometry{typeof(I2),typeof(integrand)}(I2,Int64[],xs,mesh,_domain,integrand)
+        return VoronoiGeometry{typeof(I2),typeof(integrand)}(I2,Int64[],xs,mesh,_domain,integrand,RaycastParameter(VG.searcher,search_settings))
     end
 end
 
-###############################################################################################################################
-
-## Periodic Grids...
-
-###############################################################################################################################
-
-
-function adjust_periodic(points=xs,domain=b,parameter=periodic_grid)
-end
-
-function PeriodicVoronoiGeometry(matrix_data::Union{Matrix,VoronoiGeometry}; sample=false, periodic=collect(1:size(matrix_data,1)), repeatdata=2*ones(Float64,size(matrix_data,1)), dimensions=ones(Float64,size(matrix_data,1)), data_dimensions=ones(Float64,size(matrix_data,1)), integrator=VI_POLYGON,integrand=nothing,mc_accurate=(1000,100,20))
-    _sample = ( sample && (typeof(matrix_data)<:Matrix) ) 
-    if _sample
-        dim = size(matrix_data,1)
-        data = matrix_data
-        stretchmatrix = diagm(dimensions)
-        offsetvector = zeros(Float64,dim)
-        xs=vecvec(reduce(hcat,iterativeperiodicgeodata(data,offsetvector,stretchmatrix,1,dim)...))
-        return VoronoiGeometry(xs, cuboid(dim,dimensions=2*stretchmatrix*ones(Float64,dim),periodic=Int64[]), integrator = integrator, integrand=integrand, mc_accurate=mc_accurate)
-    else
-        VG = matrix_data
-        if (typeof(matrixdata)<:Matrix)
-            dim = size(matrix_data,1)
-            stretchmatrix = diagm(dimensions./(data_dimensions.*repeat))
-            data = stretchmatrix * deepcopy(matrix_data)
-            _integrand = typeof(integrand)!=Nothing && integrator!=VI_HEURISTIC ? stack_function(integrand,repeatdata) : nothing
-            dimensions2 = stretchmatrix * data_dimensions
-            _integrator = integrator==VI_HEURISTIC ? VI_Polygon : integrator
-            VG = VoronoiGeometry(data, sample=true, dimensions=dimensions2, integrator = _integrator, integrand=_integrand, mc_accurate=mc_accurate )
-        end
-
-    end
-end
-
-function stack_function(integrand,repeatdata)
-    return integrand
-end
-
-function iterativeperiodicgeodata(data,shift,stretch,mydim,dim)
-    if mydim>dim
-        return (data.+(stretch*shift),)
-    else
-        shift[mydim]=0.0
-        d1 = iterativeperiodicgeodata(data,shift,stretch,mydim+1,dim)
-        shift[mydim]=1.0
-        d2 = iterativeperiodicgeodata(data,shift,stretch,mydim+1,dim)
-        shift[mydim]=0.0
-        return (d1...,d2...)
-    end
-end
 
 
 ###############################################################################################################################
@@ -209,11 +164,15 @@ function refine!(VG::VoronoiGeometry,xs::Points,update=true)
     _modified=systematic_refine!(VG.domain,VG.Integrator,xs,intro="")
     VG.refined[1]=true
     if (update)
+        println("updating...")
         println(Crayon(foreground=:red,underline=true), "Start integration on refined cells:",Crayon(reset=true))
         _relevant=Base.intersect(_modified,collect((1+length(VG.domain.references)):(length(VG.Integrator.Integral.MESH))))
         append!(_relevant,collect((length(VG.Integrator.Integral.MESH)+1):(length(VG.Integrator.Integral.MESH)+length(VG.domain.boundary))))
-        integrate(backup_Integrator(VG.Integrator,VG.refined[1]),domain=VG.domain.boundary, modified=_modified ,relevant=_relevant)
+#        println(_modified)
+#        println(_relevant)
+        integrate(backup_Integrator(VG.Integrator,VG.refined[1]),domain=VG.domain.internal_boundary, modified=_modified ,relevant=_relevant)
         VG.refined[1]=false
+        return VG
     end
     return VG
 end
@@ -222,16 +181,172 @@ function refine(VG::VoronoiGeometry,xs::Points,update=true)
     return refine!(copy(VG),xs,update)
 end
 
+function periodic_bc_filterfunction(sig,periodic) 
+    for i in length(sig):-1:1
+        (sig[i]<periodic[1]) && (return true)
+        (sig[i] in periodic) && (return false)
+    end
+    return true
+end
+
+"""
+    indeces_in_subset(VG::VoronoiGeometry,B::Boundary)
+
+returns all indeces of `VG` lying within `B`.
+"""
+function indeces_in_subset(VG::VoronoiGeometry,B::Boundary)
+    nodes = VG.Integrator.Integral.MESH.nodes
+    lref = length(VG.domain.references)
+    li = length(VG.Integrator.Integral)
+    indeces = collect(1:(li-lref))
+    for i in (lref+1):li
+        (!(nodes[i] in B)) && (indeces[i-lref] = 0)
+    end
+    return filter!(i->i!=0,indeces)
+end
+
+function _not_in_grid(sig,r,tree,nodes,skip=x->false)
+    dist2 = nn(tree,r,skip)[2]
+    dist1 = sum(abs2,r-nodes[sig[1]])
+    return (dist2^2-dist1)/dist1>1.0E-10
+end
+
+function shift_boundarynodes(sig,lmesh,offset)
+    for k in 1:length(sig) 
+        n = sig[k]
+        if n> lmesh
+            sig[k] += offset
+        end
+    end
+end
+
+"""
+    substitute!(VG::VoronoiGeometry,VG2::VoronoiGeometry,indeces)
+
+Takes the nodes `indeces` from `VG2` and erases all nodes from `VG` within the VornoiCells of `indeces`. Then plugs the nodes 
+`indeces` into `VG` and generates the full mesh for this new setting.
+"""
+function substitute!(VG::VoronoiGeometry,VG2::VoronoiGeometry,indeces,update=true)
+    if !(typeof(indeces)<:AbstractVector{Int64})
+        if typeof(indeces)<:Function
+            indeces = indeces(VG2.Integrator.Integral.MESH)
+        else
+            error("you need to provide either a vector of indeces or a function generating indeces from a Voronoi_MESH in the third argument")
+        end
+    end
+    make_consistent!(VG.Integrator)
+    make_consistent!(VG2.Integrator)
+    # find all internally mirrored points:
+    indeces = copy(indeces)
+    indeces .+= length(VG2.domain.references)
+    unique!(sort!(prepend!(indeces,filter!(x->x!=0,map!(i->VG2.domain.references[i] in indeces ? i : 0, Vector{Int64}(undef,length(VG2.domain.references)),1:length(VG2.domain.references))))))    
+    Integral1 = VG.Integrator.Integral
+    Integral2 = copy(VG2.Integrator.Integral)
+    nodes1 = Integral1.MESH.nodes
+    nodes2 = Integral2.MESH.nodes
+    references1 = VG.domain.references
+    references2 = copy(VG2.domain.references)
+    reference_shifts1 = VG.domain.reference_shifts
+    reference_shifts2 = copy(VG2.domain.reference_shifts)
+    
+    # extract periodic boundaries:
+    periodic = filter!(n->VG.domain.boundary.planes[n].BC>0,collect(1:(length(VG.domain.boundary))))
+
+    ln1 = length(nodes1)
+    ln2 = length(nodes2)
+
+    keeps1 = BitVector(undef,ln1)
+    modified1 = BitVector(undef,ln1)
+    keeps2 = BitVector(undef,ln2)
+    modified2 = BitVector(undef,ln2)
+    tree2 = KDTree(nodes2)
+    not_in_grid_2(x) = !(nn(tree2,x)[1] in indeces)
+    #println(indeces)
+    #draw2D(VG,"test-reduce-1.mp")
+    filter!(n->not_in_grid_2(nodes1[n]), (sig,r,m)->_not_in_grid(sig,r,tree2,nodes1,n->!(n in indeces)), Integral1, references1, reference_shifts1, length(VG.domain.boundary), keeps1, modified1 )
+
+    #draw2D(VG,"test-reduce-2.mp")
+
+    tree1 = KDTree(nodes1)
+#    not_in_new_grid1(x) = !keeps1[nn(tree1,x)[1]] 
+    periodic .+= ln2
+    filter!(n->n in indeces, (sig,r,m)->periodic_bc_filterfunction(sig,periodic) && _not_in_grid(sig,r,tree1,nodes2), Integral2, references2, reference_shifts2, length(VG2.domain.boundary), keeps2, modified2 )
+    ln1 = length(nodes1)
+    ln2 = length(nodes2)
+    for i in 1:length(Integral1)
+        Integral1.neighbors[i] .+= ln2
+        for (sig,_) in Integral1.MESH.All_Verteces[i]
+            sig.+=ln2
+        end
+    end
+#    println("$ln2, $ln1, $(length(Integral2)) : ")
+    for i in 1:length(Integral2)
+        shift_boundarynodes(Integral2.neighbors[i],ln2,ln1)
+        for (sig,_) in Integral2.MESH.All_Verteces[i]
+#            print("$i: $sig -> ")
+            shift_boundarynodes(sig,ln2,ln1)
+#            print("$sig   ;   ")
+        end
+    end
+    prepend!(nodes1,nodes2)
+    prepend!(Integral1.volumes,Integral2.volumes)
+    prepend!(Integral1.area,Integral2.area)
+    prepend!(Integral1.bulk_integral,Integral2.bulk_integral)
+    prepend!(Integral1.interface_integral,Integral2.interface_integral)
+    prepend!(Integral1.neighbors,Integral2.neighbors)
+    prepend!(Integral1.MESH.All_Verteces,Integral2.MESH.All_Verteces)
+    prepend!(Integral1.MESH.Buffer_Verteces,Integral2.MESH.Buffer_Verteces)
+
+    for i in 1:length(Integral1)
+        Base.rehash!(Integral1.MESH.All_Verteces[i])
+        Base.rehash!(Integral1.MESH.Buffer_Verteces[i])
+    end
+    append!(modified2,modified1)
+    #plausible(Integral1.MESH,Raycast(nodes1,domain=VG.domain.internal_boundary),report=true)
+    num_of_vert = map!(n->length(Integral1.MESH.All_Verteces[n])+length(Integral1.MESH.All_Verteces[n]),Vector{Int64}(undef,length(Integral1)),1:length(Integral1))
+    voronoi(VG.Integrator,searcher=Raycast(nodes1,domain=VG.domain.internal_boundary))
+    map!(n->modified2[n] || (num_of_vert[n]!=length(Integral1.MESH.All_Verteces[n])+length(Integral1.MESH.All_Verteces[n])),modified2,1:length(Integral1))
+    shift_block!(Integral1,length(references2)+1,ln2,ln1)   # shift new nodes to their proper position
+    shift_block!(modified2,length(references2)+1,ln2,ln1)
+    references2 .+= ln1
+    references1 .+= length(references2)
+    prepend!(references1,references2)
+    prepend!(reference_shifts1,reference_shifts2)
+    iter = keepat!(collect(1:length(nodes1)),modified2)
+    repair_periodic_structure!(VG.domain,Integral1,iter)
+    #    periodize!()
+    #draw2D(VG,"test-reduce-3.mp")
+    VG.refined[1]=true
+    if (update)
+        println("updating...")
+        println(Crayon(foreground=:red,underline=true), "Start integration on refined cells:",Crayon(reset=true))
+        _relevant=Base.intersect(iter,collect((1+length(VG.domain.references)):(length(VG.Integrator.Integral.MESH))))
+        append!(_relevant,collect((length(Integral1.MESH)+1):(length(Integral1.MESH)+length(VG.domain.boundary))))
+        integrate(backup_Integrator(VG.Integrator,VG.refined[1]),domain=VG.domain.internal_boundary, modified=iter ,relevant=_relevant)
+        VG.refined[1]=false
+    end
+    return VG
+end
+
 function integrate!(VG::VoronoiGeometry)
     integrate(backup_Integrator(VG.Integrator,VG.refined[1]),domain=VG.domain.boundary,relevant=(1+length(VG.domain.references)):(length(VG.Integrator.Integral)+length(VG.domain.boundary)))
     VG.refined[1]=false
 end
 
 function copy(VG::VoronoiGeometry)
+    #println("here copy geometry")
     _domain=copy(VG.domain)
     I=copy(VG.Integrator)
     mesh=I.Integral.MESH    
-    return VoronoiGeometry{typeof(I),typeof(VG.integrand)}(I,copy(VG.adress),mesh.nodes,mesh,_domain,VG.refined,VG.integrand)
+    #=Integrator::T
+    adress::Vector{Int64}
+    nodes::Points
+    basic_mesh::Voronoi_MESH
+    domain::Discrete_Domain
+    integrand::TT
+    refined::Vector{Bool}
+    searcher::NamedTuple=#
+    return VoronoiGeometry{typeof(I),typeof(VG.integrand)}(I,copy(VG.adress),mesh.nodes,mesh,_domain,VG.integrand,VG.searcher)
 end
 
 function copy_Integral_content(Inte,I2,volume,area,bulk,interface)
@@ -267,24 +382,33 @@ end
 """
 The data can be stored using the `write_jld` method:
 
-    write_jld(Geo::VoronoiGeometry,filename,offset="")
+    write_jld(Geo::VoronoiGeometry,filename,offset="";_myopen=jldopen)
+    write_jld(Geo::VoronoiGeometry,file,offset="")
 
 stores the complete information of a VoronoiGeometry object to a file. This information can later be retrieved using the `VoronoiGeometry(file::String, args...)` function.
 
 - `Geo`: The Voronoi geometry object to be stored
 - `filename`: name of file to store in
+- `file`: A file given in a format supporting `write(file,"tagname",content)` and `read(file,"tagname",content)` 
 - `offset`: If several Geometry objects are to be stored in the same file, this will be the possibility to identify each one by a unique name. In particular, this is the key to store several objects in one single file.
+- `_myopen`: a method that allows the syntax `_myopen(filename,"w") do myfile ....... end`. By default the method uses the `JLD2` library as this (at the point of publishing this package) has the least problems with converting internal data structure to an output format.
 
 !!! warning "Filname extension" 
-    The filename needs to end on `.jld`. Otherwise there might be confusion by the loading algorithm.
+    If you want to use the default method, then the filename should end on `.jld`. Otherwise there might be confusion by the abstract built in julia loading algorithm.
 """
 function write_jld()
 end
 
-function write_jld(Geo::VoronoiGeometry,filename,offset="")
-    I=Geo.Integrator.Integral
-    storevalues=BitVector([length(I.volumes)>0,length(I.area)>0,length(I.bulk_integral)>0,length(I.interface_integral)>0])
-    jldopen(filename, "w") do file
+function write_jld(Geo::VoronoiGeometry,filename::String,offset="";_myopen=jldopen)
+    _myopen(filename, "w") do file
+        write_jld(Geo,file,offset)
+    end    
+end
+
+function write_jld(Geo::VoronoiGeometry,file,offset="")
+    #_myopen(filename, "w") do file
+        I=Geo.Integrator.Integral
+        storevalues=BitVector([length(I.volumes)>0,length(I.area)>0,length(I.bulk_integral)>0,length(I.interface_integral)>0])
         write(file, offset*"type", Integrator_Type(Geo.Integrator))
         write(file, offset*"compactdata", CompactVoronoiData(length(I.MESH.nodes)-length(Geo.domain.references),length(Geo.domain.references),length(I.MESH.nodes[1]),length(prototype_bulk(Geo.Integrator))))
         #write(file, "onenode", I.MESH.nodes[1])
@@ -302,7 +426,7 @@ function write_jld(Geo::VoronoiGeometry,filename,offset="")
         write(file, offset*"shifts", Geo.domain.shifts)
         write(file, offset*"reference_shifts", Geo.domain.reference_shifts)
         write(file, offset*"references", Geo.domain.references)
-    end    
+     
 end
 
 """
@@ -316,35 +440,53 @@ Note that the latter information is of particular importance since here is the h
 function load_Voronoi_info()
 end
 
-function load_Voronoi_info(filname,offset="")
-    jldopen(filename, "r") do file
+function load_Voronoi_info(filename::String,offset="";_myopen=jldopen)
+    _myopen(filename, "r") do file
+        load_Voronoi_info(file)
+    end
+end
+
+function load_Voronoi_info(file,offset="")
         C=read(file, offset*"compactdata")
         println(filname," entry ",offset,":")
         println("    dimension: $(C.dimension) ; nodes: $(C.numberOfNodes) ; internal nodes: $(C.numberOfInternalNodes) ; dimension of integral data: $(C.integrand) ")
         vp_print(read(file, offset*"boundary"),offset=4)
-    end  
 end
 
-function load_MESH(filename,offset="")
+function load_MESH(filename::String,offset="",_myopen=jldopen)
     mesh=UndefInitializer
-    jldopen(filename, "r") do file
-        xs=read(file, offset*"nodes")
-        mesh=Voronoi_MESH(xs, read(file, offset*"All_Verteces"), read(file, offset*"boundary_Verteces"))
+    _myopen(filename, "r") do file
+        mesh=load_MESH(file,offset)
     end  
     return mesh 
 end
 
-function load_Domain(filename,offset="")
-    domain=UndefInitializer
-    jldopen(filename, "r") do file
-        domain=Discrete_Domain(read(file, offset*"boundary"), read(file, offset*"shifts"), read(file, offset*"reference_shifts"), read(file, offset*"references"), read(file, offset*"internal_boundary"))
+function load_MESH(file,offset="")
+    return Voronoi_MESH(read(file, offset*"nodes"), read(file, offset*"All_Verteces"), read(file, offset*"boundary_Verteces"))
+end
+
+function load_Domain(filename::String,offset="",_myopen=jldopen)
+    domain = UndefInitializer
+    _myopen(filename, "r") do file
+        domain = load_Domain(file,offset)
     end  
     return domain     
 end
 
-function load_Integral(filename,I2,volume,area,bulk,interface,offset="")
+function load_Domain(file,offset="")
+    return Discrete_Domain(read(file, offset*"boundary"), read(file, offset*"shifts"), read(file, offset*"reference_shifts"), read(file, offset*"references"), read(file, offset*"internal_boundary"))
+end
+
+function load_Integral(filename::String,I2,volume,area,bulk,interface,offset="")
     Inte=I2.Integral
     jldopen(filename, "r") do file
+        Inte = load_Integral(file,I2,volume,area,bulk,interface,offset)
+    end
+    return Inte
+end
+
+function load_Integral(file,I2,volume,area,bulk,interface,offset="")
+    Inte=I2.Integral
         empty!(Inte.neighbors)
         append!(Inte.neighbors,read(file,offset*"neighbors"))
         storevalues=read(file,offset*"storevalues")
@@ -394,7 +536,7 @@ function load_Integral(filename,I2,volume,area,bulk,interface,offset="")
                 append!(Inte.interface_integral,bu)
             end
         end
-    end  
+        return Inte
 end
 
 ###############################################################################################################################
@@ -497,29 +639,29 @@ The call of `VoronoiData(VG)` provides the following options:
 - `sorted=true`: During the reduction of the internal pseude periodic mesh to the fully periodic output, the neighbors (jointly with their respective properties) get sorted by their numbers
 """
 function VoronoiData(VG::VoronoiGeometry;reduce_to_periodic=true,getorientations=false,getverteces=false,getboundarynodes=false,onboundary=false,sorted=true,view_only=false)
-mesh=VG.basic_mesh
-domain=VG.domain
-I=VG.Integrator.Integral
-lref=length(domain.references)
-get_o=getorientations || reduce_to_periodic
-_sorted = sorted && !view_only
-start = reduce_to_periodic ? (1+lref) : 1
-ori=(Vector{typeof(mesh.nodes[1])})[]
-if get_o # get orientations in case this is wanted by the user
-    lmesh=length(mesh)
-    ori=Vector{Vector{typeof(mesh.nodes[1])}}(undef,lmesh+1-start)
-    for i in start:lmesh
-        lneigh=length(I.neighbors[i])
-        ori[i+1-start]=Vector{typeof(mesh.nodes[1])}(undef,lneigh)
-        for k in 1:lneigh
-            n=I.neighbors[i][k]
-            if n<=lmesh
-                ori[i+1-start][k]=mesh.nodes[n]-mesh.nodes[i]
-            else
-                ori[i+1-start][k] = ( onboundary ? 0.5 : 1.0 ) * (reflect(mesh.nodes[i],domain.boundary,n-lmesh)-mesh.nodes[i])
+    mesh=VG.basic_mesh
+    domain=VG.domain
+    I=VG.Integrator.Integral
+    lref=length(domain.references)
+    get_o=getorientations || reduce_to_periodic
+    _sorted = sorted && !view_only
+    start = reduce_to_periodic ? (1+lref) : 1
+    ori=(Vector{typeof(mesh.nodes[1])})[]
+    if get_o # get orientations in case this is wanted by the user
+        lmesh=length(mesh)
+        ori=Vector{Vector{typeof(mesh.nodes[1])}}(undef,lmesh+1-start)
+        for i in start:lmesh
+            lneigh=length(I.neighbors[i])
+            ori[i+1-start]=Vector{typeof(mesh.nodes[1])}(undef,lneigh)
+            for k in 1:lneigh
+                n=I.neighbors[i][k]
+                if n<=lmesh
+                    ori[i+1-start][k]=mesh.nodes[n]-mesh.nodes[i]
+                else
+                    ori[i+1-start][k] = ( onboundary ? 0.5 : 1.0 ) * (reflect(mesh.nodes[i],domain.boundary,n-lmesh)-mesh.nodes[i])
+                end
             end
         end
-    end
 end
 
 # method for getting indeces in the new system of points...
@@ -548,7 +690,7 @@ end
 _bv=mesh.boundary_Verteces
 if !isempty(_bv)
     if !(isempty(_bv))
-        _bv=EmptyDictOfType(sig=>ver)
+        _bv=EmptyDictOfType(first(_bv))
     end
     if getverteces
         for (sigma,ver) in mesh.boundary_Verteces

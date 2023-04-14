@@ -40,63 +40,42 @@ function clean_affected!(Integral::Voronoi_Integral,affected; clean_neighbors=fa
     # If a vertex is solely composed of affected nodes, it has to be removed.
     # if a vertex contains only one NONaffected vertex, it has to stay. 
     # Hence the following needs to be iterated only over affected nodes.
-    All_Verteces=Integral.MESH.All_Verteces
-    Buffer_Verteces=Integral.MESH.Buffer_Verteces
-    neighbors=Integral.neighbors
-    numberOfNodes=length(Integral)
-    k=0
+    numberOfNodes = length(Integral)
+    filter!((sig,r)->!first_is_subset(sig,affected,numberOfNodes),Integral.MESH,affected=affected,filter_bV=true)
+    if clean_neighbors
+        for i in affected
+            empty!(neighbors[i])
+        end
+    end
 
-    for i in affected
-        for (sig,_) in All_Verteces[i]
-            if sig[end]>numberOfNodes && first_is_subset(sig,affected,numberOfNodes)
-                empty!(sig)
-                k+=1
-                continue
-            end
-            if first_is_subset(sig,affected) # if sig consists only of affected cells
-                empty!(sig)
-                k+=1
-                continue
-            end
-        end
-        filter!( x->( length(x.first)!=0 ), All_Verteces[i] )
-        #filter!( x->( length(x.first)!=0 ), Buffer_Verteces[i] )
-        clean_neighbors && empty!(neighbors[i])
-    end
-    clear_Buffer_verteces!(Integral.MESH)
-    new_Buffer_verteces!(Integral.MESH)
-    for (edge,_) in Integral.MESH.boundary_Verteces
-        if first_is_subset(edge,affected) # if sig consists only of affected cells
-            empty!(edge)
-        end
-    end
-    filter!( x->( length(x.first)!=0 ), Integral.MESH.boundary_Verteces )
 end
 
-function systematic_refine!( Integral::Voronoi_Integral, new_xs::Points ; recursive=true, domain=FullSpace(), variance_tol=1.0E-20, break_tol=1.0E-5, subroutine_offset=0, intro="Refine mesh with $(length(new_xs)) new points", short_log=true)
-    s_offset=subroutine_offset+sys_refine_offset
-    iter=Int64[] # array to store all old cells that are affected
+
+function systematic_refine!( Integral::Voronoi_Integral, new_xs::Points ; search_settings=[], recursive=true, domain=Boundary(), subroutine_offset=0, intro="Refine with $(length(new_xs)) points", short_log=true,pdomain=false)
+    s_offset = subroutine_offset+sys_refine_offset
+    iter = Int64[] # array to store all old cells that are affected
     if length(new_xs)==0 return iter end
-    lxs=length(Integral)
-    lnxs=length(new_xs)
+    lxs = length(Integral)
+    lnxs = length(new_xs)
+    search_ = RaycastParameter((recursive=recursive,domain=domain),search_settings)
+
     prepend!(Integral,new_xs)
     vp_print(subroutine_offset,intro)
-    vp_line()
-    vp_print(s_offset,"First Voronoi iteration among the new points: ")
+    s_offset += length(intro)
     # update integrator
-    Integrator,searcher=voronoi(Geometry_Integrator(Integral),Iter=1:lnxs,searcher=Raycast(Integral.MESH.nodes,recursive=recursive,domain=domain,variance_tol=variance_tol,break_tol=break_tol),subroutine_offset=s_offset,intro="",iteration_reset=true)
-    if short_log
-        vp_line_up(3)
+    searcher = Raycast(Integral.MESH.nodes;search_...)
+    if pdomain
+        vp_print(searcher.domain)
     end
-
-    vp_print(s_offset,"Identify affected old cells")
-    vp_line()
+    #plausible(Integral.MESH,searcher,report_number=0)
+    Integrator, _ = voronoi(Geometry_Integrator(Integral),Iter=1:lnxs,searcher=searcher,subroutine_offset=s_offset,intro="First Voronoi:     ",iteration_reset=true,compact=true)
+    #println("Total length= $(length(Integrator.Integral)), new points: $lnxs")
+    vp_print(s_offset,"Identify affected old cells                                      ")
     #identify all affected cells
-    affected=zeros(Bool,lnxs+lxs)
-    new_allverts=(Integral.MESH.All_Verteces)
-    _count=0
+    affected = zeros(Bool,lnxs+lxs)
+    _count = 0
     for i in 1:lnxs
-        for (sig,_) in new_allverts[i]
+        for (sig,_) in Integral.MESH.All_Verteces[i]#)#, Integral.MESH.All_Degenerate_Verteces[i])
             for j in sig
                 j>(lxs+lnxs) && break
                 if !(affected[j])    _count+=1    end
@@ -104,8 +83,8 @@ function systematic_refine!( Integral::Voronoi_Integral, new_xs::Points ; recurs
             end
         end
     end
-    iter=vcat(collect(1:lnxs),zeros(Int64,_count-lnxs))
-    _count=lnxs+1
+    iter = vcat(collect(1:lnxs),zeros(Int64,_count-lnxs))
+    _count = lnxs+1
     for i in (lnxs+1):(lnxs+lxs)
         if affected[i]
             iter[_count]=i
@@ -114,17 +93,13 @@ function systematic_refine!( Integral::Voronoi_Integral, new_xs::Points ; recurs
     end
 
     # get a list of all "old" cells that are possibly affected
-    short_iter=iter[lnxs+1:length(iter)]
+    short_iter = view(iter,lnxs+1:length(iter))
     # erase all data that needs to be recalculated
     clean_affected!(Integral,short_iter)
-    if short_log
-        vp_line_up(2)
-    end
-
-    vp_print(s_offset,"Second Voronoi iteration to obtain full grid")
-    voronoi( Integrator, Iter=short_iter,  searcher=searcher ,subroutine_offset=s_offset,intro="")
-    if short_log
-        vp_line_up(4)
-    end
+    #println("The new mesh is $(plausible(Integral.MESH,searcher))ly plausible...")
+    vp_print(s_offset,"                                                            ")
+    #plausible(Integrator.Integral.MESH,searcher,report=true,report_number=1)
+    voronoi( Integrator, Iter=short_iter,  searcher=searcher ,subroutine_offset=s_offset,intro="Second Voronoi:     ",compact=true)
+    #plausible(Integrator.Integral.MESH,searcher,report=true,report_number=2)
     return iter
 end

@@ -32,7 +32,7 @@ Additionally, the following colors may be passed as a `<:String`. note that an e
 - board::Boundary: provides a board: every node or vertex outside this board is not drawn
 """
 function MetaPostBoard(;node_size=0.01, vertex_size=0.003, scaling=100, nodes_color="", vertex_color="red", edge_color="blue", domain_color="", board=cuboid(2,dimensions=3*ones(Float64,2),offset=-0.5*ones(Float64,2)))
-    return new(node_size,vertex_size,scaling,nodes_color,vertex_color,edge_color,domain_color,board)
+    return MetaPostBoard(node_size,vertex_size,scaling,nodes_color,vertex_color,edge_color,domain_color,board)
 end
 
 """
@@ -62,6 +62,21 @@ function draw2D(Integral::Voronoi_Integral, filename::String; domain=nothing, bo
         if draw_nodes draw_nodes_2D(Integral,f,board) end
         if draw_edges draw_edges_2D(Integral,f,board) end
         if draw_verteces draw_verteces_2D(Integral,f,board) end
+    end
+end
+
+# For developping and testing. Only reactivate for that purpose!
+function draw2D(Integral::Voronoi_Integral, D, filename::String; domain=nothing, board=MetaPostBoard(), draw_nodes=true, draw_verteces=true, draw_edges=true)
+    if dimension(Integral)>2 error("dimension of Integral to large to be plottet in 2D") end
+    open(filename,"w") do f 
+        if typeof(domain)!=Nothing draw_Boundary_2D(domain,f,board,color=board.d_color) 
+        else println("No domain provided...") end
+        if draw_nodes draw_nodes_2D(Integral,f,board) end
+        if draw_edges draw_edges_2D(Integral,f,board) end
+        if draw_verteces draw_verteces_2D(Integral,f,board) end
+        for (_,r) in D
+            write(f,metapost_cross(r[1],r[2],color="green",scale=board.scale,size=board.v_size))
+        end
     end
 end
 
@@ -123,28 +138,20 @@ function draw_edges_2D(Integral,f,board::MetaPostBoard)
     Buffer_Verteces=Integral.MESH.Buffer_Verteces
     for i in 1:(length(Integral))
         _Cell=i
-        neigh=neighbors_of_cell(i,All_Verteces[i],Buffer_Verteces[i])
+        neigh=neighbors_of_cell(i,Integral.MESH)
         _length=length(neigh)
         while length(neigh)>length(dd) push!(dd,copy(emptylist)) end
         verteces=All_Verteces[i]
         verteces2=Buffer_Verteces[i]
-        for (sig,r) in verteces  # iterate over all verteces
+        for (sig,r) in chain(verteces,verteces2)  # iterate over all verteces
             for _neigh in sig # iterate over neighbors in vertex
-                _neigh==_Cell && continue
-                index=_neigh_index(neigh,_neigh)
-                push!( dd[index] , sig =>r) # push vertex to the corresponding list
-            end
-        end
-        for (sig,r) in verteces2 # repeat in case verteces2 is not empty
-            for _neigh in sig
-                _neigh==_Cell && continue
-                index=_neigh_index(neigh,_neigh)
-                #if (_neigh>_Cell || isempty(dd[index])) 
-                    push!( dd[index] , sig =>r) # push vertex to the corresponding list
-                #end
+                _neigh<=_Cell && continue
+                index = _neigh_index(neigh,_neigh)
+                index!=0 && (push!( dd[index] , sig =>r)) # push vertex to the corresponding list
             end
         end
         for k in 1:_length
+            neigh[k]<=_Cell && continue
             s1,r1=pop!(dd[k])
             if !isempty(dd[k]) && r1 in board._board
                 s2,r2=pop!(dd[k])

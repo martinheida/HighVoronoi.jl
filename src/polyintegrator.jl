@@ -23,7 +23,6 @@ function copy(I::Polygon_Integrator)
 end
 
 function integrate(Integrator::Polygon_Integrator; domain=FullSpace(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
-    println("PolyInt: ")#$(length(relevant)), $(length(modified))")
     _integrate(Integrator; domain=domain, calculate=relevant, iterate=Base.intersect(union(modified,relevant),1:(length(Integrator.Integral)))) 
 end
 
@@ -50,8 +49,8 @@ end
 #function integrate(domain,_Cell,iter,calcul,searcher,Integrator::Polygon_Integrator)
 function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Polygon_Integrator,ar,bulk_inte,inter_inte)    
     Integral  = Integrator.Integral
-    verteces2 = Integral.MESH.Buffer_Verteces[_Cell]
-    verteces  = Integral.MESH.All_Verteces[_Cell]
+    verteces2 = chain(Integral.MESH.Buffer_Verteces[_Cell])
+    verteces  = chain(Integral.MESH.All_Verteces[_Cell])
     xs=data.extended_xs
 
     dim = data.dimension    # (full) Spatial dimension
@@ -103,16 +102,24 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
     if (dim==1) # this is the case if and only if we arrived at an edge
         (sig,r)=pop!(verteces)
         if isempty(verteces) # in this case, sig is a boundary vertex, i.e. the edge goes to infty. 
-            println("Hoppla! $_Cell: $sig, $r")
+            #println("Hoppla! $_Cell: $sig, $(round.(r;digits=3))")
             #=A[1] += 0.0  ### that stuff is actually not needed
             if (typeof(_function)!=Nothing)
                 Ay.+=0*(_function(r))
             end=#
             if space_dim==2 push!(verteces,sig=>r) end
+            #error("bla")
             return 
         end
         (sig2,r2)=pop!(verteces) # isempty(verteces) ? ([0],r) : pop!(verteces)
-        if !isempty(verteces) println("HOOOOOOOOOOOOOOOOOOOOOOOOOOO") end
+        if !isempty(verteces) 
+            #print("HOOOOOOOOOOOO  ($sig,$(round.(r;digits=3)))  ($sig2,$(round.(r2;digits=3)))  -- ")
+            #for  (ss,rr) in verteces
+            #    print("($ss,$(round.(rr;digits=3))) , ")
+            #end
+            #println()
+            #error("bla")
+        end
         if space_dim==2 push!(verteces,sig2=>r2) end
         k_minor(all_determinants,space_dim-1,r-vector)
         k_minor(all_determinants,space_dim, r2-vector)
@@ -137,6 +144,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
             for _neigh in sig # iterate over neighbors in vertex
                 _neigh==_Cell && continue
                 index=_neigh_index(neigh,_neigh)
+                index==0 && continue
                 push!( dd[index] , sig =>r) # push vertex to the corresponding list
             end
         end
@@ -144,6 +152,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
             for _neigh in sig
                 _neigh==_Cell && continue
                 index=_neigh_index(neigh,_neigh)
+                index==0 && continue
                 if (_neigh>_Cell || isempty(dd[index])) # make sure for every neighbor the dd-list is not empty
                     push!( dd[index] , sig =>r) # push vertex to the corresponding list
                 end
@@ -199,7 +208,8 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
                     _,vert=pop!(bufferlist)
                     empty!(bufferlist)
                     distance=0.5*norm(vector-xs[buffer])#abs(dot(normalize(vector-xs[buffer]),vert))
-                    AREA[1]=get_area(Full_Matrix,buffer,_Cell)
+                    AREA[1]=get_area(Full_Matrix,buffer,_Cell) 
+                        # !!!!! if you get an error at this place, it means you probably forgot to include the boundary planes into "calculate"
                     thisvolume = AREA[1]*distance/dim
                     V[1] += thisvolume
                     A[k]=AREA[1]
@@ -229,38 +239,26 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
             _count+=neigh[k]!=0 ? 1 : 0 # only if neigh[k] has not been treated earlier in the loop
         end
         _my_neigh=Vector{Int64}(undef,_count-1)
-        #_my_count=Vector{Int64}(undef,_count-1)
+
         while length(dd)<_count push!(dd,copy(emptylist)) end
         _count=1
         for k in 1:_length
             if (neigh[k]!=0) # only if neigh[k] has not been treated earlier in the loop
                 _my_neigh[_count]=neigh[k]
-        #        _my_count[_count]=_count
                 _count+=1
             end
         end
-        #indizes=sparsevec(_my_neigh,_my_count)
 
-        #(sig,r)=([0],vector)
         ll=(length(verteces))
-        for _ in 1:(ll-1)  # iterate over all verteces
-            (sig,r)=pop!(verteces)
+        for _ii in 1:(ll)  # iterate over all verteces
+            (sig,r) = _ii==ll ? first(verteces) : pop!(verteces)
             for _neigh in sig # iterate over neighbors in vertex
-                if !(_neigh in taboo) # if _N is a valid neighbor (i.e. has not been treated in earlier recursion)
-#                if (_neigh in neigh) # if _N is a valid neighbor (i.e. has not been treated in earlier recursion)
-#                    push!( dd[indizes[_neigh]] , sig =>r) # push vertex to the corresponding list
-                    push!( dd[_neigh_index(_my_neigh,_neigh)] , sig =>r) # push vertex to the corresponding list
-                end
+                (_neigh in taboo) && continue # if _N is a valid neighbor (i.e. has not been treated in earlier recursion)
+                index = _neigh_index(_my_neigh,_neigh)
+                index==0 && continue
+                push!( dd[index] , sig =>r) # push vertex to the corresponding list
             end
         end
-        for (sig,r) in verteces#_ in 1:(ll-1)  # iterate over all verteces
-            for _neigh in sig # iterate over neighbors in vertex
-                if !(_neigh in taboo) # if _N is a valid neighbor (i.e. has not been treated in earlier recursion)
-                    push!( dd[_neigh_index(_my_neigh,_neigh)] , sig =>r) # push vertex to the corresponding list
-                end
-            end
-        end
-#        push!(verteces,sig=>r)
     
         _count=1
         for k in 1:_length

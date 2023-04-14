@@ -39,7 +39,10 @@ import Base.append!
 import Base.copy
 import Base.length
 import Base.push!
+import Base.pop!
+import Base.haskey
 import Base.keepat!
+import Base.filter!
 #import show
 
 # get SVector-field from matrix
@@ -115,31 +118,36 @@ struct Voronoi_MESH{T}
     All_Verteces::Vector{Dict{Vector{Int64},T}}
     Buffer_Verteces::Vector{Dict{Vector{Int64},T}}
     boundary_Verteces::Dict{Vector{Int64},boundary_vertex{T}}
-    function Voronoi_MESH{T}(a::Vector{T},b::Vector{Dict{Vector{Int64},T}},c::Vector{Dict{Vector{Int64},T}},d::Dict{Vector{Int64},boundary_vertex{T}}) where {T}
-        return new(a,b,c,d)
+    All_Degenerate_Verteces::Vector{Dict{Vector{Int64},T}}
+    Buffer_Degenerate_Verteces::Vector{Dict{Vector{Int64},T}}
+end
+function Voronoi_MESH(a,b,d)
+    mesh=Voronoi_MESH{typeof(a[1])}(a,b,VectorOfDict([0]=>a[1],length(a)),d,VectorOfDict([0]=>a[1],length(a)),VectorOfDict([0]=>a[1],length(a)))
+    new_Buffer_verteces!(mesh)      
+    return mesh
+end
+function Voronoi_MESH(a,b,d,e)
+    mesh=Voronoi_MESH{typeof(a[1])}(a,b,VectorOfDict([0]=>a[1],length(a)),d,e,VectorOfDict([0]=>a[1],length(a)))
+    new_Buffer_verteces!(mesh)      
+    return mesh
+end
+function Voronoi_MESH(xs::Points) #where {T}
+    vert=Dict([0]=>xs[1])
+    pop!(vert)
+    vertlist1=Vector{typeof(vert)}(undef,length(xs))
+    vertlist2=Vector{typeof(vert)}(undef,length(xs))
+    vertlist3=Vector{typeof(vert)}(undef,length(xs))
+    vertlist4=Vector{typeof(vert)}(undef,length(xs))
+    for i in 1:length(xs)
+        vertlist1[i]=copy(vert)
+        vertlist2[i]=copy(vert)
+        vertlist3[i]=copy(vert)
+        vertlist4[i]=copy(vert)
     end
-    function Voronoi_MESH(a,b,c,d) 
-        return Voronoi_MESH{typeof(a[1])}(a,b,c,d)
-    end
-    function Voronoi_MESH(a,b,d)
-        mesh=Voronoi_MESH{typeof(a[1])}(a,b,VectorOfDict([0]=>a[1],length(a)),d)
-        new_Buffer_verteces!(mesh)      
-        return mesh
-    end
-    function Voronoi_MESH(xs::Points) #where {T}
-        vert=Dict([0]=>xs[1])
-        pop!(vert)
-        vertlist1=Vector{typeof(vert)}(undef,length(xs))
-        vertlist2=Vector{typeof(vert)}(undef,length(xs))
-        for i in 1:length(xs)
-            vertlist1[i]=copy(vert)
-            vertlist2[i]=copy(vert)
-        end
-        bound=Dict([0]=>boundary_vertex{typeof(xs[1])}(xs[1],xs[1],1))
-        pop!(bound)
-        tt=Voronoi_MESH{typeof(xs[1])}(xs,vertlist1,vertlist2,bound)
-        return tt
-    end
+    bound=Dict([0]=>boundary_vertex{typeof(xs[1])}(xs[1],xs[1],1))
+    pop!(bound)
+    tt=Voronoi_MESH{typeof(xs[1])}(xs,vertlist1,vertlist2,bound,vertlist3,vertlist4)
+    return tt
 end
 
 function show_mesh(mesh::Voronoi_MESH; nodes=false,verteces=true,vertex_coordinates=false)
@@ -152,14 +160,7 @@ function show_mesh(mesh::Voronoi_MESH; nodes=false,verteces=true,vertex_coordina
     if verteces
         for i in 1:length(mesh)
             print("$i: ")
-            for (sig,r) in mesh.All_Verteces[i]
-                print(sig)
-                if vertex_coordinates
-                    print("/$r")
-                end
-                print(", ")
-            end
-            for (sig,r) in mesh.Buffer_Verteces[i]
+            for (sig,r) in chain(mesh.All_Verteces[i],mesh.Buffer_Verteces[i])
                 print(sig)
                 if vertex_coordinates
                     print("/$r")
@@ -183,45 +184,165 @@ function dimension(mesh::Voronoi_MESH)
     return length(mesh.nodes[1])
 end
 
-
+function plausible(mesh::Voronoi_MESH,searcher=Raycast(mesh.nodes);report=false,report_number="")
+    ret = true
+    for _Cell in 1:length(mesh)
+        searcher.tree.active.*=0
+        activate_cell( searcher, _Cell, neighbors_of_cell(_Cell,mesh,adjacents=true) )
+        for (sig,r) in chain(mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell])
+            lsig = length(sig)
+            ret2 = (vertex_variance(sig,r,searcher.tree.extended_xs,lsig-1,view(searcher.ts,1:lsig))<1.0E-10*sum(abs2,(r-searcher.tree.extended_xs[1])))
+            ret = ret && ret2
+            if !ret2 
+                ii,dist =_nn(searcher.tree,r)
+                println("Plausible $report_number: $_Cell, $sig, $r ,  $(vertex_variance(sig,r,searcher.tree.extended_xs,lsig-1,view(searcher.ts,1:lsig))) --> $(_inrange(searcher.tree,r,dist*(1.0+1.0E-8)))")
+            end
+            (!ret) && !report && break
+        end
+        (!ret) && !report && break
+    end
+    if ret
+        report && println("plausible $report_number: The mesh of length $(length(mesh)) is plausible")
+    else
+        println("===================================================")
+        println("plausible $report_number: The mesh is NOT plausible")
+        println("===================================================")
+    end
+    return ret
+end
 
 """ 
-    neighbors_of_cell(_Cell,verteces,verteces2=verteces,domain=FullSpace())  
+    neighbors_of_cellneighbors_of_cell(_Cell,mesh,condition = r->true)  
 
     This function takes the verteces of a cell (calculated e.g. by systematic_voronoi) and returns 
-    an array containing the index numbers of all neighbors.
+    an array containing the index numbers of all neighbors. A `neighbor` here is a cell that shares a full interface.
+    any lower dimensional edge/vertex is not sufficient as a criterion. This is equivalent with `_Cell` and
+    `neighbor` sharing at least `dimension` different verteces.
 
-    The idea is to pass as variables from a fully calculated Voronoi_MESH 'mesh' the fields
-    verteces=mesh.All_Verteces[_Cell], verteces2=mesh.Buffer_Verteces[_Cell] 
-    'domain' can be assigned any type that can handle 'x in domain', where x is an <:AbstractVector{Float}
+    'condition' can be any condition on the coordinates of a vertex
 """
-function neighbors_of_cell(_Cell,verteces,verteces2=verteces,domain=FullSpace())
-    neighbors=Dict(1=>1)
-    pop!(neighbors)
-    for (sigma,r) in verteces
-        for i in sigma
-            if i!=_Cell && (r in domain)
-                get!(neighbors,i,1)
-            end
-        end
-    end
-    if verteces2!=verteces && typeof(verteces2)!=Nothing
-        for (sigma,r) in verteces2
+function neighbors_of_cell(_Cells,mesh,condition = r->true; adjacents=false)
+    neighbors = zeros(Int64,10)
+    counts = zeros(Int64,10)
+    position = 1
+    __max = 10
+    dim = length(mesh.nodes[1])
+    adjacents = adjacents || length(_Cells)>1
+    for _Cell in _Cells
+        for (sigma,r) in chain(mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell]) 
+            regular = ( length(sigma)==(dim+1) )
             for i in sigma
-                if i!=_Cell && (r in domain)
-                    get!(neighbors,i,1)
+                if i!=_Cell && (condition(r))
+                    f = findfirst(x->(x==i),neighbors)
+                    if typeof(f)==Nothing
+                        f = position
+                        neighbors[position] = i
+                        position += 1
+                        if position>__max
+                            __max += 10
+                            append!(neighbors,zeros(Int64,10))
+                            append!(counts,zeros(Int64,10))
+                        end
+                    end
+                    counts[f] += regular || adjacents ? dim : counts[f]+1
                 end
             end
         end
-    end    
-    result=Int64[]
-    for (i,_) in neighbors
-        push!(result,i)
     end
-    return sort!(result)
+    for i in 1:__max
+        if i>=position || counts[i]<dim
+            neighbors[i] = typemax(Int64)
+        end
+    end
+    sort!(neighbors)
+    resize!(neighbors, findfirst(x->(x>typemax(Int64)-1),neighbors)-1)
+    adjacents && (return neighbors)
+    _Cell = _Cells
+    #return neighbors
+    ortho_system = Vector{Vector{Float64}}(undef,dim)
+    for i in 1:dim   ortho_system[i] = zeros(Float64,dim)  end
+    for i in 1:length(neighbors)
+        n = neighbors[i]
+        reference = nothing
+        position = 0
+        success = false
+        for (sig,r) in chain(mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell]) 
+            if n in sig
+                if reference==nothing
+                    reference = r
+                elseif position==0
+                    position+=1
+                    ortho_system[1].=reference-r
+                    normalize!(ortho_system[1])
+                    if dim==2
+                        success=true
+                        break
+                    end
+                else
+                    position+=1
+                    ortho_system[position].=reference-r
+                    norm_2 = sum(abs2,ortho_system[position])
+                    for j in 1:(position-1)
+                        part = (-1.0)*dot(ortho_system[position],ortho_system[j])
+                        ortho_system[position] .+= part.*ortho_system[j]
+                    end
+                    if sum(abs2,ortho_system[position])/norm_2 < 1.0E-20 
+                        position -= 1 
+                    elseif position==dim-1
+                        success=true
+                        break
+                    else
+                        normalize!(ortho_system[position])
+                    end # in this case have lower dimensional structure
+                end
+            end
+        end
+        !success && (neighbors[i]=typemax(Int64))
+    end
+    sort!(neighbors)
+    ff = findfirst(x->(x>typemax(Int64)-1),neighbors)
+    if ff==nothing
+        return neighbors
+    else
+        resize!(neighbors, ff-1)
+    end
 end
 
+"""
+    adjacents_of_cell(_Cell, mesh, condition = r->true)
 
+This does not only calcualte the neighbors but any adjacent cell, i.e. cells that share at minimum one single vertex are 
+"""
+function adjacents_of_cell(_Cell, mesh, condition = r->true)
+    neighbors = zeros(Int64,10)
+    counts = zeros(Int64,10)
+    position = 1
+    __max = 10
+    dim = length(mesh.nodes[1])
+    for (sigma,r) in chain(mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell],mesh.All_Degenerate_Verteces[_Cell],mesh.Buffer_Degenerate_Verteces[_Cell]) 
+        for i in sigma
+            if i!=_Cell && (condition(r))
+                f = findfirst(x->(x==i),neighbors)
+                if typeof(f)==Nothing
+                    f = position
+                    neighbors[position] = i
+                    position += 1
+                    if position>__max
+                        __max += 10
+                        append!(neighbors,zeros(Int64,10))
+                        append!(counts,zeros(Int64,10))
+                    end
+                end
+                counts[f] += 1
+            end
+        end
+    end
+    for i in position:__max
+            neighbors[i] = typemax(Int64)
+    end
+    sort!(neighbors)
+    return resize!(neighbors, findfirst(x->(x>typemax(Int64)-1),neighbors)-1)
+end
 
 ###############################################################################################################
 
@@ -229,11 +350,69 @@ end
 
 ###############################################################################################################
 
+function rehash!(mesh::Voronoi_MESH)
+    for i in 1:length(mesh)
+        rehash!(mesh.All_Verteces[i])
+    end
+    rehash!(mesh.boundary_Verteces)
+end
+
+
+""" filters verteces of `affected` according to `condition`. Does NOT reduce number of points. This must be done manually"""
+function filter!( condition, mesh::Voronoi_MESH{T}; affected = 1:length(mesh), filter_bV=false ) where {T}
+    All_Verteces = mesh.All_Verteces
+    Buffer_Verteces = mesh.Buffer_Verteces
+
+    if typeof(affected[1])==Bool
+        affected = view(1:length(mesh),affected)
+    end  
+    for i in affected
+        for (sig,r) in All_Verteces[i]
+            if !condition(sig,r)
+                empty!(sig)
+            end
+        end
+        filter!( x->( length(x.first)!=0 ), All_Verteces[i] )
+        filter!( x->( length(x.first)!=0 ), Buffer_Verteces[i] )
+    end
+    if (filter_bV)
+        for (edge,bv) in mesh.boundary_Verteces
+            if !condition(edge,bv) # if sig consists only of affected cells
+                empty!(edge)
+            end
+        end
+        filter!( x->( length(x.first)!=0 ), mesh.boundary_Verteces )
+    end
+end
+
+
+function push!(mesh::Voronoi_MESH{T}, p, meshlength=length(mesh)) where {T}
+    sig = p[1]
+    r = p[2]
+    push!(mesh.All_Verteces[sig[1]],sig=>r)
+    for jj in 2:length(sig)#(length(r)+1)
+        sig[jj]<=meshlength && push!(mesh.Buffer_Verteces[sig[jj]],sig=>r)
+    end
+end
+
+function pop!(mesh::Voronoi_MESH{T}, key) where {T}
+    if length(key)>0
+        eI = mesh.nodes[1]
+        Base.pop!(mesh.All_Verteces[key[1]],key,eI)
+        for i in 2:length(key)
+            Base.pop!(mesh.Buffer_Verteces[key[i]],key,eI)
+        end
+    end
+end
+
+function haskey(mesh::Voronoi_MESH{T},sig) where {T}
+    return haskey(mesh.All_Verteces[sig[1]],sig) ? true : haskey(mesh.All_Degenerate_Verteces[sig[1]],sig) 
+end
+
 @doc raw"""
     append!(mesh::Voronoi_MESH, xs)
     adds the points 'xs' to the beginning of the mesh and correpsondingly shifts the indeces in the fields of All_Verteces and Buffer_Verteces
 """
-
 function append!(mesh::Voronoi_MESH,xs)
     allverts=mesh.All_Verteces
     lnxs=length(xs)
@@ -243,12 +422,18 @@ function append!(mesh::Voronoi_MESH,xs)
     pop!(vert)
     vertlist1=Vector{typeof(vert)}(undef,length(xs))
     vertlist2=Vector{typeof(vert)}(undef,length(xs))
+    vertlist3=Vector{typeof(vert)}(undef,length(xs))
+    vertlist4=Vector{typeof(vert)}(undef,length(xs))
     for i in 1:length(xs)
         vertlist1[i]=copy(vert)
         vertlist2[i]=copy(vert)
+        vertlist3[i]=copy(vert)
+        vertlist4[i]=copy(vert)
     end
     append!(mesh.All_Verteces,vertlist1)
     append!(mesh.Buffer_Verteces,vertlist2)
+    append!(mesh.All_Degenerate_Verteces,vertlist3)
+    append!(mesh.Buffer_Degenerate_Verteces,vertlist4)
 end
 
 @doc raw"""
@@ -272,12 +457,18 @@ function prepend!(mesh::Voronoi_MESH,xs)
     vert=EmptyDictOfType([0]=>xs[1])
     vertlist1=Vector{typeof(vert)}(undef,length(xs))
     vertlist2=Vector{typeof(vert)}(undef,length(xs))
+    vertlist3=Vector{typeof(vert)}(undef,length(xs))
+    vertlist4=Vector{typeof(vert)}(undef,length(xs))
     for i in 1:length(xs)
         vertlist1[i]=copy(vert)
         vertlist2[i]=copy(vert)
+        vertlist3[i]=copy(vert)
+        vertlist4[i]=copy(vert)
     end
     prepend!(mesh.All_Verteces,vertlist1)
     prepend!(mesh.Buffer_Verteces,vertlist2)
+    prepend!(mesh.All_Degenerate_Verteces,vertlist3)
+    prepend!(mesh.Buffer_Degenerate_Verteces,vertlist4)
 end
 
 
@@ -289,16 +480,12 @@ end
 
 """
 function copy(mesh::Voronoi_MESH)
-    points=copy(mesh.nodes)
-    new_mesh=Voronoi_MESH(points)
+    points = copy(mesh.nodes)
+    new_mesh = Voronoi_MESH(points)
     for i in 1:length(mesh.nodes)
-        newAV=new_mesh.All_Verteces[i]
         for (sig,r) in mesh.All_Verteces[i]
-            push!(newAV,copy(sig)=>r)
+            push!(new_mesh,copy(sig)=>r)
         end
-    end
-    if !isempty(mesh.Buffer_Verteces[length(points)]) # the last Buffer_Verteces-list will for sure be not empty if those elements are stored.
-        new_Buffer_verteces!(new_mesh)    
     end
     for (sig,b) in mesh.boundary_Verteces
         push!(new_mesh.boundary_Verteces,copy(sig)=>b)
@@ -310,6 +497,8 @@ function keepat!(mesh::Voronoi_MESH,entries)
     keepat!(mesh.nodes,entries)
     keepat!(mesh.All_Verteces,entries)
     keepat!(mesh.Buffer_Verteces,entries)
+    keepat!(mesh.All_Degenerate_Verteces,entries)
+    keepat!(mesh.Buffer_Degenerate_Verteces,entries)
 end
 
 ###########################################################################################################
@@ -335,16 +524,23 @@ end
     calculate the list of Buffer_Verteces from already determined list All_Verteces using the distribute_verteces function
 """
 function new_Buffer_verteces!(mesh::Voronoi_MESH) 
-    lmesh=length(mesh.nodes)
+    lmesh = length(mesh.nodes)
+    dim = length(mesh.nodes[1])
     for i in 1:lmesh
         for (sigma,r) in mesh.All_Verteces[i]
-            lsigma=length(sigma)
-            #sigma[lsigma]>lmesh && continue
+            lsigma = length(sigma)
             for k in 2:lsigma
                 Index=sigma[k]
-                if (Index<=lmesh) get!(mesh.Buffer_Verteces[Index],sigma,r) end
+                if (Index<=lmesh) push!(mesh.Buffer_Verteces[Index],sigma=>r) end
             end
         end
+#=        for (sigma,r) in mesh.All_Degenerate_Verteces[i]
+            lsigma = length(sigma)
+            for k in 2:lsigma
+                Index=sigma[k]
+                if (Index<=lmesh) get!(mesh.Buffer_Degenerate_Verteces[Index],sigma,r) end
+            end
+        end=#
     end
     return mesh
 end
@@ -381,7 +577,9 @@ end
 shifts the nodes _start:_end of mesh.nodes by "shift" places and modifies the other fields of "mesh" accordingly
 such that in the end "mesh" remains a consistent mesh. In the course, Buffer_Verteces is emptied and recalculated.  
 """
+
 function shift_block!(mesh::Voronoi_MESH,_start,_end,shift)
+    #mesh2 = copy(mesh)
     meshsize=length(mesh)
     if _start+shift<1 || _end+shift>meshsize 
         error("Invalid call of shift_block: _start=$_start, _end=$_end, shift=$shift, meshsize=$(length(mesh))")
@@ -393,7 +591,7 @@ function shift_block!(mesh::Voronoi_MESH,_start,_end,shift)
     # modify all entries (sig,_) in mesh.All_Verteces such that the correct new indeces of the nodes will be in there
     for i in 1:length(mesh)
         for (sig,_) in mesh.All_Verteces[i]
-            permute_nodes!(sig,_start,_end,shift,dimension+1)
+            permute_nodes!(sig,_start,_end,shift)
         end
     end
     
@@ -404,7 +602,7 @@ function shift_block!(mesh::Voronoi_MESH,_start,_end,shift)
         bV=EmptyDictOfType(Int64[]=>boundary_vertex(mesh.nodes[1],mesh.nodes[1],0))
         short_int_vec=[0]
         for (sig,v) in mesh.boundary_Verteces
-            sort!(permute_nodes!(sig,_start,_end,shift,dimension))
+            sort!(permute_nodes!(sig,_start,_end,shift))
             short_int_vec[1]=v.node
             permute_nodes!(short_int_vec,_start,_end,shift,1)
             push!(bV,sig=>boundary_vertex(v.base,v.direction,short_int_vec[1]))
@@ -431,6 +629,60 @@ function shift_block!(mesh::Voronoi_MESH,_start,_end,shift)
     shift_block!(mesh.nodes,_start,_end,shift) # finally shift the nodes
 end
 
+# The following also works but is of factor 2x slower in high dimensions. For whatever reason....
+#=function shift_block2!(mesh::Voronoi_MESH,_start,_end,shift)
+        meshsize=length(mesh)
+    if _start+shift<1 || _end+shift>meshsize 
+        error("Invalid call of shift_block: _start=$_start, _end=$_end, shift=$shift, meshsize=$(length(mesh))")
+        return
+    end
+    dimension=length(mesh.nodes[1])
+    
+    # modify all entries (sig,_) in mesh.All_Verteces such that the correct new indeces of the nodes will be in there
+    for i in 1:length(mesh)
+        for (sig,_) in mesh.All_Verteces[i]
+            permute_nodes!(sig,_start,_end,shift)
+            sort!(sig)
+        end
+    end
+    
+    shift_block!(mesh.All_Verteces,_start,_end,shift) # shift the lists in All_Verteces according to the new numbering of the nodes 
+    shift_block!(mesh.Buffer_Verteces,_start,_end,shift) # shift the lists in All_Verteces according to the new numbering of the nodes 
+    
+    # modify the field boundary_Verteces
+    if !isempty(mesh.boundary_Verteces)
+        bV=EmptyDictOfType(Int64[]=>boundary_vertex(mesh.nodes[1],mesh.nodes[1],0))
+        short_int_vec=[0]
+        for (sig,v) in mesh.boundary_Verteces
+            sort!(permute_nodes!(sig,_start,_end,shift))
+            short_int_vec[1]=v.node
+            permute_nodes!(short_int_vec,_start,_end,shift,1)
+            push!(bV,sig=>boundary_vertex(v.base,v.direction,short_int_vec[1]))
+        end
+        empty!(mesh.boundary_Verteces)
+        merge!(mesh.boundary_Verteces,bV)
+    end
+    
+    # for those verteces that are stored in the wrong All_Verteces list, create a copy in the correct list and delete original.  
+    lmesh=length(mesh)
+    for i in 1:lmesh
+        for (sig,r) in mesh.All_Verteces[i]
+#            sort!(sig)
+            if (sig[1]!=i)# && sig[end]<=lmesh) 
+                push!(mesh.All_Verteces[sig[1]], sig=>r)
+                push!(mesh.Buffer_Verteces[i], sig=>r)
+            end
+        end
+        filter!( x->( x.first[1]==i ), mesh.All_Verteces[i] )
+        filter!( x->( x.first[1]!=i ), mesh.Buffer_Verteces[i] )
+        Base.rehash!(mesh.All_Verteces[i])
+        Base.rehash!(mesh.Buffer_Verteces[i])
+    end
+
+    shift_block!(mesh.nodes,_start,_end,shift) # finally shift the nodes
+
+end
+=#
 
 function compare(mesh1::Voronoi_MESH,mesh2::Voronoi_MESH,tolerance)
     println("compare meshes with tolerance $tolerance")
