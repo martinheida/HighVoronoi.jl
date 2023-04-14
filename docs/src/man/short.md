@@ -83,6 +83,25 @@ vd2 = VoronoiData(VG2)
 println(vd2.bulk_integral)
 ```
 
+## Recycle Voronoi data for refined geometries
+
+The following creates a `VoronoiGeometry VG`, then makes a copy `VG2` and refines it with 20 points inside the region $(0,\,0.2)^4$. 
+```julia
+xs = HighVoronoi.VoronoiNodes(rand(4,20))
+
+VG = VoronoiGeometry(xs,cuboid(4,periodic=Int64[]),integrator=HighVoronoi.VI_POLYGON,integrand = x->[norm(x),1])
+
+VG2 = copy(VG)
+
+refine!(VG,0.2*rand(4,20))
+
+vd = VoronoiData(VG)
+println(vd.bulk_integral)
+
+vd2 = VoronoiData(VG2)
+println(vd2.bulk_integral)
+```
+
 
 ## Store and load data
 

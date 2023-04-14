@@ -15,12 +15,16 @@ makedocs(sitename="HighVoronoi Documentation",
     pages = [
         "Home" => "index.md",
         "Manual" => Any[
-            "In Short..." => "man/short.md",
+            "In short..." => "man/short.md",
             "man/geometry.md",
             "man/boundaries.md",
+            "man/refine.md",
+            "man/periodic.md",
             "FunctionComposer" => "man/functions.md",
             "Finite Volume Problems" => "man/finitevolume.md",
+            "Projection operators" => "man/projection.md",
             "man/metapost.md",
+            "Sources of errors and loss in performance" => "man/errors.md",
         ],
         "Intentions of use (EXAMPLES)" => "showcase.md",
 #        "Library" => Any[
