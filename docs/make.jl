@@ -1,18 +1,20 @@
-push!(LOAD_PATH,".../src/")
-using Revise, Documenter, HighVoronoi
+using HighVoronoi
+using Documenter
 
-makedocs(sitename="HighVoronoi Documentation",
-    format = Documenter.HTML(
-        # Use clean URLs, unless built as a "local" build
-#        prettyurls = !("local" in ARGS),
-#        canonical = "https://juliadocs.github.io/Documenter.jl/stable/",
-#        assets = ["assets/favicon.ico"],
-#        analytics = "UA-136089579-2",
-#        highlights = ["yaml"],
-        ansicolor = true,
+DocMeta.setdocmeta!(HighVoronoi, :DocTestSetup, :(using HighVoronoi); recursive=true)
+
+makedocs(;
+    modules=[HighVoronoi],
+    authors="Martin Heida",
+    repo="https://github.com/martinheida/HighVoronoi.jl/blob/{commit}{path}#{line}",
+    sitename="HighVoronoi.jl",
+    format=Documenter.HTML(;
+        prettyurls=get(ENV, "CI", "false") == "true",
+        canonical="https://martinheida.github.io/HighVoronoi.jl",
+        edit_link="main",
+        assets=String[],
     ),
-    authors = "Martin Heida.",
-    pages = [
+    pages=[
         "Home" => "index.md",
         "Manual" => Any[
             "In short..." => "man/short.md",
@@ -27,40 +29,10 @@ makedocs(sitename="HighVoronoi Documentation",
             "Sources of errors and loss in performance" => "man/errors.md",
         ],
         "Intentions of use (EXAMPLES)" => "showcase.md",
-#        "Library" => Any[
-#            "Public" => "lib/public.md",
-#            "Internals" => map(
-#                s -> "lib/internals/$(s)",
-#                sort(readdir(joinpath(@__DIR__, "src/lib/internals")))
-#            ),
-#        ],
-#        "contributing.md",
     ],
 )
 
-#=
-    pages = [
-        "Home" => "index.md",
-        "Manual" => Any[
-            "Guide" => "man/guide.md",
-            "man/examples.md",
-            "man/syntax.md",
-            "man/doctests.md",
-            "man/latex.md",
-            hide("man/hosting.md", [
-                "man/hosting/walkthrough.md"
-            ]),
-            "man/other-formats.md",
-        ],
-        "showcase.md",
-        "Library" => Any[
-            "Public" => "lib/public.md",
-            "Internals" => map(
-                s -> "lib/internals/$(s)",
-                sort(readdir(joinpath(@__DIR__, "src/lib/internals")))
-            ),
-        ],
-        "contributing.md",
-    ],
-
-    =#
+deploydocs(;
+    repo="github.com/martinheida/HighVoronoi.jl",
+    devbranch="main",
+)

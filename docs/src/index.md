@@ -1,4 +1,16 @@
-# Functionality of the HighVoronoi Package
+```@meta
+CurrentModule = HighVoronoi
+```
+
+# HighVoronoi
+
+Documentation for [HighVoronoi](https://github.com/martinheida/HighVoronoi.jl).
+
+## Index
+```@index
+```
+
+## Functionality of the HighVoronoi Package
 
 `HighVoronoi` is intended as an effective Voronoi mesh generator in any ARBITRARY DIMENSION greater or equal to 2. It can work on polygonal domains and also on (partially or fully) periodic domains. It also provides methods to implement Finite Volume problems on these high dimensional meshes.
 
