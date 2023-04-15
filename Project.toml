@@ -1,20 +1,13 @@
 name = "HighVoronoi"
-uuid = "21f5bc4f-3bcb-4fe9-b58c-a287e93c5fce"
-authors = ["Martin Heida <martin.heida@wias-berlin.de>"]
-version = "0.1.0"
+uuid = "1d30c219-805f-47bd-9cb8-33f291c94a4c"
+authors = ["Martin Heida"]
+version = "1.0.0-DEV"
 
-[deps]
-Crayons = "a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f"
-GLPK = "60bf3e95-4087-53dc-ae20-288a0d20c6a6"
-HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
-IterTools = "c8e1da08-722c-5040-9ed9-7db0dc04731e"
-IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153"
-JLD = "4138dd39-2aa7-5051-a626-17a0bb65d9c8"
-JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
-LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-NearestNeighbors = "b8a86587-4115-5ab1-83bc-aa920d37bbce"
-Polyhedra = "67491407-f73d-577b-9b50-8179a7c68029"
-Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
-SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
-SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
-StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+[compat]
+julia = "1.4"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
