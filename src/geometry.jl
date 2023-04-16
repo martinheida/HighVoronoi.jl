@@ -441,6 +441,7 @@ function load_Voronoi_info()
 end
 
 function load_Voronoi_info(filename::String,offset="";_myopen=jldopen)
+    print(filename)
     _myopen(filename, "r") do file
         load_Voronoi_info(file)
     end
@@ -448,7 +449,7 @@ end
 
 function load_Voronoi_info(file,offset="")
         C=read(file, offset*"compactdata")
-        println(filname," entry ",offset,":")
+        println(" entry ",offset,":")
         println("    dimension: $(C.dimension) ; nodes: $(C.numberOfNodes) ; internal nodes: $(C.numberOfInternalNodes) ; dimension of integral data: $(C.integrand) ")
         vp_print(read(file, offset*"boundary"),offset=4)
 end
