@@ -3,34 +3,45 @@ using HighVoronoi
 
 using SpecialFunctions
 using LinearAlgebra
+using SparseArrays
 
 @testset "HighVoronoi.jl" begin
 
     @testset "VoronoiGeometry" begin
         # Test all Integrators
+        println("-----------------------------------------------------------------")
+        println("testing integrators")
+        println("-----------------------------------------------------------------")
         for i in HighVoronoi.VI_MIN:HighVoronoi.VI_MAX
             @test length(VoronoiGeometry(VoronoiNodes(rand(3,100)),cuboid(3,periodic=[1],neumann=[2,-3]),integrator=i,integrand=x->[x[1]^2]).nodes)>=100
         end
 
         # Test full space, so bad cases will happen and will be corrected
+        println("-----------------------------------------------------------------")
+        println("testing large domains")
+        println("-----------------------------------------------------------------")
         xs=VoronoiNodes(hcat(rand(6,1000).+[1,0,0,0,0,0],rand(6,1000)))
         @test length(VoronoiGeometry(xs,integrator=HighVoronoi.VI_GEOMETRY,integrand = x->[norm(x),1]).nodes) == 2000
 
         # Test Polygon_Integrator on high dimensions
         #vg1 = VoronoiGeometry(VoronoiNodes(rand(5,1000)),cuboid(5,periodic=[1]),integrator=HighVoronoi.VI_POLYGON,integrand = x->[1.0])
+        println("-----------------------------------------------------------------")
+        println("testing Polygon integrator in high dimensions")
+        println("-----------------------------------------------------------------")
         @test abs( sum(VoronoiData(VoronoiGeometry(VoronoiNodes(rand(5,1000)),cuboid(5,periodic=[1]),integrator=HighVoronoi.VI_POLYGON,integrand = x->[1.0])).volume) - 1.0 ) < 1E-3
 
         # Test Heuristic_Integrator and copying by constructor. 4 dimensions should suffice
+        println("-----------------------------------------------------------------")
+        println("testing Heuristic integrator in high dimensions")
+        println("-----------------------------------------------------------------")
         vg2 = VoronoiGeometry(VoronoiNodes(rand(4,500)),cuboid(4,periodic=[1]),integrator=HighVoronoi.VI_POLYGON,integrand = x->[x[1],x[2]])
         @test abs(sum( abs, VoronoiData(vg2).volume)-1.0)<1.0E-5
         vg2b = VoronoiGeometry( vg2, integrator=HighVoronoi.VI_HEURISTIC, integrand = x->[1.0] )
         @test abs(sum( abs, map(x->x[1],VoronoiData(vg2b).bulk_integral))-1.0)<1.0E-1
         vg2c = VoronoiGeometry( vg2b, bulk=true, interface=true )
-        vd2d = VoronoiData(vg2d)
+        vd2d = VoronoiData(vg2c)
         @test abs(sum( abs, vd2d.volume .- map(x->x[1],vd2d.bulk_integral)))<1.0E-1
 
-        # mach was hiermit:
-        voronoi(VoronoiNodes(rand(3,100)), initialize=10)
     end
 
     @testset "Substitute and refine" begin
@@ -43,6 +54,9 @@ using LinearAlgebra
             return abs(sum(VD.volume)-1)<1.0E-1
             #draw2D(VG,"2dsample.mp",drawVerteces=false)
         end
+        println("-----------------------------------------------------------------")
+        println("testing substitute")
+        println("-----------------------------------------------------------------")
         @test test_substitute(4,60,600)
 
         #refine to be tested in next step implicitly. For now:
@@ -51,10 +65,10 @@ using LinearAlgebra
 
     @testset "Periodic Grids" begin
         function bla(dim,NN,f=false)
-            dim = max(dim,3)
+            #dim = max(dim,3)
                 VG=HighVoronoi.VoronoiGeometry(VoronoiNodes(rand(dim,NN)),periodic_grid=(dimensions=ones(Float64,dim),scale=0.2*ones(Float64,dim),repeat=5*ones(Int64,dim), periodic=[1,2],fast=f),integrator=HighVoronoi.VI_POLYGON)
                 aaarea = deepcopy(VG.Integrator.Integral.area)
-                data = 0.7*rand(dim,100)
+                data = 0.3*rand(dim,100)
                 data .+= 0.3*ones(Float64,dim)
                 refine!(VG,VoronoiNodes(data))
         
@@ -92,6 +106,9 @@ using LinearAlgebra
             return count==offset && abs(1-sum(view(VG.Integrator.Integral.volumes,(ln-offset+1):ln)))<0.05 && abs(1-sum(view(VG2.Integrator.Integral.volumes,(ln-offset+1):ln)))<0.05
         end
                 
+        println("-----------------------------------------------------------------")
+        println("testing periodic grids in 4D")
+        println("-----------------------------------------------------------------")
         @test bla(4,1)
         @test bla(4,3)
         @test bla(4,1,true)
@@ -101,7 +118,7 @@ using LinearAlgebra
 
     @testset "Draw" begin
         function draw_test()
-            VG = VoronoiGeometry(VoronoiNodes(2,20),cuboid(2,periodic=[1,2]),integrator=VI_GEOMETRY)
+            VG = VoronoiGeometry(VoronoiNodes(rand(2,20)),cuboid(2,periodic=[1,2]),integrator=VI_GEOMETRY)
             draw2D(VG,"testoutput.mp")
             return true
         end
@@ -154,7 +171,7 @@ using LinearAlgebra
         @test test_interactionmatrix2()
     end
 
-    @testblock "Finite Volume" begin
+    @testset "Finite Volume" begin
         function myflux(;para_i,para_j,mass_ij,normal,kwargs...) 
             # kwargs... collects all additional parameters which are not used in the current function.
             weight = norm(normal)^(-1) * mass_ij * sqrt(para_i[:kappa]*para_j[:kappa])
