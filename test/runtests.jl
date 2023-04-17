@@ -118,7 +118,7 @@ using SparseArrays
 
     @testset "Draw" begin
         function draw_test()
-            VG = VoronoiGeometry(VoronoiNodes(rand(2,20)),cuboid(2,periodic=[1,2]),integrator=VI_GEOMETRY)
+            VG = VoronoiGeometry(VoronoiNodes(rand(2,20)),cuboid(2,periodic=[1,2]),integrator=HighVoronoi.VI_GEOMETRY)
             draw2D(VG,"testoutput.mp")
             return true
         end
