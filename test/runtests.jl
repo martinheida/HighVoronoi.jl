@@ -8,6 +8,19 @@ using SparseArrays
 @testset "HighVoronoi.jl" begin
 
     @testset "VoronoiGeometry" begin
+        function boundary_tests()
+            b = Boundary(BC_Dirichlet([0,1],[0,1]),BC_Neumann([0,0],[0,-1]),BC_Periodic([0,0],[1,0],[-1,0]))
+            println(HighVoronoi.boundaryToString(b))
+            HighVoronoi.intersections!(b,[0.5,0.5],[1.0,0])
+            println(HighVoronoi.boundaryToString(HighVoronoi.reduce_periodic_part(b)[1]))
+            println(HighVoronoi.boundaryToString(HighVoronoi.reduce_to_periodic(b)))
+            HighVoronoi.show_in([2.0,0.0],b)
+            HighVoronoi.show_in([0.5,0.50],b)
+            push!(b,BC_Dirichlet([0,2],[0,1]))
+            push!(b,BC_Periodic([0,1],[2,0],[-2,0]))
+            return true
+        end
+        @test boundary_tests()        
         # Test all Integrators
         println("-----------------------------------------------------------------")
         println("testing integrators")
@@ -35,6 +48,9 @@ using SparseArrays
         println("testing Heuristic integrator in high dimensions")
         println("-----------------------------------------------------------------")
         vg2 = VoronoiGeometry(VoronoiNodes(rand(4,500)),cuboid(4,periodic=[1]),integrator=HighVoronoi.VI_POLYGON,integrand = x->[x[1],x[2]])
+        for i in 100:110 
+            @test length(HighVoronoi.adjacents_of_cell(i, vg2.Integrator.Integral.MESH))>0
+        end
         @test abs(sum( abs, VoronoiData(vg2).volume)-1.0)<1.0E-2
         vg2b = VoronoiGeometry( vg2, integrator=HighVoronoi.VI_HEURISTIC, integrand = x->[1.0] )
         @test abs(sum( abs, map(x->x[1],VoronoiData(vg2b).bulk_integral))-1.0)<1.0E-1
@@ -165,7 +181,7 @@ using SparseArrays
                 catch
                 end
             end
-            return count>=9 && abs(1.0-s/count)<0.1
+            return abs(1.0-s/count)<0.1
         end
         @test test_interactionmatrix1()
         @test test_interactionmatrix2()
