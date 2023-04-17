@@ -154,7 +154,7 @@ function show_mesh(mesh::Voronoi_MESH; nodes=false,verteces=true,vertex_coordina
     if verteces
         for i in 1:length(mesh)
             print("$i: ")
-            for (sig,r) in chain(mesh.All_Verteces[i],mesh.Buffer_Verteces[i])
+            for (sig,r) in Iterators.flatten((mesh.All_Verteces[i],mesh.Buffer_Verteces[i]))
                 print(sig)
                 if vertex_coordinates
                     print("/$r")
@@ -183,7 +183,7 @@ function plausible(mesh::Voronoi_MESH,searcher=Raycast(mesh.nodes);report=false,
     for _Cell in 1:length(mesh)
         searcher.tree.active.*=0
         activate_cell( searcher, _Cell, neighbors_of_cell(_Cell,mesh,adjacents=true) )
-        for (sig,r) in chain(mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell])
+        for (sig,r) in Iterators.flatten((mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell]))
             lsig = length(sig)
             ret2 = (vertex_variance(sig,r,searcher.tree.extended_xs,lsig-1,view(searcher.ts,1:lsig))<1.0E-10*sum(abs2,(r-searcher.tree.extended_xs[1])))
             ret = ret && ret2
@@ -223,7 +223,7 @@ function neighbors_of_cell(_Cells,mesh,condition = r->true; adjacents=false)
     dim = length(mesh.nodes[1])
     adjacents = adjacents || length(_Cells)>1
     for _Cell in _Cells
-        for (sigma,r) in chain(mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell]) 
+        for (sigma,r) in Iterators.flatten((mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell]))
             regular = ( length(sigma)==(dim+1) )
             for i in sigma
                 if i!=_Cell && (condition(r))
@@ -260,7 +260,7 @@ function neighbors_of_cell(_Cells,mesh,condition = r->true; adjacents=false)
         reference = nothing
         position = 0
         success = false
-        for (sig,r) in chain(mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell]) 
+        for (sig,r) in Iterators.flatten((mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell])) 
             if n in sig
                 if reference==nothing
                     reference = r
