@@ -1,3 +1,0 @@
-function CubicVoronoiGeometry()
-    
-end
