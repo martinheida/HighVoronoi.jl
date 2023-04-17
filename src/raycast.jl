@@ -279,7 +279,12 @@ function walkray(edge::Sigma, r::Point, xs::Points, searcher, sig; ray=nothing, 
             t2 = searcher.ts[sig2[1]-1]
             #println(vertex_variance([edge,k],r+t*u,length(edge)))
             #println(vertex_variance([edge,k2],r+t2*u,length(edge)))
-            error("There is a severe error in the walkray method. Probably you provided a node or an initial vertex outside of the domain or the coordinates of a given vertex are wrong.")
+            if length(searcher.domain)<=d
+                @warn("the above output simply means that the machine precission is not high enough to properly calculate the Voronoi cells far away from the nodes. You should consider to place a large box around your sample.")
+                return sig_del, r, u, false
+            else 
+                error("There is a severe error in the walkray method. Probably you provided a node or an initial vertex outside of the domain or the coordinates of a given vertex are wrong.")
+            end
             #u.*=-1.0
             #sig2, t = raycast(sig_del, r, u, xs, searcher, Rest,sig)
             println() 

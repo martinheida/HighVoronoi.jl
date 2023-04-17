@@ -318,7 +318,7 @@ function systematic_explore_vertex(xs,sig,R,_Cell,edgecount_local,mesh,queue,bou
             new_sig, r,u, success = walkray(edge, R, xs, searcher, sig) # provide missing node "j" of new vertex and its coordinate "r" 
                                                     # together with edge orientation 'u'
             if new_sig == edge #if oldnode==newnode then we found a boundary element and we can cancel 
-                push!(boundary, new_sig=>boundary_vertex(R,u,_Cell))
+                push!(boundary, new_sig=>boundary_vertex(R,typeof(R)(u),_Cell))
                 b,_ = increase_edgeview( edgeview, lsig, dim)
                 continue
             end
@@ -371,7 +371,7 @@ function systematic_explore_vertex(xs,sig,R,_Cell,edgecount_local,mesh,queue,bou
             new_sig, r,u, success = walkray(edge, R, xs, searcher, sig, ray=u, minimal_edge=view(sig,minimal_edge(local_edges,searcher)) ) # provide missing node "j" of new vertex and its coordinate "r" 
                                                     # together with edge orientation 'u'
             if new_sig == edge #if oldnode==newnode then we found a boundary element and we can cancel 
-                push!(boundary, new_sig=>boundary_vertex(R,u,_Cell))
+                push!(boundary, new_sig=>boundary_vertex(R,typeof(R)(u),_Cell))
                 continue
             end
             (!success) && return

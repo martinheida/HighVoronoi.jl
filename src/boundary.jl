@@ -2,6 +2,9 @@
 const Dirichlet=0
 const Neumann=-1
 
+import Base.in
+
+
 #################################################################################################################
 
 ## struct Boundary and related operators on it
