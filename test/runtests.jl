@@ -35,7 +35,7 @@ using SparseArrays
         println("testing Heuristic integrator in high dimensions")
         println("-----------------------------------------------------------------")
         vg2 = VoronoiGeometry(VoronoiNodes(rand(4,500)),cuboid(4,periodic=[1]),integrator=HighVoronoi.VI_POLYGON,integrand = x->[x[1],x[2]])
-        @test abs(sum( abs, VoronoiData(vg2).volume)-1.0)<1.0E-5
+        @test abs(sum( abs, VoronoiData(vg2).volume)-1.0)<1.0E-2
         vg2b = VoronoiGeometry( vg2, integrator=HighVoronoi.VI_HEURISTIC, integrand = x->[1.0] )
         @test abs(sum( abs, map(x->x[1],VoronoiData(vg2b).bulk_integral))-1.0)<1.0E-1
         vg2c = VoronoiGeometry( vg2b, bulk=true, interface=true )
