@@ -45,11 +45,6 @@ import Base.keepat!
 import Base.filter!
 #import show
 
-# get SVector-field from matrix
-
-vecvec(x::Matrix) = map(SVector{size(x,1)}, eachcol(x))
-vecvec(x::Vector{<:SVector}) = x
-
 
 """
     VoronoiNodes(x::Matrix)
@@ -67,7 +62,7 @@ creates a list of points (as static vectors) from a matrix.
 VoronoiNodes(x::Matrix) = map(SVector{size(x,1)}, eachcol(x))
 VoronoiNodes(x::Vector{<:Vector}) = map(SVector{length(x[1])}, x)
 VoronoiNodes(x::Vector{<:SVector}) = x
-
+VoronoiNodes(p<:AbstractVector{Float}) = VoronoiNodes([p])
 
 ####################################################################################################################################
 
@@ -124,11 +119,11 @@ function Voronoi_MESH(a,b,d)
     new_Buffer_verteces!(mesh)      
     return mesh
 end
-function Voronoi_MESH(a,b,d,e)
+#=function Voronoi_MESH(a,b,d,e)
     mesh=Voronoi_MESH{typeof(a[1])}(a,b,VectorOfDict([0]=>a[1],length(a)),d,e,VectorOfDict([0]=>a[1],length(a)))
     new_Buffer_verteces!(mesh)      
     return mesh
-end
+end=#
 function Voronoi_MESH(xs::Points) #where {T}
     vert=Dict([0]=>xs[1])
     pop!(vert)
@@ -144,6 +139,8 @@ function Voronoi_MESH(xs::Points) #where {T}
     return tt
 end
 
+# For developing and testing only:
+#=
 function show_mesh(mesh::Voronoi_MESH; nodes=false,verteces=true,vertex_coordinates=false)
     if nodes
         for i in 1:length(mesh)
@@ -165,6 +162,8 @@ function show_mesh(mesh::Voronoi_MESH; nodes=false,verteces=true,vertex_coordina
         end
     end
 end
+=#
+
 
 @doc raw"""
     length(mesh::Voronoi_MESH)
@@ -178,6 +177,8 @@ function dimension(mesh::Voronoi_MESH)
     return length(mesh.nodes[1])
 end
 
+# For developing and testing only:
+#=
 function plausible(mesh::Voronoi_MESH,searcher=Raycast(mesh.nodes);report=false,report_number="")
     ret = true
     for _Cell in 1:length(mesh)
@@ -204,6 +205,8 @@ function plausible(mesh::Voronoi_MESH,searcher=Raycast(mesh.nodes);report=false,
     end
     return ret
 end
+=#
+
 
 """ 
     neighbors_of_cellneighbors_of_cell(_Cell,mesh,condition = r->true)  
@@ -665,6 +668,9 @@ end
 end
 =#
 
+# For developing and testing only:
+#=
+
 function compare(mesh1::Voronoi_MESH,mesh2::Voronoi_MESH,tolerance)
     println("compare meshes with tolerance $tolerance")
     if length(mesh1)!=length(mesh2)
@@ -704,3 +710,5 @@ function compare(mesh1::Voronoi_MESH,mesh2::Voronoi_MESH,tolerance)
     end
 
 end
+=#
+

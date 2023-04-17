@@ -456,7 +456,8 @@ function queue_edges(sig,r,_Cell,edgecount_local,searcher,le=nothing;print=x->no
     return ret
 end
 
-
+# Maybe some time in the future....
+#=
 function ev_first_is_subset(edgeview,iter,dim)
     len_k=length(iter)
     i = 1
@@ -502,6 +503,7 @@ function increase_edgeview_fast( edgeview, lsig, dim, local_edges,sig)
     end
     return b, ret
 end
+=#
 
 function increase_edgeview( edgeview, lsig, dim;taboo=nothing)
     if edgeview[dim]<lsig && taboo!=nothing

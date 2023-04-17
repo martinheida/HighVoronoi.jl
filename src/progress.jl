@@ -17,7 +17,7 @@ function vp_line()
     print("\n")
 end
 
-function vp_column(i)
+#=function vp_column(i)
     print("\u1b[0E\u1b[$(i)C")    
 end
 
@@ -27,12 +27,13 @@ end
 
 function vp_delete_line_content()
     print("\u1b[2K") # delete entire line
-end
+end=#
 
 function vp_line_up()
     print("\u1b[2K\u1b[1A\u1b[200D")
 end
 
+#=
 function vp_line_up(K)
     for i in 1:K
         print("\u1b[2K\u1b[1A\u1b[200D")
@@ -45,6 +46,7 @@ function vp_blocks(content,offsets)
         print(content[i])
     end
 end
+=#
 
 function vp_print(o1::Int,c;crayon=nothing)
     if typeof(crayon)==Nothing
@@ -52,10 +54,10 @@ function vp_print(o1::Int,c;crayon=nothing)
         print("\u1b[200D\u1b[$(o1)C")    
         print(c)
     else
-        print(crayon)
+#=        print(crayon)
         print("\u1b[0E\u1b[$(o1)C")    
         print(c)
-        print(Crayon(reset=true))
+        print(Crayon(reset=true))=#
     end
 end
 
@@ -66,11 +68,11 @@ function vp_print(o1::Int,c1,o2::Int,c2;crayon=nothing)
         print("\u1b[0E\u1b[$(o2)C")    
         print(c2)
     else
-        print(crayon)
+#=        print(crayon)
         print("\u1b[0E\u1b[$(o1)C")    
         print(c1)
         print("\u1b[0E\u1b[$(o2)C")    
         print(c2)
-        print(Crayon(reset=true))
+        print(Crayon(reset=true))=#
     end
 end

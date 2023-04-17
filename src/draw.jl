@@ -66,7 +66,7 @@ function draw2D(Integral::Voronoi_Integral, filename::String; domain=nothing, bo
 end
 
 # For developping and testing. Only reactivate for that purpose!
-function draw2D(Integral::Voronoi_Integral, D, filename::String; domain=nothing, board=MetaPostBoard(), draw_nodes=true, draw_verteces=true, draw_edges=true)
+#=function draw2D(Integral::Voronoi_Integral, D, filename::String; domain=nothing, board=MetaPostBoard(), draw_nodes=true, draw_verteces=true, draw_edges=true)
     if dimension(Integral)>2 error("dimension of Integral to large to be plottet in 2D") end
     open(filename,"w") do f 
         if typeof(domain)!=Nothing draw_Boundary_2D(domain,f,board,color=board.d_color) 
@@ -78,7 +78,7 @@ function draw2D(Integral::Voronoi_Integral, D, filename::String; domain=nothing,
             write(f,metapost_cross(r[1],r[2],color="green",scale=board.scale,size=board.v_size))
         end
     end
-end
+end=#
 
 function metapost_line(x1,y1,x2,y2;color="",scale=100)
     s=""
@@ -163,6 +163,8 @@ function draw_edges_2D(Integral,f,board::MetaPostBoard)
     
 end
 
+# For developing and testing
+#=
 function check_2d(mesh::Voronoi_MESH)
     for i in 1:length(mesh)
         neigh=neighbors_of_cell(i,mesh.All_Verteces[i],mesh.Buffer_Verteces[i])
@@ -175,5 +177,5 @@ function check_2d(mesh::Voronoi_MESH)
         end
         if count!=length(neigh) println("error in $i: $(mesh.nodes[i]) ,    $count<>$(length(neigh))") end
     end
-end
+end=#
     

@@ -22,7 +22,7 @@ function copy(I::Heuristic_Cube_Integrator)
     return Heuristic_Integrator{typeof(I._function),typeof(I.Integral)}(I._function,I.bulk,copy(I.Integral))
 end
 
-function integrate(Integrator::Heuristic_Cube_Integrator; domain=FullSpace(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
+function integrate(Integrator::Heuristic_Cube_Integrator; domain=Boundary(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
     println("PolyInt: ")#$(length(relevant)), $(length(modified))")
     _integrate(Integrator; domain=domain, calculate=relevant, iterate=Base.intersect(union(modified,relevant),1:(length(Integrator.Integral)))) 
 end

@@ -128,26 +128,6 @@ function Boundary()
     return Boundary(Plane[],true)
 end
 
-struct FullSpace
-end
-
-import Base.in
-
-function in(x,B::FullSpace)
-    return true
-end
-
-function length(B::FullSpace)
-    return 0
-end
-
-function intersect(B::FullSpace,x_0,v,condition=(x->true))
-    return 0, Inf64
-end
-
-function extend_periodic_part(B::FullSpace,xs::Points)
-    return B
-end
 ####################  OUTPUT REPRESENTATION ####################################################################
 
 function boundaryToString(B::Boundary;offset=0)
@@ -424,10 +404,6 @@ function show_in(x,B::Boundary)
         end
     end
     return true
-end
-
-function project(x,B::FullSpace)
-    return x
 end
 
 function project(x,B::Boundary)

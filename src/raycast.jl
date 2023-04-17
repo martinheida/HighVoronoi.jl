@@ -507,32 +507,6 @@ end
 ####################################################################################################################################
 
 
-###############   FIRST raycast ###############################################################
-
-struct RaycastBruteforce end
-
-""" shooting a ray in the given direction, find the next connecting point.
-This is the bruteforce variant, using a linear search to find the closest point """
-function raycast(sig::Sigma, r, u, xs, searcher::RaycastBruteforce,iter=1:length(xs))
-    (tau, ts) = [0; sig], Inf
-    x0 = xs[sig[1]]
-
-    c = maximum(dot(xs[g], u) for g in sig)
-    skip(i) = (dot(xs[i], u) <= c) || i ∈ sig
-    result_i=0
-
-    for i in iter
-        skip(i) && continue
-        x = xs[i]
-        t = (sum(abs2, r .- x) - sum(abs2, r .- x0)) / (2 * u' * (x-x0))
-        if 0 < t < ts
-            ts, result_i = t, i
-        end
-    end
-    if result_i!=0 tau= vcat(sig, [result_i]) end
-
-    return sort(tau), ts
-end
 
 
 ########################################################################################################################################

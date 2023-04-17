@@ -1,4 +1,5 @@
-function periodize_new_nodes(mesh,lnxs,reference_shifts,planes)
+# The following is no longer needed
+#=function periodize_new_nodes(mesh,lnxs,reference_shifts,planes)
     lp=length(planes)
     lrs=length(reference_shifts)
     mirrors=EmptyDictOfType(0=>[1])
@@ -23,7 +24,7 @@ function periodize_new_nodes(mesh,lnxs,reference_shifts,planes)
     end
 
     return mirrors
-end
+end=#
 
 
 function systematic_refine!(domain::Discrete_Domain,Integrator,_new_xs::Points;intro="Refine discrete domain with $(length(_new_xs)) points",offset=0,short_log=true)
@@ -52,13 +53,14 @@ function systematic_refine!(domain::Discrete_Domain,Integrator,_new_xs::Points;i
     return iter #_my_modified_cells(Integrator.Integral.MESH,old_length,old_references,length(domain.references),length(_new_xs))
 end
 
-function _my_modified_cells(mesh,old_length,old_references,new_references,lnxs)
+# The following is no longer needed
+#=function _my_modified_cells(mesh,old_length,old_references,new_references,lnxs)
     lmesh = length(mesh)
     start_old = lmesh-new_references+1
     neigh = neighbors_of_cell(Iterators.flatten((1:(new_references-old_references), (lmesh-lnxs+1):lmesh)),mesh,adjacents=true)
     keepat!(neigh,map(n->(n in ((new_references-old_references)+1):(lmesh-lnxs)),neigh))
     return vcat(collect(1:(new_references-old_references)),sort!(neigh),collect((lmesh-lnxs+1):lmesh))
-end
+end=#
 
 function repair_periodic_structure!(domain,Integral,iter,sr_offset=0)
     known_reflections = retrieve_reflections(domain,Integral)

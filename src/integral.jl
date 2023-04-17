@@ -37,6 +37,9 @@ struct Voronoi_Integral{T}
     end
 end
 
+
+# For developing and testing only:
+#=
 function show_integral(I::Voronoi_Integral;volume=true,bulk=true,area=true,interface=true)
     show_vol=volume && length(I.volumes)>0
     show_bulk=bulk && length(I.bulk_integral)>0
@@ -67,7 +70,10 @@ function show_integral(I::Voronoi_Integral;volume=true,bulk=true,area=true,inter
         println("")
     end
 end
+=#
 
+# For developing and testing only:
+#=
 function print_integral(I::Voronoi_Integral;volume=false,bulk=false,area=true,interface=true)
     vol=(length(I.volumes)!=0)
     ar=(length(I.area)!=0)
@@ -89,6 +95,7 @@ function print_integral(I::Voronoi_Integral;volume=false,bulk=false,area=true,in
         println("")
     end
 end
+=#
 
 # the following function is for internal use inside modify_integral(...) only
 function modify_Integral_entry!(b::Bool,field,data)
