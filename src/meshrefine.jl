@@ -75,7 +75,7 @@ function systematic_refine!( Integral::Voronoi_Integral, new_xs::Points ; search
     affected = zeros(Bool,lnxs+lxs)
     _count = 0
     for i in 1:lnxs
-        for (sig,_) in Integral.MESH.All_Verteces[i]#)#, Integral.MESH.All_Degenerate_Verteces[i])
+        for (sig,_) in Integral.MESH.All_Verteces[i]
             for j in sig
                 j>(lxs+lnxs) && break
                 if !(affected[j])    _count+=1    end

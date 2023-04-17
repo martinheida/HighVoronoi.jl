@@ -49,8 +49,8 @@ end
 #function integrate(domain,_Cell,iter,calcul,searcher,Integrator::Polygon_Integrator)
 function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Polygon_Integrator,ar,bulk_inte,inter_inte)    
     Integral  = Integrator.Integral
-    verteces2 = chain(Integral.MESH.Buffer_Verteces[_Cell])
-    verteces  = chain(Integral.MESH.All_Verteces[_Cell])
+    verteces2 = Integral.MESH.Buffer_Verteces[_Cell]
+    verteces  = Integral.MESH.All_Verteces[_Cell]
     xs=data.extended_xs
 
     dim = data.dimension    # (full) Spatial dimension

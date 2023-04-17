@@ -143,7 +143,7 @@ function draw_edges_2D(Integral,f,board::MetaPostBoard)
         while length(neigh)>length(dd) push!(dd,copy(emptylist)) end
         verteces=All_Verteces[i]
         verteces2=Buffer_Verteces[i]
-        for (sig,r) in chain(verteces,verteces2)  # iterate over all verteces
+        for (sig,r) in Iterators.flatten((verteces,verteces2))  # iterate over all verteces
             for _neigh in sig # iterate over neighbors in vertex
                 _neigh<=_Cell && continue
                 index = _neigh_index(neigh,_neigh)

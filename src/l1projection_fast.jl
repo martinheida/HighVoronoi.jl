@@ -7,6 +7,10 @@ function splitvolumes(parent::VoronoiGeometry,child::VoronoiGeometry)
     # set up KD searchtree
     oldstd = stdout
     redirect_stdout(devnull)
+    v1 = Int64[]
+    v2 = Int64[]
+    vols = Float64[]
+    try
     kdtree = KDTree(child.Integrator.Integral.MESH.nodes)
 
     # extract some variables from the FULL mesh
@@ -269,6 +273,11 @@ print("bla")
     filter!(x->x!=0,v1)
     resize!(v2,length(v1))
     resize!(vols,length(v1))
+catch
+    v1 = Int64[0]
+    v2 = Int64[0]
+    vols = Float64[1.0]
+end
     redirect_stdout(oldstd) # recover original stdout
 
     return v1,v2,vols
@@ -456,7 +465,7 @@ function validate(r,_Cell,boundaries)
 end
 
 function validate(r,_Cell,sub,boundaries)
-    for (k,plane) in chain(boundaries[_Cell],boundaries[sub])
+    for (k,plane) in Iterators.flatten((boundaries[_Cell],boundaries[sub]))
 #        print(" - ")
         if dot(plane.normal,plane.base-r)<-0.000001
             print("res: $(dot(plane.normal,r-plane.base))  ") 
@@ -493,7 +502,7 @@ function walkray_volume(sig, R, i, boundaries, _Cell, sub,child_indeces, maxinde
     # schneide mit boundary
     t=Inf64
     index=0
-    for (k,plane) in chain(boundaries[_Cell],boundaries[sub])
+    for (k,plane) in Iterators.flatten((boundaries[_Cell],boundaries[sub]))
         (k in sig) && continue
         t1=intersect(plane,R,u)
         #print("[$(dot(R+t1*u-plane.base,plane.normal))] , ")

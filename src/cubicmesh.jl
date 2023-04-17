@@ -80,7 +80,7 @@ function heuristic_Cube_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,n
     dd=Vector{typeof(emptylist)}(undef,_length)
     for i in 1:_length dd[i]=copy(emptylist) end
 
-    for (sig,r) in chain(verteces,verteces2)  # iterate over all verteces
+    for (sig,r) in Iterators.flatten((verteces,verteces2))  # iterate over all verteces
         for _neigh in sig # iterate over neighbors in vertex
             _neigh==_Cell && continue
             index=_neigh_index(neigh,_neigh)

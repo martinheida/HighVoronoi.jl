@@ -358,7 +358,7 @@ function PeriodicVoronoiGeometry(matrix_data::Matrix; search_settings=[], fast=t
                 nodeshift, trust = periodic_copy_data(pc, Integrator.Integral.MESH, extended_cube, affected, Integrator.Integral,searcher,modified)
                 if trust
                     integrand!=nothing && merge_integrate( Integrator,Integrator2, use1=x->false, intro="Block $(string(i, base = 10, pad = max_string_len)), Integrate    :   ", 
-                            calculate = chain(i_nodes,(b+1):((length(xs)+length(cube)))), iterate=i_nodes, I_data=I_data,compact=true)
+                            calculate = Iterators.flatten((i_nodes,(b+1):((length(xs)+length(cube))))), iterate=i_nodes, I_data=I_data,compact=true)
                     increase(pc)
                     continue
                 end
@@ -383,8 +383,8 @@ function PeriodicVoronoiGeometry(matrix_data::Matrix; search_settings=[], fast=t
                 # Apply integration to make sure every volume information is correct
 #                modified_i_nodes = view(i_nodes,view(modified,i_nodes))
                 merge_integrate( Integrator,Integrator2, use1=use_Integrator1, intro="Block $(string(i, base = 10, pad = max_string_len)), Integrate    :   ", 
-                        calculate = chain(i_nodes,(b+1):((length(xs)+length(cube)))), iterate=i_nodes, I_data=I_data,compact=true)
-# old version                       calculate = chain(modified_i_nodes,(b+1):((length(xs)+length(cube)))), iterate=modified_i_nodes, I_data=I_data,compact=true)
+                        calculate = Iterators.flatten((i_nodes,(b+1):((length(xs)+length(cube))))), iterate=i_nodes, I_data=I_data,compact=true)
+# old version                       calculate = Iterators.flatten((modified_i_nodes,(b+1):((length(xs)+length(cube))))), iterate=modified_i_nodes, I_data=I_data,compact=true)
                 # finally increase to next cell
                 increase(pc)
             end

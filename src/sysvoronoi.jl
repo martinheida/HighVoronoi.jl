@@ -223,7 +223,7 @@ function systematic_explore_cell(xs::Points,_Cell,mesh::Voronoi_MESH,edgecount_l
     queue = EmptyDictOfType(Int64[]=>xs[1]) #copy(allverts)
     lxs=length(xs)
 #    println("1: $(round.(Vector(searcher.tree.extended_xs[_Cell]),digits=3))")
-    for (sig,r) in chain(verts,allverts)
+    for (sig,r) in Iterators.flatten((verts,allverts))
         queue_edges(sig,r,_Cell,edgecount_local,searcher)#,vertex_edges)
     end
 #    println("2")

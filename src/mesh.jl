@@ -118,11 +118,9 @@ struct Voronoi_MESH{T}
     All_Verteces::Vector{Dict{Vector{Int64},T}}
     Buffer_Verteces::Vector{Dict{Vector{Int64},T}}
     boundary_Verteces::Dict{Vector{Int64},boundary_vertex{T}}
-    All_Degenerate_Verteces::Vector{Dict{Vector{Int64},T}}
-    Buffer_Degenerate_Verteces::Vector{Dict{Vector{Int64},T}}
 end
 function Voronoi_MESH(a,b,d)
-    mesh=Voronoi_MESH{typeof(a[1])}(a,b,VectorOfDict([0]=>a[1],length(a)),d,VectorOfDict([0]=>a[1],length(a)),VectorOfDict([0]=>a[1],length(a)))
+    mesh=Voronoi_MESH{typeof(a[1])}(a,b,VectorOfDict([0]=>a[1],length(a)),d)
     new_Buffer_verteces!(mesh)      
     return mesh
 end
@@ -136,17 +134,13 @@ function Voronoi_MESH(xs::Points) #where {T}
     pop!(vert)
     vertlist1=Vector{typeof(vert)}(undef,length(xs))
     vertlist2=Vector{typeof(vert)}(undef,length(xs))
-    vertlist3=Vector{typeof(vert)}(undef,length(xs))
-    vertlist4=Vector{typeof(vert)}(undef,length(xs))
     for i in 1:length(xs)
         vertlist1[i]=copy(vert)
         vertlist2[i]=copy(vert)
-        vertlist3[i]=copy(vert)
-        vertlist4[i]=copy(vert)
     end
     bound=Dict([0]=>boundary_vertex{typeof(xs[1])}(xs[1],xs[1],1))
     pop!(bound)
-    tt=Voronoi_MESH{typeof(xs[1])}(xs,vertlist1,vertlist2,bound,vertlist3,vertlist4)
+    tt=Voronoi_MESH{typeof(xs[1])}(xs,vertlist1,vertlist2,bound)
     return tt
 end
 
@@ -319,7 +313,7 @@ function adjacents_of_cell(_Cell, mesh, condition = r->true)
     position = 1
     __max = 10
     dim = length(mesh.nodes[1])
-    for (sigma,r) in chain(mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell],mesh.All_Degenerate_Verteces[_Cell],mesh.Buffer_Degenerate_Verteces[_Cell]) 
+    for (sigma,r) in Iterators.flatten((mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell])) 
         for i in sigma
             if i!=_Cell && (condition(r))
                 f = findfirst(x->(x==i),neighbors)
@@ -406,7 +400,7 @@ function pop!(mesh::Voronoi_MESH{T}, key) where {T}
 end
 
 function haskey(mesh::Voronoi_MESH{T},sig) where {T}
-    return haskey(mesh.All_Verteces[sig[1]],sig) ? true : haskey(mesh.All_Degenerate_Verteces[sig[1]],sig) 
+    return haskey(mesh.All_Verteces[sig[1]],sig) 
 end
 
 @doc raw"""
@@ -432,8 +426,6 @@ function append!(mesh::Voronoi_MESH,xs)
     end
     append!(mesh.All_Verteces,vertlist1)
     append!(mesh.Buffer_Verteces,vertlist2)
-    append!(mesh.All_Degenerate_Verteces,vertlist3)
-    append!(mesh.Buffer_Degenerate_Verteces,vertlist4)
 end
 
 @doc raw"""
@@ -467,8 +459,6 @@ function prepend!(mesh::Voronoi_MESH,xs)
     end
     prepend!(mesh.All_Verteces,vertlist1)
     prepend!(mesh.Buffer_Verteces,vertlist2)
-    prepend!(mesh.All_Degenerate_Verteces,vertlist3)
-    prepend!(mesh.Buffer_Degenerate_Verteces,vertlist4)
 end
 
 
@@ -497,8 +487,6 @@ function keepat!(mesh::Voronoi_MESH,entries)
     keepat!(mesh.nodes,entries)
     keepat!(mesh.All_Verteces,entries)
     keepat!(mesh.Buffer_Verteces,entries)
-    keepat!(mesh.All_Degenerate_Verteces,entries)
-    keepat!(mesh.Buffer_Degenerate_Verteces,entries)
 end
 
 ###########################################################################################################
@@ -534,13 +522,6 @@ function new_Buffer_verteces!(mesh::Voronoi_MESH)
                 if (Index<=lmesh) push!(mesh.Buffer_Verteces[Index],sigma=>r) end
             end
         end
-#=        for (sigma,r) in mesh.All_Degenerate_Verteces[i]
-            lsigma = length(sigma)
-            for k in 2:lsigma
-                Index=sigma[k]
-                if (Index<=lmesh) get!(mesh.Buffer_Degenerate_Verteces[Index],sigma,r) end
-            end
-        end=#
     end
     return mesh
 end

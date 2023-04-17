@@ -55,7 +55,7 @@ end
 function _my_modified_cells(mesh,old_length,old_references,new_references,lnxs)
     lmesh = length(mesh)
     start_old = lmesh-new_references+1
-    neigh = neighbors_of_cell(chain(1:(new_references-old_references), (lmesh-lnxs+1):lmesh),mesh,adjacents=true)
+    neigh = neighbors_of_cell(Iterators.flatten((1:(new_references-old_references), (lmesh-lnxs+1):lmesh)),mesh,adjacents=true)
     keepat!(neigh,map(n->(n in ((new_references-old_references)+1):(lmesh-lnxs)),neigh))
     return vcat(collect(1:(new_references-old_references)),sort!(neigh),collect((lmesh-lnxs+1):lmesh))
 end
