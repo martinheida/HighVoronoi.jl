@@ -20,6 +20,12 @@ using SparseArrays
             push!(b,BC_Periodic([0,1],[2,0],[-2,0]))
             return true
         end
+        function statistics()
+            HighVoronoi.VoronoiStatistics(3,10;periodic=nothing,points=100)            
+            HighVoronoi.VoronoiStatistics(3,10;periodic=3,points=100)
+            return true            
+        end
+        @test statistics()
         @test boundary_tests()        
         # Test all Integrators
         println("-----------------------------------------------------------------")
@@ -40,7 +46,8 @@ using SparseArrays
                 b = false
                 try
                     xs=VoronoiNodes(hcat(rand(6,1000).+[1,0,0,0,0,0],rand(6,1000)))
-                    VoronoiGeometry(xs,integrator=HighVoronoi.VI_GEOMETRY,integrand = x->[norm(x),1])
+                    vg = VoronoiGeometry(xs,integrator=HighVoronoi.VI_GEOMETRY,integrand = x->[norm(x),1])
+                    vd = VoronoiData(vg, getverteces=true)
                 catch
                     b = true
                 end
@@ -70,7 +77,7 @@ using SparseArrays
         vg2c = VoronoiGeometry( vg2b, bulk=true, interface=true )
         vd2d = VoronoiData(vg2c)
         @test abs(sum( abs, vd2d.volume .- map(x->x[1],vd2d.bulk_integral)))<1.0E-1
-
+        HighVoronoi.vp_print(HighVoronoi.Raycast(VoronoiNodes(rand(2,10))),mirrors=true)
     end
 
     @testset "Substitute and refine" begin
