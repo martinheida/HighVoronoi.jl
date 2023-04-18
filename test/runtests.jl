@@ -48,6 +48,7 @@ using SparseArrays
                     xs=VoronoiNodes(hcat(rand(6,1000).+[1,0,0,0,0,0],rand(6,1000)))
                     vg = VoronoiGeometry(xs,integrator=HighVoronoi.VI_GEOMETRY,integrand = x->[norm(x),1])
                     vd = VoronoiData(vg, getverteces=true)
+                    append!(vg.Integrator.Integral,VoronoiNodes(rand(6,100)))
                 catch
                     b = true
                 end
