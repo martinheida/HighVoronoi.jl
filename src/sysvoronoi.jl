@@ -122,8 +122,8 @@ function voronoi(Integrator; Iter=1:(length(Integrator.Integral.MESH.nodes)), se
     new_verteces=0::Int64
     while repeat
         if iteration_count>4
-            println()
-            kk=1
+            println("There is some serious problem with the mesh: $iteration_count iterations are not a good sign")
+#=            kk=1
             while TODO[kk]!=0
                 print("$(TODO[kk]) - ") 
                 kk +=1
@@ -138,10 +138,10 @@ function voronoi(Integrator; Iter=1:(length(Integrator.Integral.MESH.nodes)), se
                 end
                 println() 
                 kk +=1
-            end
+            end=#
         end
         if iteration_count>=6
-            error("")
+            error("you should check that all nodes lie within the domain and restart. If problem persists, contact the developer with a sample of your points and domain")
         end
         if !iteration_reset vp_line() end
         vp_print(v_offset+4,"Iteration:",v_offset+21,"Cell:")
