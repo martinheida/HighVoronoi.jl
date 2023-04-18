@@ -8,4 +8,3 @@ A Julia Package for setting up high dimensional (i.e. any dimension >= 2) Finite
 [![Coverage](https://coveralls.io/repos/github/martinheida/HighVoronoi.jl/badge.svg?branch=main)](https://coveralls.io/github/martinheida/HighVoronoi.jl?branch=main)
 
 
-[A full Documentation can be found here (until the package is approved by the Julia community)](https://www.wias-berlin.de/people/heida/HighVoronoi.jl/
