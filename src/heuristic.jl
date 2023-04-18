@@ -25,7 +25,7 @@ function copy(I::Heuristic_Integrator)
     return Heuristic_Integrator{typeof(I._function),typeof(I.Integral)}(I._function,I.bulk,copy(I.Integral))
 end
 
-function integrate(Integrator::Heuristic_Integrator; domain=FullSpace(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
+function integrate(Integrator::Heuristic_Integrator; domain=Boundary(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
     println("PolyInt: ")#$(length(relevant)), $(length(modified))")
     _integrate(Integrator; domain=domain, calculate=relevant, iterate=Base.intersect(union(modified,relevant),1:(length(Integrator.Integral)))) 
 end
@@ -96,13 +96,14 @@ function heuristic_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,neigh,
         for _neigh in sig # iterate over neighbors in vertex
             _neigh==_Cell && continue
             index=_neigh_index(neigh,_neigh)
-            push!( dd[index] , sig =>r) # push vertex to the corresponding list
+            index!=0 && (push!( dd[index] , sig =>r)) # push vertex to the corresponding list
         end
     end
     for (sig,r) in verteces2 # repeat in case verteces2 is not empty
         for _neigh in sig
             _neigh==_Cell && continue
             index=_neigh_index(neigh,_neigh)
+            index==0 && continue
             if (_neigh>_Cell || isempty(dd[index])) # make sure for every neighbor the dd-list is not empty
                 push!( dd[index] , sig =>r) # push vertex to the corresponding list
             end
