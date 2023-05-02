@@ -51,9 +51,9 @@ function clean_affected!(Integral::Voronoi_Integral,affected; clean_neighbors=fa
 end
 
 
-function systematic_refine!( Integral::Voronoi_Integral, new_xs::Points ; search_settings=[], recursive=true, domain=Boundary(), subroutine_offset=0, intro="Refine with $(length(new_xs)) points", short_log=true,pdomain=false)
+function systematic_refine!( Integral::Voronoi_Integral, new_xs::Points ; search_settings=[], recursive=true, domain=Boundary(), subroutine_offset=0, intro="Refine with $(length(new_xs)) points", short_log=true,pdomain=false, obligatories=Int64[])
     s_offset = subroutine_offset+sys_refine_offset
-    iter = Int64[] # array to store all old cells that are affected
+    iter = obligatories # array to store all old cells that are affected
     if length(new_xs)==0 return iter end
     lxs = length(Integral)
     lnxs = length(new_xs)
@@ -99,6 +99,9 @@ function systematic_refine!( Integral::Voronoi_Integral, new_xs::Points ; search
     #println("The new mesh is $(plausible(Integral.MESH,searcher))ly plausible...")
     vp_print(s_offset,"                                                            ")
     #plausible(Integrator.Integral.MESH,searcher,report=true,report_number=1)
+    obligatories .+= lnxs
+    sort!(unique!(append!(iter,obligatories)))
+    short_iter = view(iter,lnxs+1:length(iter))
     voronoi( Integrator, Iter=short_iter,  searcher=searcher ,subroutine_offset=s_offset,intro="Second Voronoi:     ",compact=true)
     #plausible(Integrator.Integral.MESH,searcher,report=true,report_number=2)
     return iter

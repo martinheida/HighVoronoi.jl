@@ -178,4 +178,111 @@ function check_2d(mesh::Voronoi_MESH)
         if count!=length(neigh) println("error in $i: $(mesh.nodes[i]) ,    $count<>$(length(neigh))") end
     end
 end=#
-    
+#=    
+struct Draw2DLine
+    p1
+    p2
+end
+
+struct Draw2dPlotsBoard
+    whiteboard
+    scale
+end
+
+struct Draw2DCell
+    _Cell
+    verteces
+end
+
+struct Draw2DCells
+    All_Verteces
+    Buffer_Verteces
+end
+struct Draw2DVerteces
+    All_Verteces
+end
+
+function Draw2DMesh(mesh;edges=true,nodes=true,verteces=true,edgecolor=nothing,nodecolor=nothing,vertexcolor=nothing)
+    a=()
+    if edges
+        a = (a...,(Draw2DCells(mesh.All_Verteces,mesh.Buffer_Verteces),edgecolor))
+    end
+    if nodes
+        a = (a...,(mesh.nodes,nodecolor))
+    end
+    if verteces
+        a = (a...,(Draw2DVerteces(mesh.All_Verteces),vertexcolor))
+    end
+    return a
+end
+
+function plot_point!(B::Draw2dPlotsBoard, x, y, color=nothing)
+    color==nothing && (color=(0,0,0))
+    s=B.scale
+    plot!(B.whiteboard, x + s*cos.(0:0.01:2π), y + s*sin.(0:0.01:2π), fill=true, color=color)
+end
+
+function plot_line!(B::Draw2dPlotsBoard, x1, y1, x2, y2, color=nothing)
+    color==nothing && (color=(0,0,0))
+    plot!(B.whiteboard, [x1, x2], [y1, y2], color=color)
+end
+
+function Draw2D(whiteboard, args...)
+    emptylist=EmptyDictOfType([0]=>Integral.MESH.nodes[1])
+    dd=Vector{typeof(emptylist)}(undef,1)
+    dd[1]=copy(emptylist)
+    for e in args
+        obj = (length(e) > 1) ? e[1] : e
+        col = (length(e) > 1) ? e[2] : nothing
+        if typeof(obj)<:Point
+            plot_point!(B, obj[1], obj[2], col)
+        elseif typeof(obj)==Draw2DLine
+            plot_line!(B, obj.p1[1], obj.p1[2], obj.p2[1], obj.p2[2], col)
+        elseif typeof(obj)<:Points
+            for i in 1:length(obj)
+                plot_point!(B, obj[i][1], obj[i][2], col)
+            end
+        elseif typeof(obj)==Drwa2DCell
+            plot_cell!(B,obj._Cell,obj.verteces,dd,emptylist,col)
+        elseif typeof(obj)==Drwa2DCells
+            for i in 1:length(obj.All_Verteces)
+                plot_cell!(B,i,Iterators.flatten((obj.All_Verteces[i],obj.Buffer_Verteces[i])),dd,emptylist,col)
+            end
+        elseif typeof(obj)==Boundary
+            edges=edge_representation2D(obj)
+            while !isempty(edges)
+                (_,(x1,x2))=pop!(edges)
+                plot_line!(B, x1[1],x1[2],x2[1],x2[2], col)
+            end        
+        elseif typeof(obj)==Draw2DVerteces
+            for i in 1:length(obj.Verteces)
+                for (_,r) in obj.Verteces[i]
+                    plot_point!(B, r[1], r[2], col)                
+                end
+            end
+        end
+    end
+end
+
+function plot_cell!(B,_Cell,verteces,dd,emptylist,col)
+    neigh = _old_neighbors_of_cell(_Cell,verteces)
+    _length = length(neigh)
+    while length(neigh)>length(dd) push!(dd,copy(emptylist)) end
+    for (sig,r) in verteces  # iterate over all verteces
+        for _neigh in sig # iterate over neighbors in vertex
+            _neigh==_Cell && continue
+            index = _neigh_index(neigh,_neigh)
+            index!=0 && (push!( dd[index] , sig =>r)) # push vertex to the corresponding list
+        end
+    end
+    for k in 1:_length
+        neigh[k]==_Cell && continue
+        s1,r1=pop!(dd[k])
+        if !isempty(dd[k]) && r1 in board._board
+            s2,r2=pop!(dd[k])
+            r2 in board._board && plot_line!(B, r1[1], r1[2], r2[1], r2[2], col)
+        end
+        while !isempty(dd[k]) pop!(dd[k]) end
+    end
+end
+=#

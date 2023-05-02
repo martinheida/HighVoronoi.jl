@@ -1,62 +1,34 @@
-struct Heuristic_Cube_Integrator{T,TT} 
-    _function::T
-    bulk::Bool
-    Integral::TT
-    function Heuristic_Cube_Integrator{T,TT}(f::T,b::Bool,I::TT) where {T,TT}
-        return new(f,b,I)
-    end
-    function Heuristic_Cube_Integrator(mesh,integrand=nothing, bulk_integral=false)
-        b_int=(typeof(integrand)!=Nothing) ? bulk_integral : false
-        i_int=(typeof(integrand)!=Nothing) ? true : false
-        Integ=Voronoi_Integral(mesh,integrate_bulk=b_int, integrate_interface=i_int)
-        PI=Heuristic_Cube_Integrator{typeof(integrand),typeof(Integ)}( integrand, b_int, Integ )
-        return PI
-    end
-end
-
-function backup_Integrator(I::Heuristic_Cube_Integrator,b)
-    return b ? Polygon_Integrator{typeof(I._function),typeof(I.Integral)}(I._function,I.bulk,I.Integral) : I
-end
-
-function copy(I::Heuristic_Cube_Integrator)
-    return Heuristic_Integrator{typeof(I._function),typeof(I.Integral)}(I._function,I.bulk,copy(I.Integral))
-end
-
-function integrate(Integrator::Heuristic_Cube_Integrator; domain=Boundary(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
-    println("PolyInt: ")#$(length(relevant)), $(length(modified))")
-    _integrate(Integrator; domain=domain, calculate=relevant, iterate=Base.intersect(union(modified,relevant),1:(length(Integrator.Integral)))) 
-end
 
 
-function prototype_bulk(Integrator::Heuristic_Cube_Integrator)
-    y = (typeof(Integrator._function)!=Nothing && Integrator.bulk) ? Integrator._function(Integrator.Integral.MESH.nodes[1]) : Float64[]
-    y.*= 0.0
-    return y
-end
-
-function prototype_interface(Integrator::Heuristic_Cube_Integrator)
-    return 0.0*(typeof(Integrator._function)!=Nothing ? Integrator._function(Integrator.Integral.MESH.nodes[1]) : Float64[])
-end
-
-
-function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Heuristic_Cube_Integrator,ar,bulk_inte,inter_inte)    
+function    integrate_cube(_Cell, data,Integrator,proto)    
     Integral  = Integrator.Integral
-    (typeof(Integrator._function) == Nothing) && (return Integral.volumes[_Cell])
+    neigh = Integral.neighbors[_Cell]
+
+    if (typeof(Integrator._function) == Nothing) 
+        return
+    end 
+
+    Integral.bulk_integral[_Cell] = copy(proto)
+    Integral.interface_integral[_Cell] = Vector{Vector{Float64}}(undef,length(neigh))
+    map!(x->copy(proto), Integral.interface_integral[_Cell], 1:length(neigh))
 
     verteces2 = Integral.MESH.Buffer_Verteces[_Cell]
     verteces  = Integral.MESH.All_Verteces[_Cell]
     xs=data.extended_xs
 
     dim = data.dimension    # (full) Spatial dimension
+    activate_data_cell(data,_Cell,neigh)
+
+    inter_inte = Integral.interface_integral[_Cell]
+    bulk_inte = Integral.bulk_integral[_Cell]
+    ar = Integral.area[_Cell]
+
 
     # get all neighbors of this current cell
-    neigh=neighbors
     _length=length(neigh)
 
     # flexible data structure to store the sublists of verteces at each iteration step 1...dim-1
     emptydict=EmptyDictOfType([0]=>xs[1])      # empty buffer-list to create copies from
-    listarray=(typeof(emptydict))[] # will store to each remaining neighbor N a sublist of verteces 
-                                    # which are shared with N
 
     # empty_vector will be used to locally store the center at each level of iteration. This saves
     # a lot of "memory allocation time"
@@ -66,7 +38,8 @@ function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Heuri
     # do the integration
     I=Integrator
     heuristic_Cube_integral(I._function, I.bulk, _Cell,  bulk_inte, ar, inter_inte, dim, neigh, 
-                _length,verteces,verteces2,emptydict,xs[_Cell],empty_vector,calculate,Integral,xs)
+                _length,verteces,verteces2,emptydict,xs[_Cell],empty_vector,1:length(xs),Integral,xs)
+
 
     return Integral.volumes[_Cell]
 end
@@ -84,14 +57,14 @@ function heuristic_Cube_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,n
         for _neigh in sig # iterate over neighbors in vertex
             _neigh==_Cell && continue
             index=_neigh_index(neigh,_neigh)
-            if (_neigh>_Cell || isempty(dd[index])) # make sure for every neighbor the dd-list is not empty
+            if index!=0 && (_neigh>_Cell || isempty(dd[index])) # make sure for every neighbor the dd-list is not empty
                 push!( dd[index] , sig =>r) # push vertex to the corresponding list
             end
         end
     end
     for k in 1:_length
         buffer=neigh[k]  
-        if !(buffer in calculate) && !(_Cell in calculate) continue end
+#        if !(buffer in calculate) && !(_Cell in calculate) continue end
         bufferlist=dd[k] 
         isempty(bufferlist) && continue
         AREA_Int = Ay[k] # always: typeof(_function)!=Nothing
@@ -200,11 +173,11 @@ function cubic_voronoi_copy_verteces(Integral,deviation,counter,domain,get_volum
         elseif stretchright && neigh[ii]==new_index
             neigh[ii]=c1
         else
-            stretchleft && get_volumes && (area[ii]/=vol1[current_dim])
-            stretchright && get_volumes && (area[ii]*=vol2[current_dim])
+            stretchleft && get_volumes && neigh[ii]!=new_index && (area[ii]/=vol1[current_dim])
             if neigh[ii]<=lmesh
                 neigh[ii] += nodeshift
             end
+            stretchright && get_volumes && neigh[ii]!=old_index && (area[ii]*=vol2[current_dim])
         end
     end
     if get_volumes
@@ -212,7 +185,7 @@ function cubic_voronoi_copy_verteces(Integral,deviation,counter,domain,get_volum
         stretchleft && (Integral.volumes[new_index]/=vol1[current_dim])
         stretchright && (Integral.volumes[new_index]*=vol2[current_dim])
     end
-
+    quicksort!(neigh,neigh,get_volumes ? area : neigh)
 end
 
 function first_cube(xs,deviation,cell_size,searcher)
@@ -245,6 +218,7 @@ function cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,domain,my_int
     Integrator = my_integrator(mesh)
     Integrator.Integral.neighbors[1] = neighbors_of_cell(1,Integrator.Integral.MESH)
     get_volumes = fast && length(Integrator.Integral.volumes)>0
+    data = (fast && integrand!=nothing) ? IntegrateData(Integrator.Integral.MESH.nodes,domain) : nothing
     
     # data for first cell:
     dim = length(xs[1])
@@ -253,6 +227,8 @@ function cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,domain,my_int
     vol_vector2 = cell_size - deviation
     Integrator.Integral.neighbors[1] = Vector{Int64}(undef,2*dim)
     get_volumes && (Integrator.Integral.area[1] = Vector{Float64}(undef,2*dim))
+    proto = 0.0*(typeof(Integrator._function)!=Nothing ? Integrator._function(Integrator.Integral.MESH.nodes[1]) : Float64[])
+
     index = ones(Int64,dim)
     bit = BitVector(ones(Int8,dim))
     for i in 1:dim
@@ -276,6 +252,8 @@ function cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,domain,my_int
         sort!(Integrator.Integral.neighbors[1])
     end
 
+    integrate_cube(1, data,Integrator,proto)    
+
     pc = Periodic_Counter(periodicity)
     increase(pc)
     indeces = zeros(Int64,3^(dim-1))
@@ -289,10 +267,29 @@ function cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,domain,my_int
             count=0
         end
         cubic_voronoi_copy_verteces(Integrator.Integral,deviation,pc,domain,get_volumes,vol_vector./cell_size,vol_vector2./cell_size,indeces)
+        integrate_cube(pc.cell_index, data, Integrator,proto)    
         increase(pc)
     end
     #println()
     #println(Integrator.Integral.volumes)
+#=    aa = [1,1,1]
+    my_ind = index_from_array(aa,periodicity)
+    println("$aa - $my_ind :  $(Integrator.Integral.area[my_ind]), $(Integrator.Integral.neighbors[my_ind])")
+    aa = [2,1,1]
+    my_ind = index_from_array(aa,periodicity)
+    println("$aa - $my_ind :  $(Integrator.Integral.area[my_ind]), $(Integrator.Integral.neighbors[my_ind])")
+    aa = [1,2,1]
+    my_ind = index_from_array(aa,periodicity)
+    println("$aa - $my_ind :  $(Integrator.Integral.area[my_ind]), $(Integrator.Integral.neighbors[my_ind])")
+    aa = [1,1,2]
+    my_ind = index_from_array(aa,periodicity)
+    println("$aa - $my_ind :  $(Integrator.Integral.area[my_ind]), $(Integrator.Integral.neighbors[my_ind])")
+    aa = [2,2,2]
+    my_ind = index_from_array(aa,periodicity)
+    println("$aa - $my_ind :  $(Integrator.Integral.area[my_ind]), $(Integrator.Integral.neighbors[my_ind])")
+    aa = [3,3,3]
+    my_ind = index_from_array(aa,periodicity)
+    println("$aa - $my_ind :  $(Integrator.Integral.area[my_ind]), $(Integrator.Integral.neighbors[my_ind])")=#
     return Integrator
 end
 

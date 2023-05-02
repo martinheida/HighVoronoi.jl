@@ -386,6 +386,17 @@ function PeriodicVoronoiGeometry(matrix_data::Matrix; search_settings=[], fast=t
                         calculate = Iterators.flatten((i_nodes,(b+1):((length(xs)+length(cube))))), iterate=i_nodes, I_data=I_data,compact=true)
 # old version                       calculate = Iterators.flatten((modified_i_nodes,(b+1):((length(xs)+length(cube))))), iterate=modified_i_nodes, I_data=I_data,compact=true)
                 # finally increase to next cell
+#=                if b>=100
+                    for i in 1:b
+                        println("$i: $(Integrator.Integral.volumes[i])  -->  $(sum(view(Integrator.Integral.volumes,1:i)))")
+                        print("   ")
+                        for k in 1:length(Integrator.Integral.neighbors[i])
+                            print("($(Integrator.Integral.neighbors[i][k]),$(Integrator.Integral.area[i][k])), ")
+                        end
+                        println()
+                    end
+                    error("")
+                end=#
                 increase(pc)
             end
             #println(modified)
@@ -622,3 +633,91 @@ function periodic_copy_data(counter::Periodic_Counter, mesh::Voronoi_MESH, domai
 end
 
 
+
+function PeriodicVoronoiGeometryTest(matrix_data::Matrix; search_settings=[], fast=true, periodic=[], scale=ones(Float64,size(matrix_data,1)), repeat = 2*ones(Int64,size(matrix_data,1)), dimensions=ones(Float64,size(matrix_data,1)), integrator=VI_POLYGON, integrand=nothing, mc_accurate=(1000,100,20))
+    dim = size(matrix_data,1)
+    _scale=diagm(scale)
+    data = _scale*matrix_data
+    number_of_nodes = size(matrix_data,2)
+    if number_of_nodes==1
+        return CubicVoronoiGeometry(matrix_data, search_settings=search_settings, fast=fast, periodic=periodic, scale=scale, repeat = repeat, dimensions=dimensions, integrator=integrator, integrand=integrand, mc_accurate=mc_accurate)
+    end
+    println(Crayon(foreground=:red,underline=true), "Create periodic mesh in $dim-D from  $number_of_nodes points",Crayon(reset=true))
+    offsetvector = zeros(Float64,dim)
+    my_repeat = copy(repeat)
+    for i in 1:dim
+        if i in periodic
+            my_repeat[i]+=2
+            offsetvector[i] = (-1.0)* dimensions[i]
+        end
+    end
+    offsetvector=_scale*offsetvector
+    println(Crayon(foreground=:red,underline=true), "Periodicity: $periodic, Unit cell size: $(_scale*dimensions), repeat=$repeat, i.e. $(prod(repeat)) unit cells",Crayon(reset=true))
+    # dimensions of the actual cube
+    cubedimensions = _scale*copy(dimensions)
+    cubedimensions .*= repeat
+    cube = cuboid( dim, periodic = periodic, dimensions = cubedimensions )
+    # dimensions of the extended cube
+    extended_cubedimensions = _scale*copy(dimensions)
+    extended_cubedimensions .*= my_repeat
+    extended_cube = cuboid( dim, periodic = periodic, dimensions = extended_cubedimensions, offset = offsetvector )
+
+    periodicity = PeriodicData(my_repeat,_scale*dimensions,number_of_nodes,offsetvector)
+
+    xs = periodicgeodata(data,periodicity)
+    
+    index = index_from_array(2*ones(Int64,dim),periodicity)
+    for i in 1:number_of_nodes
+        r = xs[(index-1)*number_of_nodes+i]
+        xs[(index-1)*number_of_nodes+i] = xs[i]
+        xs[i] = r
+    end
+    mysearcher = Raycast(xs,domain=extended_cube)
+    Integrator,_ = voronoi(xs,searcher=mysearcher,Iter=1:number_of_nodes)
+    m1 = Integrator.Integral.MESH    
+    #I2=HighVoronoi.Integrator(Integrator.Integral.MESH,type=VI_POLYGON,integrand=integrand,mc_accurate=mc_accurate)
+    #_integrate(I2,domain=extended_cube,iterate=1:number_of_nodes,compact=true)
+    #println()
+    #println("Volumen: ",sum(view(I2.Integral.volumes,1:number_of_nodes)))
+    
+    counts =zeros(Int64,number_of_nodes)
+    @time for _Cell in 1:number_of_nodes
+        mysearcher.tree.active.*=0
+        activate_cell( mysearcher, _Cell, neighbors_of_cell(_Cell,m1,adjacents=true) )    
+        for i in 1:40000
+            sig, r = descent(xs,mysearcher,_Cell)
+            vv = vertex_variance(sig,r,mysearcher)
+            if !(haskey(m1.All_Verteces[_Cell],sig) || haskey(m1.Buffer_Verteces[_Cell],sig)) && vv<1E-15
+                counts[_Cell]+=1
+                #println("$_Cell, $i : Fehler $sig")
+                push!(m1,sig=>r)
+                #return
+            end
+        end
+
+    end
+    println(counts)
+    I2=HighVoronoi.Integrator(Integrator.Integral.MESH,type=VI_POLYGON,integrand=integrand,mc_accurate=mc_accurate)
+    _integrate(I2,domain=extended_cube,iterate=1:number_of_nodes,compact=true)
+    println()
+    println("Volumen: ",sum(view(I2.Integral.volumes,1:number_of_nodes)))
+    #=for i in 1:10
+        Integrator2,_ = voronoi(xs,searcher=mysearcher,Iter=1:number_of_nodes,intro="Calculating Voronoi cells $i :")    
+        m1 = Integrator.Integral.MESH    
+        m2 = Integrator2.Integral.MESH
+        for n in 1:number_of_nodes
+            for (sig,r) in Iterators.flatten((m1.All_Verteces[n],m1.Buffer_Verteces[n]))
+                if !(haskey(m2.All_Verteces[n],sig) || haskey(m2.Buffer_Verteces[n],sig))
+                    println("Fehler 1")
+                    return
+                end
+            end
+            for (sig,r) in Iterators.flatten((m2.All_Verteces[n],m2.Buffer_Verteces[n]))
+                if !(haskey(m1.All_Verteces[n],sig) || haskey(m1.Buffer_Verteces[n],sig))
+                    println("Fehler 2")
+                    return
+                end
+            end
+        end
+    end=#
+end

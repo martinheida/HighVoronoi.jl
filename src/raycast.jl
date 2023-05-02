@@ -147,7 +147,7 @@ function descent(xs::Points, searcher, start = 1)
     minimal_edge[1] = start
     base = xs[start]
     d = length(r)
-    u = rand(length(r))
+    u = 2 .* rand(length(r)) .- 1 # rand(length(r))
     ortho_system = Vector{Vector{Float64}}(undef,d)
     for k in 1:d   ortho_system[k]=zeros(Float64,d)   end 
     span = searcher.edge_buffer
@@ -207,6 +207,7 @@ function descent(xs::Points, searcher, start = 1)
     span .= 0
     r = project(r,searcher.domain)
     r,_ = walkray_correct_vertex(r, sig, searcher, true,minimal_edge=view(minimal_edge,1:d),new_generator=minimal_edge[d+1])
+    #println("Descent 1: $sig")
     return (sig, r)
 end
 

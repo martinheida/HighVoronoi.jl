@@ -53,7 +53,6 @@ also available in the forms
 
     VoronoiNodes(x::Vector{<:Vector})
     VoronoiNodes(x::Vector{<:SVector})
-    VoronoiNodes(p::AbstractVector{Float64}) = VoronoiNodes([p])
 
 creates a list of points (as static vectors) from a matrix.
 # Example: 100 Points in ``(0,1)^3``

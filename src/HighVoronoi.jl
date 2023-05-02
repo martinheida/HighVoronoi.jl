@@ -1,5 +1,5 @@
 module HighVoronoi
-using IterTools
+#using IterTools
 using SpecialFunctions
 using LinearAlgebra
 using NearestNeighbors

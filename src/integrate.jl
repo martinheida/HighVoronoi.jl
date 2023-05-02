@@ -216,10 +216,14 @@ function _integrate(Integrator; domain=Boundary(), calculate=1:(length(Integrato
     TODO_count=length(TODO)
     max_string_i = length(string(iterate[end], base=10)) 
     max_string_todo = length(string(TODO_count, base=10)) 
-
+    vol_sum = 0.0
+    count=0 
     for k in 1:TODO_count # initialize and array of length "length(xs)" to locally store verteces of cells
         vp_print(position_0,"Cell $(string(TODO[k], base=10, pad=max_string_i)) (in cycle: $(string(k, base=10, pad=max_string_todo)) of $TODO_count)")
         integrate_cell(vol,ar,bulk,inter,TODO[k],iterate, calculate, data,Integrator)
+        vol_sum+=Integral.volumes[TODO[k]]
+        count += Integral.volumes[TODO[k]]<1E-10
+        print("  vol = $(Integral.volumes[TODO[k]]), s=$(round(vol_sum,digits=6)),  $count")
     end
     #vp_line_up(1)
     if (!compact) vp_line() end 

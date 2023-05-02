@@ -107,6 +107,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
             if (typeof(_function)!=Nothing)
                 Ay.+=0*(_function(r))
             end=#
+            #println("hier")
             if space_dim==2 push!(verteces,sig=>r) end
             #error("bla")
             return 
@@ -125,6 +126,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
         k_minor(all_determinants,space_dim, r2-vector)
         vol=(all_determinants.data[space_dim])[1] #pop!(all_determinants[space_dim])
         vol=abs(vol)
+        #println(_Cell," vol ",vol)
         A[1]+=vol
         if (typeof(_function)!=Nothing)
             Ay.+=0.5*(_function(r)+_function(r2))*vol
@@ -138,6 +140,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
         
         # dd will store to each remaining neighbor N a sublist of verteces which are shared with N
         dd=Vector{typeof(emptylist)}(undef,_length)
+        #println("Berechne $_Cell, $neigh")
         for i in 1:_length dd[i]=copy(emptylist) end
 
         for (sig,r) in verteces  # iterate over all verteces
