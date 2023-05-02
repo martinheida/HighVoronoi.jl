@@ -634,7 +634,7 @@ end
 
 
 
-function PeriodicVoronoiGeometryTest(matrix_data::Matrix; search_settings=[], fast=true, periodic=[], scale=ones(Float64,size(matrix_data,1)), repeat = 2*ones(Int64,size(matrix_data,1)), dimensions=ones(Float64,size(matrix_data,1)), integrator=VI_POLYGON, integrand=nothing, mc_accurate=(1000,100,20))
+#=function PeriodicVoronoiGeometryTest(matrix_data::Matrix; search_settings=[], fast=true, periodic=[], scale=ones(Float64,size(matrix_data,1)), repeat = 2*ones(Int64,size(matrix_data,1)), dimensions=ones(Float64,size(matrix_data,1)), integrator=VI_POLYGON, integrand=nothing, mc_accurate=(1000,100,20))
     dim = size(matrix_data,1)
     _scale=diagm(scale)
     data = _scale*matrix_data
@@ -721,3 +721,4 @@ function PeriodicVoronoiGeometryTest(matrix_data::Matrix; search_settings=[], fa
         end
     end=#
 end
+=#
