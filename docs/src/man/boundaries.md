@@ -33,3 +33,6 @@ cuboid(dim;dimensions=ones(Float64,dim),periodic=collect(1:dim),neumann=Int64[],
 !!! warning "Using no boundaries in high dimensions"
     when using no boundary planes the result "at infinity" i.e. for farout vertex points can be corrupted for high dimensions. This is because virtually every boundary point (a point with infinite cell) becomes neighbor with almost all other boundary points and the verteces reach out to very very very large coordinates compared to the original nodes coordinates. The Library provides internal algorithms to identify and correct misscalculations but this functionallity is, however, limited to the precission of `Float64`. We advise to implement a farout boundary (e.g. `1.0E6`) compared to a cube of diameter `1`.
 
+## Some more tools
+
+
