@@ -34,6 +34,7 @@ To verify the claimed scaling, one may use the following:
  dim = 5
  A = HighVoronoi.collect_statistics(HighVoronoi.statistic_samples(dim,nodeslist,4),txt="results$(dim)D-30000-new.txt")
  ```
+
  The above calculates for each number of nodes `n` in `nodeslist` in dimension `dim` 
   a Voronoi grid in the unit cube. It does this 4 times and returns averaged information about:
 - `A[1,entry]` = number of nodes
