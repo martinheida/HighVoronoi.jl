@@ -33,6 +33,7 @@ This creates a Voronoi mesh from the points `xs` given e.g. as an array of `SVec
 the commands in the Boundaries section.
 
 You have the following optional commands:
+- `silence`: Suppresses output to the command line when `true`. The latter will speed up the algorithm by a few percent. default is `false`. 
 - `integrator`: can be either one of the following values:
     * `VI_GEOMETRY`: Only the basic properties of the mesh are provided: the verteces implying a List of neighbors of each node
     * `VI_MONTECARLO`: Volumes, interface areas and integrals are calculated using a montecarlo algorithm. 
@@ -71,7 +72,7 @@ Additionally it has the following options:
 """
 VoronoiGeometry()
 
-function VoronoiGeometry(xs::Points,b=Boundary(); search_settings=[], integrator=VI_GEOMETRY,integrand=nothing,mc_accurate=(1000,100,20),periodic_grid=nothing,silence=false)
+function VoronoiGeometry(xs::Points,b=Boundary(); search_settings=[], integrator=VI_GEOMETRY,integrand=nothing,mc_accurate=(1000,100,20),periodic_grid=nothing,silence=false,printevents=false)
     oldstd = stdout
     result = nothing
     try
@@ -82,7 +83,7 @@ function VoronoiGeometry(xs::Points,b=Boundary(); search_settings=[], integrator
             println(Crayon(foreground=:red,underline=true), "Initialize bulk mesh with $(length(xs)) points",Crayon(reset=true))
             redirect_stdout(silence ? devnull : oldstd)
             search=RaycastParameter(search_settings,(domain=b,))
-            I,searcher=voronoi(xs,searcher=Raycast(xs;search...),intro="")
+            I,searcher=voronoi(xs,searcher=Raycast(xs;search...),intro="",printsearcher=printevents)
             #println(plausible(I.Integral.MESH,searcher))
             redirect_stdout(oldstd)
             println(Crayon(foreground=:red,underline=true), "Initialize mesh on boundary based on boundary conditions",Crayon(reset=true))
@@ -93,7 +94,8 @@ function VoronoiGeometry(xs::Points,b=Boundary(); search_settings=[], integrator
             integrate(backup_Integrator(I2,true),domain=b,relevant=(1+length(_domain.references)):(length(I.Integral)+length(b)))
             result = VoronoiGeometry{typeof(I2),typeof(integrand)}(I2,Int64[],xs,I.Integral.MESH,_domain,integrand,search)
         end
-    catch
+    catch err
+        rethrow()
     end
     redirect_stdout(oldstd)
     return result    

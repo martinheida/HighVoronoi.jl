@@ -77,8 +77,8 @@ end
 
 #############################################################################################
 
-function voronoi(xs::Points; searcher=Raycast(xs),initialize=0,Iter=1:length(xs),intro="Calculating Voronoi cells:",compact=false) 
-    return voronoi(Geometry_Integrator(xs),searcher=searcher,initialize=initialize,Iter=Iter,intro=intro,compact=compact)
+function voronoi(xs::Points; searcher=Raycast(xs),initialize=0,Iter=1:length(xs),intro="Calculating Voronoi cells:",compact=false,printsearcher=false) 
+    return voronoi(Geometry_Integrator(xs),searcher=searcher,initialize=initialize,Iter=Iter,intro=intro,compact=compact,printsearcher=printsearcher)
 end
 
 function initialize_voronoi(initialize,mesh,TODO,searcher)
@@ -191,6 +191,7 @@ function voronoi(Integrator; Iter=1:(length(Integrator.Integral.MESH.nodes)), se
         vp_line()
     end
     printsearcher && (vp_print(searcher))
+    println(searcher.force_irregular_search)
     return Integrator, searcher
 end
 
@@ -304,7 +305,7 @@ function systematic_explore_vertex(xs,sig,R,_Cell,edgecount_local,mesh,queue,bou
     ( (start+dim-1)>lsig ) &&  return
     for i in 1:searcher.dimension edgeview[i]=start+i-1 end
     b = true
-    new_verts = Vector{Pair{Vector{Int64},typeof(R)}}(undef,dim)
+    new_verts = searcher.new_verts_list
     count_verts = 1
     l_newverts = length(new_verts)
     # ------------------------------------------------------------------------------------------
@@ -548,6 +549,8 @@ function queue_vertex(sig,r,mesh,queue,edgecount_local,searcher)
     ret = 0
         if !haskey(mesh.All_Verteces[sig[1]], sig) && !haskey(queue, sig) #in case we really have new vertex ....
             push!(queue, sig => r)  # put it to the queue
+            searcher.rare_events[SRI_vertex] += 1
+            sig[end]>length(mesh) && (searcher.rare_events[SRI_boundary_vertex]+=1)
             ret += queue_edges(sig,r,sig[1],edgecount_local,searcher,print=Base.print)
         end
     return ret

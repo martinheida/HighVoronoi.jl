@@ -38,20 +38,17 @@ const SearchRandom = (recursive=true, plane_tol=1.0E-15, variance_tol=1.0E-20, b
             allow_irregular=false, force_irregular_search=false, domain=Boundary(), bruteforce=false, fastiterator=false)
 
 function RaycastParameter(set1,set2)
-    keys1 = keys(set1)
-    keys2 = keys(set2)
-    set0 = DefaultRaycastSetting
-    keys0 = keys(set0)
-    all_settings = Dict{Symbol,Any}()
-    for k in keys0
-        push!(all_settings, k=> k in keys2 ? set2[k] : (k in keys1 ? set1[k] : set0[k]) ) 
-    end
-    all_settings[:force_irregular_search] && (all_settings[:allow_irregular]=true)
+    #set0 = NamedTuple(keys(DefaultRaycastSetting),values(DefaultRaycastSetting))
+    #println(set0)
+    set0 = (;DefaultRaycastSetting...,set1...,set2...)
+    all_settings = (;set0..., allow_irregular = set0[:allow_irregular] || set0[:force_irregular_search])
     if all_settings[:correcting]
         vtol = all_settings[:variance_tol]
-        (all_settings[:break_tol]<vtol) && (all_settings[:break_tol]=10*vtol)
+        if (all_settings[:break_tol]<vtol) 
+            all_settings= (;all_settings...,break_tol = 10*vtol)
+        end
     end
-    return NamedTuple(all_settings)
+    return all_settings
 end
 
 ####################################################################################################################################
@@ -138,6 +135,7 @@ end
 
 """ starting at given points, run the ray shooting descent to find vertices """
 function descent(xs::Points, searcher, start = 1) 
+    searcher.rare_events[SRI_descent] += 1
     if !searcher.allow_irregular_verteces
         return olddescent(xs,searcher,start)
     end
@@ -227,6 +225,7 @@ end
 """ find the vertex connected to `v` by moving away from its `i`-th generator """
 function walkray(edge::Sigma, r::Point, xs::Points, searcher, sig; ray=nothing, minimal_edge=nothing)
     #global walk_count=walk_count+1
+    searcher.rare_events[SRI_walkray] += 1
     dim = length(r)
     sig_del = edge #deleteat(_sig, i)
     success = true
@@ -234,7 +233,7 @@ function walkray(edge::Sigma, r::Point, xs::Points, searcher, sig; ray=nothing, 
     Rest = sig[k]
     u = ray
     if typeof(u)==Nothing
-        u = randray(view(xs,sig_del))
+        u = randray(view(xs,sig_del),map(i->view(searcher.vectors,:,i),1:(dim-1)))
         value_max = 0.0
         value_min = 0.0
         for s in sig
@@ -276,10 +275,6 @@ function walkray(edge::Sigma, r::Point, xs::Points, searcher, sig; ray=nothing, 
             end
             k = searcher.visited[sig2[1]]
             println("sig2[1]= $(sig2[1])")
-            k2 = searcher.visited[sig2[1]-1]
-            t2 = searcher.ts[sig2[1]-1]
-            #println(vertex_variance([edge,k],r+t*u,length(edge)))
-            #println(vertex_variance([edge,k2],r+t2*u,length(edge)))
             if length(searcher.domain)<=d
                 @warn("the above output simply means that the machine precission is not high enough to properly calculate the Voronoi cells far away from the nodes. You should consider to place a large box around your sample.")
                 return sig_del, r, u, false
@@ -377,6 +372,27 @@ function randray(xs::Points)
         u = u - dot(u, v[i]) * v[i]
     end
     u = normalize(u)
+    return u
+end
+
+function randray(xs::Points,v)
+    k = length(xs)
+    d = length(xs[1])
+
+    # Gram Schmidt
+    for i in 1:k-1
+        map!(j->xs[i][j] - xs[k][j],v[i],1:d)
+        for j in 1:(i-1)
+            v[i] .-= dot(v[i], v[j]) .* v[j]
+        end
+        normalize!(v[i])
+    end
+
+    u = randn(d)
+    for i in 1:k-1
+        u .-= dot(u, v[i]) .* v[i]
+    end
+    normalize!(u)
     return u
 end
 
@@ -620,7 +636,7 @@ end
 ########################################################################################################################################
 
 
-struct RaycastIncircleSkip{T,TT,TTT}
+struct RaycastIncircleSkip{T,TT,TTT,TTTT}
     tree::T
     lmesh::Int64
     visited::Vector{Int64}
@@ -645,6 +661,7 @@ struct RaycastIncircleSkip{T,TT,TTT}
     dimension::Int64
     edgeiterator::TTT
     plane_tolerance::Float64
+    new_verts_list::TTTT
 end
 
 # SRI = search rare index
@@ -662,7 +679,11 @@ const SRI_out_of_line_is_severe_multi = 11
 const SRI_descent_out_of_vertex_line = 12
 const SRI_fake_vertex = 13
 const SRI_check_fake_vertex = 14
-
+const SRI_walkray = 15
+const SRI_descent = 16
+const SRI_vertex = 17
+const SRI_boundary_vertex = 18
+const SRI_nn = 19
 const SRI_max = 20
 
 function vp_print(searcher::RaycastIncircleSkip; rare_events=true,mirrors=false)
@@ -700,8 +721,9 @@ function RaycastIncircleSkip(xs,recursive,variance_tol,break_tol,node_tol,b_tol,
     z2d_2=zeros(Float64,dim,dim)
     tree=brut ? BruteTree(xs) : MyTree(xs,length(dom))
     EI = getEdgeIterator(fast,dim,lxs)
-    return RaycastIncircleSkip{typeof(tree),typeof(dom),typeof(EI)}( tree, lxs, zeros(Int64,lxs+length(dom)+3), zeros(Int64,dim), z1d_1, recursive, BitVector(zeros(Int8,length(xs))), variance_tol, break_tol, node_tol, b_tol,
-                                    correcting, allow, force, z2d_1, z2d_2, z1d_2, z1d_3, z1d_4, dom, zeros(Int64,SRI_max),dim,EI,planetol)
+    nvl = Vector{Pair{Vector{Int64},typeof(xs[1])}}(undef,dim)
+    return RaycastIncircleSkip{typeof(tree),typeof(dom),typeof(EI),typeof(nvl)}( tree, lxs, zeros(Int64,lxs+length(dom)+3), zeros(Int64,dim), z1d_1, recursive, BitVector(zeros(Int8,length(xs))), variance_tol, break_tol, node_tol, b_tol,
+                                    correcting, allow, force, z2d_1, z2d_2, z1d_2, z1d_3, z1d_4, dom, zeros(Int64,SRI_max),dim,EI,planetol,nvl)
 end
 
 function getEdgeIterator(fast,dim,l)
@@ -720,10 +742,10 @@ global RAYCAST_ERROR=0::Int64
 function raycast(edge::Sigma, r::Point, u::Point, xs::Points, searcher::RaycastIncircleSkip, old = 0,sig2=Int64[])
     sig = isempty(sig2) ? edge : sig2
     x0 = xs[edge[1]]
-    searcher.visited.*=0
-    searcher.ts.*=0
+    #searcher.visited.=0
     visited = view(searcher.visited,4:length(searcher.visited))
     status = view(searcher.visited,1:3)
+    status .= 0
     #maxiterator(_sig,l,pos) = l==1 ? dot(xs[_sig[1]], u) : max( dot(xs[_sig[pos]], u), pos<l-1 ? maxiterator(_sig,l,pos+1) : dot(xs[_sig[pos+1]], u))
     #c = maxiterator(sig,length(sig),1) #maximum(dot(xs[g], u) for g in sig)
     c = maximum(dot(xs[g], u) for g in sig)+ searcher.plane_tolerance #*(1.0)#-1E-12)
@@ -735,9 +757,12 @@ function raycast(edge::Sigma, r::Point, u::Point, xs::Points, searcher::RaycastI
         i, t = _nn(searcher.tree, r + u * (u' * (x0-r)), skip=skip)
     t == Inf && return [0], Inf
 
+    searcher.rare_events[SRI_nn]+=1
     # sucessively reduce incircles unless nothing new is found
     k=1
     visited[1]=i
+    visited[2]=0
+    visited[3]=0
     j=0
     while true
         if (i>length(xs)) || i<=0
@@ -751,6 +776,7 @@ function raycast(edge::Sigma, r::Point, u::Point, xs::Points, searcher::RaycastI
             println("$edge, $i $(sum(abs2, r - x) - sum(abs2, r - x0)), $(u' * (x-x0))")
         end
         j, _ = _nn(searcher.tree, r+t*u, skip=skip)
+        searcher.rare_events[SRI_nn]+=1
         if j in sig 
             break
         elseif _visited(j,visited)
@@ -761,6 +787,8 @@ function raycast(edge::Sigma, r::Point, u::Point, xs::Points, searcher::RaycastI
         end
         k+=1
         visited[k]=j
+        visited[k+1]=0
+        visited[k+2]=0
     end
     k=1
     # lv=length(visited)
