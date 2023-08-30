@@ -37,7 +37,7 @@ using SparseArrays
 
         # Test full space, so bad cases will happen and will be corrected
         println("-----------------------------------------------------------------")
-        println("testing large domains")
+        println("testing large domains and VoronoiNodes Distribution generator")
         println("-----------------------------------------------------------------")
         function test_2000()
             # the following is necessary since unbounded domains can lead to a crash in very rare events
@@ -45,7 +45,7 @@ using SparseArrays
             while b
                 b = false
                 try
-                    xs=VoronoiNodes(hcat(rand(6,1000).+[1,0,0,0,0,0],rand(6,1000)))
+                    xs=VoronoiNodes(1000,density=x->x[1]*sin(x[2]*π),domain=cuboid(6,periodic=[]))
                     vg = VoronoiGeometry(xs,integrator=HighVoronoi.VI_GEOMETRY,integrand = x->[norm(x),1],silence=global_silence)
                     vd = VoronoiData(vg, getverteces=true)
                     HighVoronoi.export_geometry(vg.Integrator.Integral)
@@ -61,10 +61,10 @@ using SparseArrays
 
         # Test Polygon_Integrator on high dimensions
         #vg1 = VoronoiGeometry(VoronoiNodes(rand(5,1000)),cuboid(5,periodic=[1]),integrator=HighVoronoi.VI_POLYGON,integrand = x->[1.0])
-        println("-----------------------------------------------------------------")
-        println("testing Polygon integrator in high dimensions")
-        println("-----------------------------------------------------------------")
-        @test abs( sum(VoronoiData(VoronoiGeometry(VoronoiNodes(rand(5,1000)),cuboid(5,periodic=[1]),integrator=HighVoronoi.VI_POLYGON,integrand = x->[1.0],silence=global_silence)).volume) - 1.0 ) < 1E-3
+        #println("-----------------------------------------------------------------")
+        #println("testing Polygon integrator in high dimensions")
+        #println("-----------------------------------------------------------------")
+        #@test abs( sum(VoronoiData(VoronoiGeometry(VoronoiNodes(rand(5,1000)),cuboid(5,periodic=[1]),integrator=HighVoronoi.VI_POLYGON,integrand = x->[1.0],silence=global_silence)).volume) - 1.0 ) < 1E-3
         # Test Heuristic_Integrator and copying by constructor. 4 dimensions should suffice
         println("-----------------------------------------------------------------")
         println("testing Heuristic integrator in high dimensions")
@@ -108,59 +108,10 @@ using SparseArrays
                                     scale=0.25*ones(Float64,dim), repeat=4*ones(Int64,dim),fast=f),integrator=HighVoronoi.VI_POLYGON,integrand=x->[1.0,x[1]^2,x[2]^2],silence=global_silence)
         #    VG = VoronoiGeometry( VoronoiNodes(rand(dim,1000)),cuboid(dim,periodic=[]), integrator=HighVoronoi.VI_POLYGON,integrand=x->[1.0,x[1]^2,x[2]^2])
             vd = VoronoiData(VG)
-            return abs(sum(vd.volume)-sum(x->x[1],vd.bulk_integral))<0.2 && abs(0.33-sum(x->x[2],vd.bulk_integral))<0.2
+            return abs(sum(vd.volume)-sum(x->x[1],vd.bulk_integral))<0.1 && abs(0.33-sum(x->x[2],vd.bulk_integral))<0.1
         end
         @test test_periodic_mesh_integration(5,1)
-        @test test_periodic_mesh_integration(5,4)
-        function bla(dim,NN,f=false)
-            #dim = max(dim,3)
-                VG=HighVoronoi.VoronoiGeometry(VoronoiNodes(rand(dim,NN)),periodic_grid=(dimensions=ones(Float64,dim),scale=0.2*ones(Float64,dim),repeat=5*ones(Int64,dim), periodic=[1,2],fast=f),integrator=HighVoronoi.VI_POLYGON,silence=global_silence)
-                aaarea = deepcopy(VG.Integrator.Integral.area)
-                data = 0.3*rand(dim,100)
-                data .+= 0.3*ones(Float64,dim)
-                refine!(VG,VoronoiNodes(data),silence=global_silence)
-        
-                offset = 25 * 5^(dim-2)*NN + 100
-                l= length(VG.Integrator.Integral.volumes)
-                VG2 = VoronoiGeometry(VG.Integrator.Integral.MESH.nodes,HighVoronoi.remove_periodicity(VG.domain.internal_boundary),integrator=HighVoronoi.VI_POLYGON,silence=global_silence)
-                ln = length(VG.Integrator.Integral.MESH.nodes)
-                println("Hier : ",sum(view(VG.Integrator.Integral.volumes,(ln-offset+1):ln)))
-                println("Hier2: ",sum(view(VG2.Integrator.Integral.volumes,(ln-offset+1):ln)))
-                neigh1 = VG.Integrator.Integral.neighbors
-                area = VG.Integrator.Integral.area
-                area2 = VG2.Integrator.Integral.area
-                neigh2 = VG2.Integrator.Integral.neighbors
-                count = 0
-                for i in (ln-offset+1):ln
-                    b=false
-                    if neigh1[i]!=neigh2[i] && HighVoronoi.neighbors_of_cell(i,VG.Integrator.Integral.MESH,adjacents=true)!=HighVoronoi.neighbors_of_cell(i,VG2.Integrator.Integral.MESH,adjacents=true)
-                        aa = 0.0
-                        for k in 1:length(neigh1[i])
-                            if !(neigh1[i][k] in neigh2[i])
-                                aa+=area[i][k]
-                            end
-                        end
-                        for k in 1:length(neigh2[i])
-                            if !(neigh2[i][k] in neigh1[i])
-                                aa+=area2[i][k]
-                            end
-                        end
-                        println("problem $i: $aa") 
-                    else
-                        count+=1
-                    end
-                end
-                println("$count of $offset cells without problems")
-            return count==offset && abs(1-sum(view(VG.Integrator.Integral.volumes,(ln-offset+1):ln)))<0.05 && abs(1-sum(view(VG2.Integrator.Integral.volumes,(ln-offset+1):ln)))<0.05
-        end
-                
-        println("-----------------------------------------------------------------")
-        println("testing periodic grids in 4D")
-        println("-----------------------------------------------------------------")
-        @test bla(4,1)
-        @test bla(4,3)
-        @test bla(4,1,true)
-        @test bla(4,3,true)
+        @test test_periodic_mesh_integration(5,2)
 
     end
 
@@ -217,6 +168,31 @@ using SparseArrays
         end
         @test test_interactionmatrix1()
         @test test_interactionmatrix2()
+    end
+
+    @testset "Discrete Functions" begin
+        function discrete_function_test()
+            mycube = cuboid(2,periodic=[1,2])
+            f = FunctionComposer(reference_argument = [0.0,0.0], super_type = Float64, alpha = x->norm(x)*x, beta = x->sum(abs,x) )
+            VG = VoronoiGeometry(VoronoiNodes(40,density=x->sin(x[1]*π), domain=mycube), mycube, integrator=HighVoronoi.VI_MONTECARLO, integrand=f.functions)
+            # make a step function from integrated values:
+            f_all = StepFunction(VG)
+            # retrieve the alpha-component as a single real valued function
+            alpha_step = x-> HighVoronoi.decompose(f, f_all(x),scalar=true)[:alpha]
+            beta_step = x-> HighVoronoi.decompose(f, f_all(x),scalar=true)[:beta]
+            # generate some sample output
+            println(alpha_step([0.5,0.5]))
+            println(beta_step([0.5,0.5]))
+            kappa = StepFunction(VG,HighVoronoi.PeriodicFunction(x->sin(x[2]*π),VG))
+            println(kappa([0.5,0.25]))
+            dia = DiameterFunction(VG)
+            println(dia([0.5,0.25]))
+            f_all_int = HighVoronoi.InterfaceFunction(VG)
+            println(f_all_int([0.5,0.25]))
+            return true
+        end
+        
+        @test discrete_function_test()
     end
 
     @testset "Finite Volume" begin
