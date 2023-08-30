@@ -128,7 +128,7 @@ end
 =#
 
 # the following function is for internal use inside modify_integral(...) only
-function modify_Integral_entry!(b::Bool,field,data)
+#=function modify_Integral_entry!(b::Bool,field,data)
     if b
         if length(field)==0
             append!(field,data)
@@ -152,7 +152,7 @@ function modify_Integral!(I::Voronoi_Integral;get_volume=(length(I.volumes)>0), 
     modify_Integral_entry!(integrate_interface,I.interface_integral,Vector{Vector{Vector{Float64}}}(undef, l_int))
     return I
 end
-
+=#
 
 @doc raw"""
     length(Integral::Voronoi_Integral)

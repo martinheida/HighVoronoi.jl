@@ -607,7 +607,7 @@ The call of `VoronoiData(VG)` provides the following options:
 - `getorientations=false`: This is set automatically to `true` once `reduce_to_periodic==true`. Once set `true` the result contains the field 
         `orientations::Vector{Vector{T}}`, 
     `T` being the type of d-dimensional vectors originally provided by the nodes of the grid.    
-- `getverteces=false`: Set to `true` the field `verteces::Vector{Dict{Vector{Int64},T}}` will for each node `i` contain a dictionary `[nodes]=>coordinate`.
+- `getvertices=false`: Set to `true` the field `verteces::Vector{Dict{Vector{Int64},T}}` will for each node `i` contain a dictionary `[nodes]=>coordinate`.
     furthermore, the field `boundary_verteces::Dict{Vector{Int64},boundary_vertex{T}}` will contain a list of edges that go to infinity
 - `getboundarynodes=false`: Set to `true` the field `boundary_nodes::Dict{Int64,Dict{Int64,T}}` will contain a dictionary 
     `node=>Dict(boundary=>point)`, where boundary is the index `boundary = length(nodes) + number_of_boundary_plane`. When `onboundary==false` then `point` 
@@ -615,7 +615,7 @@ The call of `VoronoiData(VG)` provides the following options:
 - `onboundary=false`: Explained in the last topic. Furthermore, the value is stored in `boundary_nodes_on_boundary::Bool` 
 - `sorted=true`: During the reduction of the internal pseude periodic mesh to the fully periodic output, the neighbors (jointly with their respective properties) get sorted by their numbers
 """
-function VoronoiData(VG::VoronoiGeometry;reduce_to_periodic=true,getorientations=false,getverteces=false,getboundarynodes=false,onboundary=false,sorted=true,view_only=false)
+function VoronoiData(VG::VoronoiGeometry;reduce_to_periodic=true,getorientations=false,getvertices=false,getboundarynodes=false,onboundary=false,sorted=true,view_only=false)
     mesh=VG.basic_mesh
     domain=VG.domain
     I=VG.Integrator.Integral
@@ -651,10 +651,10 @@ function VoronoiData(VG::VoronoiGeometry;reduce_to_periodic=true,getorientations
 
     # get lists related to nodes with potentially shifted coordinates 
     _nodes=copy( view(mesh.nodes,start:length(mesh)) )
-    _verteces=VectorOfDict([0]=>_nodes[1], getverteces ? length(mesh)-start+1 : 1 )
+    _verteces=VectorOfDict([0]=>_nodes[1], getvertices ? length(mesh)-start+1 : 1 )
     _neighbors=Vector{Vector{Int64}}(undef,length(mesh)-start+1)
     for i in 1:length(_nodes)
-        if getverteces
+        if getvertices
             for (sigma,r) in mesh.All_Verteces[i+start-1]
                 push!(_verteces[i], shiftnodes(copy(sigma)) => r )
             end
@@ -673,7 +673,7 @@ function VoronoiData(VG::VoronoiGeometry;reduce_to_periodic=true,getorientations
         if !(isempty(_bv))
             _bv=EmptyDictOfType(first(_bv))
         end
-        if getverteces
+        if getvertices
             for (sigma,ver) in mesh.boundary_Verteces
                 if sigma[end]<start && ver.node<start # we are not interested in BVs which are only shared by nodes that are sorted out 
                     continue

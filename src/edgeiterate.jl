@@ -86,7 +86,7 @@ function max_angle(nu,dim)
     return 10*m
 end
 
-function max_angle(nu,range,dim)
+#=function max_angle(nu,range,dim)
     m = 0.0
     for i in range
         for j in range
@@ -99,22 +99,22 @@ function max_angle(nu,range,dim)
         m = max(m,abs(dot(nu[i],nu[dim])))
     end
     return 10*m
-end
+end=#
 
-function update_normal_range!(nu,range,dim)
+#=function update_normal_range!(nu,range,dim)
     for i in range
         nor_i = dot(nu[dim],nu[i])
         nu[dim] .-= nor_i .*nu[i]
     end
     normalize!(nu[dim])    
-end
+end=#
 
 function rotate(nu,i,dim)
         ortho_project!(nu,i,1:(i-1))        
         update_normal!(nu,i,dim)
 end
 
-function max_angle2(nu,dim,nu2=nu)
+#=function max_angle2(nu,dim,nu2=nu)
     m = 0.0
     for i in 1:(dim-1)
             m = max(m,abs(dot(nu[i],nu2[dim])))
@@ -148,7 +148,7 @@ function test_rotate(dim,loops)
         nums[l]+=1
     end
     return nums
-end
+end=#
 
 function reset(NF_::FastEdgeIterator,_first,sig,searcher,r)
     reset(NF_,sig,r,searcher.tree.extended_xs,sig[_first],searcher)
@@ -402,12 +402,12 @@ function reset(NF_::FastEdgeIterator,sig::Sigma,r,xs,_Cell,searcher,nu=0,old_con
     return true 
 end
 
-function neighbors_from_vertex(sig::Sigma,r,xs,_Cell,NF=GlobalFastEdgeIterator(length(r)))
+#=function neighbors_from_vertex(sig::Sigma,r,xs,_Cell,NF=GlobalFastEdgeIterator(length(r)))
     searcher = (ray_tol = 1.0E-12,)
     reset(NF,sig,r,xs,_Cell,searcher,allrays=true)
     NF.iterators[1].valid_nodes[NF.iterators[1].active_nodes[1]] = true
     return view(NF.iterators[1].sig,NF.iterators[1].valid_nodes)
-end
+end=#
 
 function minimal_edge(NF_::FastEdgeIterator,searcher)
     return NF_.iterators[1].active_nodes
@@ -652,9 +652,9 @@ function get_full_edge(nu,my_cone,edge,first_entry,lsig,dim,_max_angle=1.0E-12)
     return view(edge,1:count)
 end
 
-function round_str(ar,dig=3)
+#=function round_str(ar,dig=3)
     return "$(round.(ar,digits=dig))"
-end
+end=#
 
 
 function max_angle(nu,my_cone,lsig,my_vals,angle_condition,active_condition,dim)
@@ -671,7 +671,7 @@ function max_angle(nu,my_cone,lsig,my_vals,angle_condition,active_condition,dim)
     return max_cos, max_ind 
 end
 
-function test_fast_iterator(dim)
+#=function test_fast_iterator(dim)
     NF = FastEdgeIterator(dim)
     k0=dim+2
     sig = collect(1:(dim+k0))
@@ -702,7 +702,7 @@ function test_fast_iterator(dim)
     println("$c: $(nn/(c-1)) vs. $(nn/(c))")
 #    println(_neighbor_test_data(0*rand(3,1)))
 #    neighbors_from_edges(NF,collect(1:2^dim),0.5*ones(Float64,dim),_neighbor_test_data(0*rand(dim,1)),1)
-end
+end=#
 
 
 #=

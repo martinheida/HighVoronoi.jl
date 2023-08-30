@@ -50,8 +50,8 @@ VoronoiNodes(ini,dim::Int,l::Int) = Vector{SVector{dim,Float64}}(ini,l)
 VoronoiNode(v) = SVector{length(v)}(v)
 
 function perturbNodes(x::Vector{<:SVector},perturbation)
-    x2 = copy(x)
-    lx2=length(x2)
+    lx2=length(x)
+    x2 = Vector{typeof(x[1])}(undef,lx2)
     dim=length(x2[1])
     for i in 1:lx2
         x2[i] = x[i] + perturbation*randn(dim)
