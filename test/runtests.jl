@@ -23,6 +23,11 @@ using SparseArrays
         function statistics()
             HighVoronoi.VoronoiStatistics(3,10;periodic=nothing,points=100)            
             HighVoronoi.VoronoiStatistics(3,10;periodic=3,points=100)
+            nodeslist = [200,500]#,10000,12500,15000,17500,20000,22500,25000,27500,30000]
+            dim = 3
+            A = HighVoronoi.collect_statistics(HighVoronoi.statistic_samples(dim,nodeslist,2),txt="test.txt",silence=true)
+            A2 = HighVoronoi.collect_statistics(rand(dim,2),dim,2*ones(Int64,dim),3*ones(Int64,dim),txt="test2.txt",fast=false,silence=true)
+            A3 = HighVoronoi.collect_statistics(rand(dim,2),dim,2*ones(Int64,dim),3*ones(Int64,dim),txt="test3.txt",fast=true,silence=true)
             return true            
         end
         @test statistics()
@@ -35,6 +40,32 @@ using SparseArrays
             @test length(VoronoiGeometry(VoronoiNodes(rand(3,100)),cuboid(3,periodic=[1],neumann=[2,-3]),integrator=i,integrand=x->[x[1]^2],silence=i==1 ? false : global_silence).nodes)>=100
         end
 
+        # Test full space, so bad cases will happen and will be corrected
+        println("-----------------------------------------------------------------")
+        println("testing Voronoi Data and related stuff")
+        println("-----------------------------------------------------------------")
+        function test_2000()
+            # the following is necessary since unbounded domains can lead to a crash in very rare events
+            b = true
+            i = 1
+            while b
+                b = false
+                i += 1
+                #try
+                    xs=VoronoiNodes(1000,density=x->x[1]*sin(x[2]*π),domain=cuboid(5,periodic=[]))
+                    xs2 = HighVoronoi.perturbNodes(xs,0.0001)
+                    vg = VoronoiGeometry(xs,integrator=HighVoronoi.VI_GEOMETRY,integrand = x->[norm(x),1],silence=global_silence)
+                    vd = VoronoiData(vg, getvertices=true)
+                    HighVoronoi.export_geometry(vg.Integrator.Integral)
+                    HighVoronoi.copy_volumes(vg.Integrator.Integral)
+                    HighVoronoi.append!(vg.Integrator.Integral,VoronoiNodes(rand(5,100)))
+                #catch
+                #    b = i<=3
+                #end
+            end
+            return true                
+        end
+        @test test_2000()
 
         # Test Polygon_Integrator on high dimensions
         #vg1 = VoronoiGeometry(VoronoiNodes(rand(5,1000)),cuboid(5,periodic=[1]),integrator=HighVoronoi.VI_POLYGON,integrand = x->[1.0])
@@ -103,9 +134,9 @@ using SparseArrays
 
     @testset "write_jld" begin
         function test_write()
-            VG = VoronoiGeometry(VoronoiNodes(rand(2,10)),cuboid(2,periodic = [1,2]),integrator=HighVoronoi.VI_POLYGON,silence=global_silence)
+            VG = VoronoiGeometry(VoronoiNodes(rand(2,10)),cuboid(2,periodic = [1,2]),integrator=HighVoronoi.VI_POLYGON,integrand=x->[sin(x[1])],silence=global_silence)
             write_jld(VG,"test.jld")
-            VG2 = VoronoiGeometry("test.jld",silence=global_silence)
+            VG2 = VoronoiGeometry("test.jld",bulk=true,interface=true,silence=global_silence)
             vd1 = VoronoiData(VG)
             load_Voronoi_info("test.jld")
             vd2 = VoronoiData(VG2)
@@ -165,6 +196,8 @@ using SparseArrays
             dia = DiameterFunction(VG)
             println(dia([0.5,0.25]))
             f_all_int = HighVoronoi.InterfaceFunction(VG)
+            fungen(;kwargs...) = 0.0
+            fff = FunctionFromData(VG,function_generator=fungen)
             println(f_all_int([0.5,0.25]))
             return true
         end
