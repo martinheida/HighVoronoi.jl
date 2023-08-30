@@ -6,7 +6,7 @@ DocMeta.setdocmeta!(HighVoronoi, :DocTestSetup, :(using HighVoronoi); recursive=
 makedocs(;
     modules=[HighVoronoi],
     authors="Martin Heida",
-    repo="https://github.com/martinheida/HighVoronoi.jl/blob/{commit}{path}#{line}",
+    #repo="https://github.com/martinheida/HighVoronoi.jl/blob/{commit}{path}#{line}",
     sitename="HighVoronoi.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
@@ -16,17 +16,25 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
-        "Manual" => Any[
-            "In short..." => "man/short.md",
+        "Manual Voronoi" => Any[
+            "Examples Voronoi Generation" => "man/short.md",
+            "man/workflowmesh.md",
             "man/geometry.md",
             "man/boundaries.md",
-            "man/refine.md",
+            "Advanced Options" => "man/advanced.md",
             "man/periodic.md",
-            "FunctionComposer" => "man/functions.md",
-            "Finite Volume Problems" => "man/finitevolume.md",
+            "man/refine.md",
             "Projection operators" => "man/projection.md",
             "man/metapost.md",
             "Sources of errors and loss in performance" => "man/errors.md",
+        ],
+        "Manual Finite Volume" => Any[
+            "Finite Volume Examples" => "man/finitevolumeexample.md",
+            "man/workflowfv.md",
+            "Finite Volume Tutorial" => "man/finitevolume.md",
+            "Functions" => "man/functions.md",
+            "man/integrals.md",
+            "man/toyfvfile.md",
         ],
         "Intentions of use (EXAMPLES)" => "showcase.md",
     ],
