@@ -187,11 +187,12 @@ Righthand side functions (bulk functions) like `myRHS` are evaluated on nodes ha
 
 
 
-## Full linear equations including BOUNDARY CONDITIONS 
+## Extracting the full FV linear equations including BOUNDARY CONDITIONS 
 
 1. [Theoretical background](@ref lin_eq_background)
 2. [`linearVoronoiFVProblem`](@ref linear_vor_prob)
-3. [Examples](@ref lin_vor_prob_ex)
+3. [No Dirichlet condition: Ambiguity](@ref no_dirichlet)
+4. [Examples](@ref lin_vor_prob_ex)
 
 ### [Background](@id lin_eq_background)
 To understand how boundary conditions are implemented in the `HighVoronoi` package, multiply equation (Flux-Form) with some function $\varphi$ and use integration by parts to obtain 
@@ -215,6 +216,11 @@ However, since we work in a discrete setting, we can make the following assumpti
 ```@docs
 linearVoronoiFVProblem(vd::VoronoiFVProblem;flux)
 ```
+### [No Dirichlet condition: Ambiguity](@id no_dirichlet)
+
+In case the boundary conditions consist only of periodic and/or Neumann conditions, the solution is unique only up to a constant. This is taken into account by providing `linearVoronoiFVProblem` with the parameter
+
+- `enforcement_node=1`: This picks out a node where the solution is forced to be $0$. If the user wants another condition, such as average value $0$, this can be achieved after solving the linear problem, as the library provides enough tools to calculate the respective integrals in the aftermath.  
 
 ### [Examples](@id lin_vor_prob_ex)
 

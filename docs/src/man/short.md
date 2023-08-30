@@ -1,8 +1,8 @@
-# Using the HighVoronoi Library
+# Voronoi generation using the HighVoronoi Library
 
 The following are examples to get a first impression of the functionalities of `HighVoronoi`. They do not represent the actual intention of use. For this we refer [here](@ref intentions)
 
-## Getting Started...
+## [Getting Started...](@id quickVG)
 
 You can write your first HighVoronoi code e.g. as follows:
 ```julia
@@ -93,7 +93,7 @@ VG = VoronoiGeometry(xs,cuboid(4,periodic=Int64[]),integrator=HighVoronoi.VI_POL
 
 VG2 = copy(VG)
 
-refine!(VG,0.2*rand(4,20))
+refine!(VG,VoronoiNodes(0.2*rand(4,20)))
 
 vd = VoronoiData(VG)
 println(vd.bulk_integral)

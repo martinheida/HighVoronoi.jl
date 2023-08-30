@@ -7,7 +7,7 @@
 
 ## Controlling the Voronoi-Algorithm
 
-The optional argument `search_settings::NamedTuple` will help to influence the Voronoi routine. However, if you don't know what for sure what you do, you should not touch these except for `force_irregular_search`. Otherwise don't blame the package if you get strange results or crash the algorithm. 
+The optional argument `search_settings::NamedTuple` will help to influence the Voronoi routine. However, if you don't know what for sure what you do, you should not touch these except for `force_irregular_search`. Otherwise don't blame the package if you get strange results or crash the algorithm. Also you should be aware of the fact that parameters once set at generation of a `VoronoiGeometry` are kept for refining, substituting, .... You can, however, locally modify these parameters with `search_settings` in `refine!` or `substitute!`
 
 The following commands are available:
 - `recursive` : When set to 'true' this will cause an iteration when verteces are found `out of line`: As long as in some step 'n' verteces are found 
@@ -16,10 +16,10 @@ The following commands are available:
 - `break_tol=1E-5` : when the afore mentioned variance is even larger than that (actually did not appear in tests on bounded domains so far) this is sign that something goes 
                 terribly wrong. Therefore, the vertex is skipped. cases when this happens is a geometry quasi periodic in at least one dimension and unbounded in the others. Typically happens "far away, i.e. 1E200" from the origin.
 - `b_nodes_tol=1E-10`: When a vertex has a  distance smaller than that to the boundary, it is considered a boundary vertex. 
-- `nodes_tol=1.0E-5,`: When `allow_irregular=true` or `force_irregular_search=true` then this is the threshold below which a node is considered to be part of 
+- `nodes_tol=1.0E-5,`: When `allow_irregular=true` or `force_irregular_search=true` then this is the threshold below which a node is a candidate to be considered as part of 
                 an irregular vertex.
 - `allow_irregular=true`: if `true` the algorithm assumes that irregular verteces may occur and checks for it whenever 
                 there is evidence that this might be the case. 
-- `force_irregular_search=false`: When `true` the algorithm checks for at every vertex if the vertex is irregular and searches for the irregular nodes. This, however, increases the computational cost. If you assume there will be no irregular verteces, set this field to false
+- `force_irregular_search=true`: When `true` the algorithm checks for at every vertex if the vertex is irregular and searches for the irregular nodes. This, however, increases the computational cost. If you assume there will be no irregular verteces, set this field to false
 - `correcting=true`: The algorithm checks if the variance of the (renormalized) distance of a vertex to its nodes is larger than `variance_tol` but 
                 still smaller than `break_tol`. In this case, it will correct the vertex to reduce the variance as much as possible. Increases the computational cost by less than 1% but is extremely stabilizing for large grids.

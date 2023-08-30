@@ -1,5 +1,5 @@
 
-# Highspeed periodic geometries
+# [Highspeed periodic geometries](@id periodicgeometrysection)
 
 A fast and efficient way to generate meshes in high dimension are quasi-periodic meshes. That is:
 - Take $N$ points $(x_j)_{j\in\{1,\dots,N\}}$ within a unit cube $[0,1]^{dim}$
@@ -64,12 +64,13 @@ Another advantage of periodic meshes with a low number of generating nodes is th
 
 The user can play around a bit with 
 ```julia
-HighVoronoi.VoronoiStatistics(dim,samples;periodic=nothing,points=1,my_generator=nothing)
+HighVoronoi.VoronoiStatistics(dim,samples;periodic=nothing,points=1,my_generator=nothing,geodata=true)
 ```
 - `dim::Int`: The dimension
 - `samples::Int`: How many samples shall be considered
 - `periodic`: If `periodic` is an integer, it will calculate the statistics for periodic meshes from `periodic` nodes. Otherwise, it will calculate the statistics for the point closest to the center of a cube, where the cube is filled with `points` random points. 
 - `my_generator`: if this is a function `my_generator(dim,points)` which returns some `xs::VoronoiNodes, number::Int` the algorithm will do the Voronoi statistics for the first `number` points of `xs`.
+- `geodata`: if true calculates volumes and areas. costly in high dimensions.
 
 The `VoronoiStatistics` returns a named tuple with the following entries:
 - `data_size`: Number of sample nodes calculated

@@ -16,7 +16,7 @@ Apart from cuboids, `Boundary` should always be generated using the following me
 Boundary(planes...)
 ```
 
-## Rectangular domains
+## [Rectangular domains](@id rectangulardomains)
 
 For simplicity of application, the following methods are provided for boundaries of rectangular domains. They return an object of type `b::Boundary` with the following structure:
 
