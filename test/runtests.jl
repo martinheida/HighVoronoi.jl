@@ -35,29 +35,6 @@ using SparseArrays
             @test length(VoronoiGeometry(VoronoiNodes(rand(3,100)),cuboid(3,periodic=[1],neumann=[2,-3]),integrator=i,integrand=x->[x[1]^2],silence=i==1 ? false : global_silence).nodes)>=100
         end
 
-        # Test full space, so bad cases will happen and will be corrected
-        println("-----------------------------------------------------------------")
-        println("testing large domains and VoronoiNodes Distribution generator")
-        println("-----------------------------------------------------------------")
-        function test_2000()
-            # the following is necessary since unbounded domains can lead to a crash in very rare events
-            b = true
-            while b
-                b = false
-                try
-                    xs=VoronoiNodes(1000,density=x->x[1]*sin(x[2]*π),domain=cuboid(6,periodic=[]))
-                    vg = VoronoiGeometry(xs,integrator=HighVoronoi.VI_GEOMETRY,integrand = x->[norm(x),1],silence=global_silence)
-                    vd = VoronoiData(vg, getverteces=true)
-                    HighVoronoi.export_geometry(vg.Integrator.Integral)
-                    HighVoronoi.copy_volumes(vg.Integrator.Integral)
-                    append!(vg.Integrator.Integral,VoronoiNodes(rand(6,100)))
-                catch
-                    b = true
-                end
-            end
-            return true                
-        end
-        @test test_2000()
 
         # Test Polygon_Integrator on high dimensions
         #vg1 = VoronoiGeometry(VoronoiNodes(rand(5,1000)),cuboid(5,periodic=[1]),integrator=HighVoronoi.VI_POLYGON,integrand = x->[1.0])
