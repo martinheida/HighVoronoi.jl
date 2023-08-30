@@ -11,7 +11,7 @@ function HeuristicMCIntegrator(mesh::Voronoi_MESH,f, mc_accurate=(1000,10,20))
     lmesh = length(mesh)
     resize!(mc.Integral.interface_integral,lmesh)
     resize!(mc.Integral.bulk_integral,lmesh)
-    make_consistent!(heu)
+    resize!(mc.Integral.area,lmesh)
     return HeuristicMCIntegrator{typeof(f)}(mc.Integral,heu,mc,f)
 end
 
