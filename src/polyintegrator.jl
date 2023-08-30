@@ -6,20 +6,25 @@ struct Polygon_Integrator{T,TT}
     bulk::Bool
     # If i!=nothing, then area has to be true. Otherwise values are taken as given
     Integral::TT
+    iterative_checker::IterativeDimensionChecker
+    function Polygon_Integrator{T,TT}(f::T,b::Bool,I::TT,Itc) where {T,TT}
+        return new(f,b,I,Itc)
+    end
     function Polygon_Integrator{T,TT}(f::T,b::Bool,I::TT) where {T,TT}
-        return new(f,b,I)
+        return new(f,b,I,IterativeDimensionChecker(length(I.MESH.nodes[1])))
     end
     function Polygon_Integrator(mesh,integrand=nothing, bulk_integral=false)
         b_int=(typeof(integrand)!=Nothing) ? bulk_integral : false
         i_int=(typeof(integrand)!=Nothing) ? true : false
         Integ=Voronoi_Integral(mesh,integrate_bulk=b_int, integrate_interface=i_int)
-        PI=Polygon_Integrator{typeof(integrand),typeof(Integ)}( integrand, b_int, Integ )
+        PI=Polygon_Integrator{typeof(integrand),typeof(Integ)}( integrand, b_int, Integ, IterativeDimensionChecker(length(mesh.nodes[1])) )
         return PI
     end
 end
 
 function copy(I::Polygon_Integrator)
-    return Polygon_Integrator{typeof(I._function),typeof(I.Integral)}(I._function,I.bulk,copy(I.Integral))
+    Inte = copy(I.Integral)
+    return Polygon_Integrator{typeof(I._function),typeof(I.Integral)}(I._function,I.bulk,Inte, IterativeDimensionChecker(length(Inte.MESH.nodes[1])))
 end
 
 function integrate(Integrator::Polygon_Integrator; domain=FullSpace(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
@@ -35,6 +40,27 @@ end
 
 function prototype_interface(Integrator::Polygon_Integrator)
     return 0.0*(typeof(Integrator._function)!=Nothing ? Integrator._function(Integrator.Integral.MESH.nodes[1]) : Float64[])
+end
+
+struct PolyEdge{T}
+    r1::T
+    r2::T
+    value::Vector{Float64}
+    function PolyEdge(r,lproto)
+        return new{typeof(r)}(r,r,Vector{Float64}(undef,lproto))
+    end
+    function PolyEdge(pe::PolyEdge,rr)
+        r = pe.r1
+        r2 = pe.r2
+        nu = r2-r 
+
+        if dot(rr-r,nu)<=0
+            r=rr
+        elseif dot(rr-r2,nu)>0
+            r2 = rr
+        end    
+        return new{typeof(pe.r1)}(r,r2,pe.value)
+    end
 end
 
 """ 
@@ -60,11 +86,11 @@ function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Polyg
     _length=length(neigh)
 
     # flexible data structure to store the sublists of verteces at each iteration step 1...dim-1
-    emptydict=EmptyDictOfType([0]=>xs[1])      # empty buffer-list to create copies from
+    emptydict=EmptyDictOfType([0]=>PolyEdge(xs[1],0))      # empty buffer-list to create copies from
     listarray=(typeof(emptydict))[] # will store to each remaining neighbor N a sublist of verteces 
                                     # which are shared with N
-    all_dd=(typeof(listarray))[]
-    for _ in 1:dim-1 push!(all_dd,copy(listarray)) end
+    all_dd=Vector{typeof(listarray)}(undef,dim-1)
+    map!(k->copy(listarray), all_dd, 1:dim-1)
 
     # create a data structure to store the minors (i.e. sub-determinants)
     all_determinants=Minors(dim)
@@ -80,9 +106,9 @@ function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Polyg
     I=Integrator
     taboo = zeros(Int64,dim)
     iterative_volume(I._function, I.bulk, _Cell, V, bulk_inte, ar, inter_inte, dim, neigh, 
-                _length,verteces,verteces2,emptydict,xs[_Cell],empty_vector,all_dd,all_determinants,calculate,Integral,xs,taboo)
+                _length,verteces,verteces2,emptydict,xs[_Cell],empty_vector,all_dd,all_determinants,calculate,Integral,xs,taboo,I.iterative_checker)
 
-
+    #println()
     return V[1]
 end
 
@@ -96,42 +122,64 @@ function _neigh_index(_my_neigh,n)
     return 0
 end
 
+global global_fei = FastEdgeIterator(5)
+
+function first_relevant_edge_index(edge,_Cell,neigh)
+    le = length(edge)
+    for i in 1:le
+        ei = edge[i]
+        if ei!=_Cell 
+            return _neigh_index(neigh,ei)
+        end
+    end
+    return 0
+end
+
+function queue_integral_edge(dd,edge,r,_Cell,neigh,lproto,le)
+    first_index = first_relevant_edge_index(edge,_Cell,neigh)
+    first_index==0 && return
+    nfirst = neigh[first_index]
+    
+    # set edge
+    if haskey(dd[first_index],edge)
+        pe = dd[first_index][edge]
+        pe.r1==r && return
+        coords = PolyEdge(pe,r)
+        for _i in 1:le
+            ee = edge[_i]
+            (ee<=_Cell || !(ee in neigh)) && continue
+            index = _neigh_index(neigh,ee)
+            dd[index][edge] = coords # bad performance
+        end
+    else
+        coords = PolyEdge(r,lproto)
+        edge = copy(edge)
+        for _i in 1:le
+            ee = edge[_i]
+            ((ee<=_Cell && ee!=nfirst) || !(ee in neigh)) && continue
+            push!(dd[_neigh_index(neigh,ee)], edge => coords)
+        end
+    end
+end
+
 function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh,_length,verteces,verteces2,
-                            emptylist,vector,empty_vector,all_dd,all_determinants,calculate,Full_Matrix=nothing,xs=nothing,taboo=nothing)
+                            emptylist,vector,empty_vector,all_dd,all_determinants,calculate,Full_Matrix,xs,taboo,dc)
     space_dim=length(vector)
     if (dim==1) # this is the case if and only if we arrived at an edge
-        (sig,r)=pop!(verteces)
-        if isempty(verteces) # in this case, sig is a boundary vertex, i.e. the edge goes to infty. 
-            #println("Hoppla! $_Cell: $sig, $(round.(r;digits=3))")
-            #=A[1] += 0.0  ### that stuff is actually not needed
-            if (typeof(_function)!=Nothing)
-                Ay.+=0*(_function(r))
-            end=#
-            #println("hier")
-            if space_dim==2 push!(verteces,sig=>r) end
-            #error("bla")
-            return 
-        end
-        (sig2,r2)=pop!(verteces) # isempty(verteces) ? ([0],r) : pop!(verteces)
-        if !isempty(verteces) 
-            #print("HOOOOOOOOOOOO  ($sig,$(round.(r;digits=3)))  ($sig2,$(round.(r2;digits=3)))  -- ")
-            #for  (ss,rr) in verteces
-            #    print("($ss,$(round.(rr;digits=3))) , ")
+        #print(length(verteces)," ")
+        #for (ed,pe) in verteces # = first(verteces)
+            r, r2,val = get_sup_edge(dc,verteces,xs)
+            k_minor(all_determinants,space_dim-1,r-vector)
+            k_minor(all_determinants,space_dim, r2-vector)
+            vol=(all_determinants.data[space_dim])[1] #pop!(all_determinants[space_dim])
+            vol=abs(vol)
+            #println(_Cell," vol ",vol)
+            A[1]+=vol
+            #if (typeof(_function)!=Nothing)
+                Ay .+= vol .* val
+                #println("a :$(Ay) ")
             #end
-            #println()
-            #error("bla")
-        end
-        if space_dim==2 push!(verteces,sig2=>r2) end
-        k_minor(all_determinants,space_dim-1,r-vector)
-        k_minor(all_determinants,space_dim, r2-vector)
-        vol=(all_determinants.data[space_dim])[1] #pop!(all_determinants[space_dim])
-        vol=abs(vol)
-        #println(_Cell," vol ",vol)
-        A[1]+=vol
-        if (typeof(_function)!=Nothing)
-            Ay.+=0.5*(_function(r)+_function(r2))*vol
-            #println("a :$(Ay) ")
-        end
+        #end
         return
     elseif dim==space_dim 
         # get the center of the current dim-dimensional face. this center is taken 
@@ -140,27 +188,76 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
         
         # dd will store to each remaining neighbor N a sublist of verteces which are shared with N
         dd=Vector{typeof(emptylist)}(undef,_length)
-        #println("Berechne $_Cell, $neigh")
         for i in 1:_length dd[i]=copy(emptylist) end
+        mlsig = reset(dc, neigh, xs, _Cell, Iterators.flatten((verteces,verteces2)))
+        NF = dc.edge_iterator
+        #println(neigh,"*************************************************************************")
+        resize!(dc.edge_buffer,mlsig)
+        dc.edge_buffer .= 0.0
+        lproto = typeof(_function)!=Nothing ? length(_function(xs[1])) : 0
+        searcher = (ray_tol = 1.0E-12,)
 
-        for (sig,r) in verteces  # iterate over all verteces
-            for _neigh in sig # iterate over neighbors in vertex
-                _neigh==_Cell && continue
-                index=_neigh_index(neigh,_neigh)
-                index==0 && continue
-                push!( dd[index] , sig =>r) # push vertex to the corresponding list
+        for (sig,r) in Iterators.flatten((verteces,verteces2)) # repeat in case verteces2 is not empty
+            lsig=length(sig)
+            if lsig>space_dim+1
+                b = reset(NF,sig,r,xs,_Cell,searcher,allrays=true,_Cell_first=true)
+                lsig = length(sig)
+                while b
+                    b, edge = update_edge(NF,searcher,[])
+                    (!b) && break
+                    
+                    # get edge
+                    le = length(edge)
+                    dc.edge_buffer[1:le] .= NF.iterators[1].sig[edge]
+                    count = 0
+                    for i in 1:le
+                        if dc.edge_buffer[i] in neigh
+                            count += 1
+                            dc.edge_buffer[count] = dc.edge_buffer[i]
+                        end
+                    end
+                    count += 1
+                    dc.edge_buffer[count] = _Cell
+                    le = count
+                    edge = view(dc.edge_buffer,1:le)
+                    sort!(edge)
+                    edge[end]<=_Cell && continue
+                    
+                    queue_integral_edge(dd,edge,r,_Cell,neigh,lproto,le)
+                end
+            elseif lsig==space_dim+1
+                    edgeview = view(dc.edge_buffer,1:space_dim)
+                    start = 1 #findfirst(x->(x==_Cell),sig)
+                    for i in 1:space_dim edgeview[i]=start+i-1 end
+                    b = true
+                    while b
+                        edge = view(sig,edgeview)
+                        if edge[end]<=_Cell 
+                            b,_ = increase_edgeview( edgeview, space_dim+1, space_dim)
+                            continue
+                        end
+                        (_Cell in edge) && queue_integral_edge(dd,edge,r,_Cell,neigh,lproto,space_dim)
+                        b,_ = increase_edgeview( edgeview, space_dim+1, space_dim)
+                    end
+                    start = 2
+                    for i in 1:space_dim edgeview[i]=start+i-1 end
+                    edge = view(sig,edgeview)
+                    edge[end]<=_Cell && continue
+                    (_Cell in edge) && queue_integral_edge(dd,edge,r,_Cell,neigh,lproto,space_dim)
             end
         end
-        for (sig,r) in verteces2 # repeat in case verteces2 is not empty
-            for _neigh in sig
-                _neigh==_Cell && continue
-                index=_neigh_index(neigh,_neigh)
-                index==0 && continue
-                if (_neigh>_Cell || isempty(dd[index])) # make sure for every neighbor the dd-list is not empty
-                    push!( dd[index] , sig =>r) # push vertex to the corresponding list
+        if (typeof(_function)!=Nothing)
+            for k in 1:_length
+                for (edge,pe) in dd[k]
+                    #edge[end]<=_Cell && continue
+                    #resize!(pe.value,lproto)
+                    pe.value .= _function(pe.r1)
+                    pe.value .+= _function(pe.r2)
+                    pe.value .*= 0.5
                 end
             end
         end
+
         taboo[dim]=_Cell
         AREA=zeros(Float64,1)
         for k in 1:_length
@@ -170,23 +267,26 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
                             # However, when it comes to A and Ay, the entry "buffer" is stored in place "k". 
             if !(buffer in calculate) && !(_Cell in calculate) continue end
             bufferlist=dd[k] 
-            isempty(bufferlist) && continue
-            taboo[dim-1]=buffer
+            buffer>_Cell && isempty(bufferlist) && continue
+            taboo[dim-1] = buffer
             neigh[k]=0
             AREA[1]=0.0
             AREA_Int=(typeof(_function)!=Nothing) ? Ay[k] : Float64[]
             # now get area and area integral either from calculation or from stack
                 if buffer>_Cell && (buffer in calculate) # in this case the interface (_Cell,buffer) has not yet been investigated
+                    set_dimension(dc,1,_Cell,buffer)
+                    #test_idc(dc,_Cell,buffer,1)
+
                     AREA_Int.*=0
                     _Center=midpoint(bufferlist,emptylist,empty_vector,vector)
                     _Center.+=vector # midpoint shifts the result by -vector, so we have to correct that .... 
-                    iterative_volume(_function, _bulk, _Cell, V, y, AREA, AREA_Int, dim-1, neigh, _length, bufferlist, emptylist, emptylist,vector,empty_vector,all_dd,all_determinants,nothing,Full_Matrix,xs,taboo)
+                    iterative_volume(_function, _bulk, _Cell, V, y, AREA, AREA_Int, dim-1, neigh, _length, bufferlist, emptylist, emptylist,vector,empty_vector,all_dd,all_determinants,calculate,Full_Matrix,xs,taboo,dc)
                     neigh[k]=buffer
                     # Account for dimension (i.e. (d-1)! to get the true surface volume and also consider the distance="height of cone")
-                    _,vert=pop!(bufferlist) # the bufferlist is empty
+                    empty!(bufferlist) # the bufferlist is empty
                     distance= 0.5*norm(vector-xs[buffer]) #abs(dot(normalize(vector-xs[buffer]),vert))
                     FACTOR=1.0
-                    for k in 1:(dim-1) FACTOR*=1/k end
+                    for _k in 1:(dim-1) FACTOR*=1/_k end
                     thisvolume = AREA[1]*FACTOR/dim
                     V[1] += thisvolume 
                     FACTOR*=1/distance
@@ -208,7 +308,6 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
                     end            
                 else # the interface (buffer,_Cell) has been calculated in the systematic_voronoi - cycle for the cell "buffer"
                     #greife auf Full_Matrix zurück
-                    _,vert=pop!(bufferlist)
                     empty!(bufferlist)
                     distance=0.5*norm(vector-xs[buffer])#abs(dot(normalize(vector-xs[buffer]),vert))
                     AREA[1]=get_area(Full_Matrix,buffer,_Cell) 
@@ -234,7 +333,6 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
         # as the new coordinate to construct the currenct triangle. The minors are stored in place space_dim-dim+1 
         _Center=midpoint(verteces,verteces2,empty_vector,vector)
         k_minor(all_determinants,space_dim-dim,_Center)
-        
         dd=all_dd[dim-1] # dd will store to each remaining neighbor N a sublist of verteces which are shared with N
 
         _count=1
@@ -253,17 +351,59 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
         end
 
         ll=(length(verteces))
+        count = 0
         for _ii in 1:(ll)  # iterate over all verteces
-            (sig,r) = _ii==ll ? first(verteces) : pop!(verteces)
+            (sig,r) = pop!(verteces)
+            if (r.r1==r.r2)
+                #=if length(sig)==space_dim
+                     print("-")
+                else
+                    print("+")
+                end=# 
+                continue
+            #elseif length(sig)!=space_dim
+            #    print("0")
+            end
+            #=δr =r.r1-r.r2
+            dist = norm(δr)
+            (dot(δr,dc.local_basis[space_dim-dim])/dist>1.0E-12) && continue=#
             for _neigh in sig # iterate over neighbors in vertex
                 (_neigh in taboo) && continue # if _N is a valid neighbor (i.e. has not been treated in earlier recursion)
                 index = _neigh_index(_my_neigh,_neigh)
-                index==0 && continue
+                (index==0 || count==dim) && continue
+                #count+=1
                 push!( dd[index] , sig =>r) # push vertex to the corresponding list
             end
         end
-    
+
+        if dim==2
+            l_mn = length(_my_neigh)
+            for k in 1:(l_mn-1)
+                length(dd[k])==0 && continue
+                keys_1 = keys(dd[k])
+                for i in (k+1):l_mn
+                    keys_2 = keys(dd[i])
+                    linear = false
+                    for s1 in keys_1
+                        for s2 in keys_2
+                            if s1==s2
+                                linear=true
+                                break
+                            end
+                        end
+                        linear && break
+                    end 
+                    if linear
+                        merge!(dd[k],dd[i])
+                        empty!(dd[i])
+                    end
+                end
+            end
+        end 
+
+#        Base.rehash!(verteces)
         _count=1
+#        dim==2 && println()
         for k in 1:_length
             buffer=neigh[k] # this is the (further) common node of all verteces of the next iteration
                             # in case dim==space_dim the dictionary "bufferlist" below will contain all 
@@ -273,8 +413,14 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
             
             # bufferlist=dd[_neigh_index(_my_neigh,buffer)] # this one can be replaced by a simple counting of neigh!=0
             bufferlist=dd[_count]
+            valid = set_dimension(dc,space_dim-dim+1,_Cell,buffer)
+            if !valid
+                empty!(bufferlist)
+            end
+
             _count+=1 
             isempty(bufferlist) && continue
+#            test_idc(dc,_Cell,buffer,space_dim-dim+1)
 
                 if (A[1]==Inf || A[1]==NaN64) # if A[1] (the current cell interface (d-1) dimensional volume) is already "at least" infinite, we can interrupt
                                               # the current branch at all levels, except the level dim=space_dim: "it won't get any better"  
@@ -286,7 +432,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
                 end
                 neigh[k]=0
                 taboo[dim-1]=buffer
-                iterative_volume(_function, _bulk, _Cell, V, y, A,         Ay        , dim-1, neigh, _length, bufferlist, emptylist, emptylist,vector,empty_vector,all_dd,all_determinants,nothing,Full_Matrix,xs,taboo)
+                iterative_volume(_function, _bulk, _Cell, V, y, A,         Ay        , dim-1, neigh, _length, bufferlist, emptylist, emptylist,vector,empty_vector,all_dd,all_determinants,calculate,Full_Matrix,xs,taboo,dc)
                 neigh[k]=buffer
                 taboo[dim-1]=0
                 if !isempty(bufferlist) pop!(bufferlist) end
@@ -295,7 +441,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
     end        
 end
 
-function midpoint(vertslist,vertslist2,empty_vector,cell_center=Float64[])
+function midpoint_points(vertslist,vertslist2,empty_vector,cell_center=Float64[])
     empty_vector.*=0.0
     for (_,r) in vertslist
         empty_vector.+=r
@@ -304,6 +450,21 @@ function midpoint(vertslist,vertslist2,empty_vector,cell_center=Float64[])
         empty_vector.+=r
     end
     empty_vector.*= 1/(length(vertslist)+length(vertslist2))
+    if length(cell_center)>0 empty_vector.-= cell_center end
+    return empty_vector
+end
+
+function midpoint(vertslist,vertslist2,empty_vector,cell_center=Float64[])
+    empty_vector.*=0.0
+    for (_,ee) in vertslist
+        empty_vector.+=ee.r1
+        empty_vector.+=ee.r2
+    end
+    for (_,ee) in vertslist2
+        empty_vector.+=ee.r1
+        empty_vector.+=ee.r2
+    end
+    empty_vector.*= 0.5/(length(vertslist)+length(vertslist2))
     if length(cell_center)>0 empty_vector.-= cell_center end
     return empty_vector
 end

@@ -75,16 +75,12 @@ which stores every flat part of the boundary as
         BC::Int16 # 0 for Dirichlet, -1 for Neumann and >0 for the index of the other correspondant in case this is supposed to be periodic
     end
 """
-struct Boundary{T}
-    planes::Vector{T}
+struct Boundary
+    planes::Vector{Plane}
     convex::Bool
-    childs::Vector{Vector{Int64}}
-    function Boundary{T}(p,co,ch) where {T}
-        return new(p,co,ch)
-    end
+    #childs::Vector{Vector{Int64}}
     function Boundary(_planes::Vector,_convex::Bool)
-        B=Boundary{Plane}(_planes,_convex,(Vector{Int64})[])
-        return B
+        return new(_planes,_convex)#,_convex,(Vector{Int64})[])
     end
 end
 
@@ -134,7 +130,7 @@ end
 ####################  OUTPUT REPRESENTATION ####################################################################
 
 function boundaryToString(B::Boundary;offset=0)
-    result="\u1b[($offset)CBOUNDARY:\n"
+    result="\u1b[($offset)CBOUNDARY in $(length(B.planes[1].normal)) dimensions with $(length(B.planes)) planes:\n"
     for i in 1:(length(B.planes))
         plane=B.planes[i]
         result*="\u1b[($offset)C    $i: base=$(plane.base), normal=$(plane.normal) ; "
@@ -143,6 +139,10 @@ function boundaryToString(B::Boundary;offset=0)
         else result*="periodic with neighbor $(plane.BC)\n" end
     end
     return result
+end
+
+function Base.show(B::Boundary)
+    print(boundaryToString(B))
 end
 
 function vp_print(B::Boundary;offset=0)
@@ -264,16 +264,6 @@ function intersections!(B::Boundary,x_0,v; results=zeros(Float64,length(B.planes
     return found
 end
 
-@doc raw"""
-    intersect(B::Boundary,v::boundary_vertex)
-    returns the couple 'i','t' such that the line v.base+t*v.direction lies in B.planes[i]
-    'i' is such that 't' is the minimal positive value, i.e. B.planes[i] is actually 
-    the true part of the boundary that is hit by 'v'
-"""
-function intersect(B::Boundary,v::boundary_vertex,condition=(x->true))
-    return intersect(B,v.base,v.direction,condition)
-end
-
 #############   HANDLING BOUNDARIES   ###############################
 
 function split_boundary_indeces(B::Boundary)
@@ -382,6 +372,13 @@ function in(x,B::Boundary)
     end
     return true
 end
+
+function check_boundary(nodes,b::Boundary)
+    for x in nodes
+        !(x in b) && error("$x does not lie in the domain given by the boundary object\n"*boundaryToString(b,offset=4))
+    end
+end
+
 
 function adjust_boundary_vertex(x,B::Boundary,sig,lmesh,lsig=length(sig),tolerance=1.0E-10)
     x2 = x

@@ -23,6 +23,10 @@ function FunctionComposer(;reference_argument, super_type, _functions...)
     return FunctionComposer{typeof(join),typeof(mylengths),typeof(super_type)}(join,_total,mylengths,super_type)
 end
 
+function _data_length(FC::FunctionComposer,symbol)
+    return FC.length_index_data[symbol][2]
+end
+
 function _mycounter(x,counter)
     l=length(x)
     c=counter[1]

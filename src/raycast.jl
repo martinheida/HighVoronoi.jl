@@ -1,3 +1,4 @@
+RaycastData = Vector{Any}(undef,2)
 
 ######## default raycast
 
@@ -26,15 +27,27 @@ Initializes the standard searcher for computation of Voronoi meshes.
             the vertex itself will be stored.
 - `bruteforce`: when set to "true" the algorithm will use a BruteTree instead of a KDTree
 - `fastiterator`: when set to 'true' this will choose an iterator with slightly higher speed on quasi-periodic meshes at the cost of much higher memory usage 
+- `periodic_searcher`: when `0` this will use an early algorith to handle periodic grids. This is still the only available version for 2d, but is replaced with the 
+            default `1` in higher dimensions
 """
-Raycast(xs;recursive=true,plane_tol=1.0E-15,variance_tol=1.0E-15,break_tol=1.0E-5,nodes_tol=1.0E-8,b_nodes_tol=1.0E-7,correcting=true,allow_irregular=true,force_irregular_search=true,domain=Boundary(),bruteforce=false,fastiterator=false) = RaycastIncircleSkip(xs,recursive,variance_tol,break_tol,nodes_tol,b_nodes_tol,correcting,allow_irregular,force_irregular_search,domain,bruteforce,plane_tol,fastiterator)
+function Raycast(xs;periodic_searcher=1,recursive=true,correcting=true,allow_irregular=true,force_irregular_search=true,domain=Boundary(),bruteforce=false,fastiterator=false,kwargs...) 
+    dim = length(xs[1])
+    if dim>length(RaycastData)
+        resize!(RaycastData,dim)
+    end
+    if !isdefined(RaycastData,dim)
+        RaycastData[dim] = (ray_tol=1.0E-12,plane_tol=1.0E-12,variance_tol=1.0E-15,break_tol=1.0E-5,nodes_tol=1.0E-8,b_nodes_tol=1.0E-7,perturb_nodes=false,)
+    end
+    args = (;RaycastData[dim]...,kwargs...)
+    return RaycastIncircleSkip(xs,recursive,args[:variance_tol],args[:break_tol],args[:nodes_tol],args[:b_nodes_tol],correcting,allow_irregular,force_irregular_search,domain,bruteforce,args[:plane_tol],fastiterator,periodic_searcher,args[:ray_tol],args[:perturb_nodes])
+end
 
-const DefaultRaycastSetting = (recursive=true,plane_tol=1.0E-15, variance_tol=1.0E-20, break_tol=1.0E-5, nodes_tol=1.0E-8, b_nodes_tol=1.0E-7, correcting=true,
+const DefaultRaycastSetting = (periodic_searcher=1,recursive=true,plane_tol=1.0E-12, variance_tol=1.0E-20, break_tol=1.0E-5, nodes_tol=1.0E-8, b_nodes_tol=1.0E-7, correcting=true,
             allow_irregular=true, force_irregular_search=true, domain=Boundary(), bruteforce=false, fastiterator=false)
 const SearchGeneral = DefaultRaycastSetting
-const SearchExpectRandom = (recursive=true, plane_tol=1.0E-15,variance_tol=1.0E-20, break_tol=1.0E-5, nodes_tol=1.0E-8, b_nodes_tol=1.0E-7, correcting=true,
+const SearchExpectRandom = (periodic_searcher=1,recursive=true, plane_tol=1.0E-12,variance_tol=1.0E-20, break_tol=1.0E-5, nodes_tol=1.0E-8, b_nodes_tol=1.0E-7, correcting=true,
             allow_irregular=true, force_irregular_search=false, domain=Boundary(), bruteforce=false, fastiterator=false)
-const SearchRandom = (recursive=true, plane_tol=1.0E-15, variance_tol=1.0E-20, break_tol=1.0E-5, nodes_tol=1.0E-8, b_nodes_tol=1.0E-7, correcting=true,
+const SearchRandom = (periodic_searcher=1,recursive=true, plane_tol=1.0E-12, variance_tol=1.0E-20, break_tol=1.0E-5, nodes_tol=1.0E-8, b_nodes_tol=1.0E-7, correcting=true,
             allow_irregular=false, force_irregular_search=false, domain=Boundary(), bruteforce=false, fastiterator=false)
 
 function RaycastParameter(set1,set2)
@@ -87,7 +100,7 @@ function adjust_vertex_t(searcher,r,u,t,nodes,_Cell)
         index, t0 = intersect(searcher.domain,r,u, x-> !((x+searcher.tree.size) in nodes)) 
         if t0<Inf
             activate_mirror(searcher,_Cell,index)
-            return sort!(push!(nodes,index+searcher.tree.size)) , t0
+            return sort!([index+searcher.tree.size;nodes]) , t0
         end
     return nodes, t        
 end
@@ -139,73 +152,65 @@ function descent(xs::Points, searcher, start = 1)
     if !searcher.allow_irregular_verteces
         return olddescent(xs,searcher,start)
     end
+    dim = searcher.dimension
     sig = [start]
     r = xs[start]
-    minimal_edge=zeros(Int64,searcher.dimension+1)
-    minimal_edge[1] = start
-    base = xs[start]
-    d = length(r)
-    u = 2 .* rand(length(r)) .- 1 # rand(length(r))
-    ortho_system = Vector{Vector{Float64}}(undef,d)
-    for k in 1:d   ortho_system[k]=zeros(Float64,d)   end 
-    span = searcher.edge_buffer
-    span[1] = start
-    for k in 1:d  # find an additional generator for each dimension
-#        println("----------------------------------------------------------------------------------")
-#        println("u=$u")
-        if ( dot(u,r-xs[start])>0 )   u = -u   end
-        (tau, t) = raycast(sig, r, u, xs, searcher)
-        b=false
-        if t==Inf 
-            (tau,t)=adjust_vertex_t(searcher,r,u,t,copy(sig),start) 
-            b=true
-            if t == Inf
-                u = -u
+    
+    keep_searching = true
+    while keep_searching
+        sig = [start]
+        r = xs[start]
+        minimal_edge = zeros(Int64,dim+1)
+        minimal_edge[1] = start
+        my_vv = 1.0
+        try
+            for k in 1:dim  # find an additional generator for each dimension
+                u = randray(xs[minimal_edge[1:k]])
                 (tau, t) = raycast(sig, r, u, xs, searcher)
+                b = false
+                if t==Inf 
+                    (tau,t)=adjust_vertex_t(searcher,r,u,t,sig,start) 
+                    b=true
+                end
+                if t == Inf
+                    u = -u
+                    (tau, t) = raycast(sig, r, u, xs, searcher)
+                end
+                if t==Inf 
+                    (tau,t)=adjust_vertex_t(searcher,r,u,t,sig,start)
+                    b=true 
+                end
+                if t == Inf
+                    error("Could not find a vertex in both directions of current point." *
+                        "Consider increasing search range (tmax)")
+                end
+                #println(" - $b: $tau")
+                r = b ? r+t*u : new_vertex!(tau,searcher,r,u,t,sig,start)
+                ff = findfirst(x->!(x in sig),tau)
+                #println(" - $(!b ? "corrected" : "kept"): $tau, $sig, $ff")
+                minimal_edge[k+1] = tau[ff]
+                my_vv = vertex_variance(view(minimal_edge,1:(k+1)),r,xs,k,view(searcher.ddd,1:(k+1)))
+                _, dist = _nn(searcher.tree,r)
+                if (dist - norm(xs[start]-r))^2>searcher.variance_tol
+                    error("")
+                end
+                my_vv>searcher.variance_tol && error("")
+                #println(" - $sig, $tau, $(minimal_edge[1:k+1]), vv_min=$(my_vv)")
+                sig = tau
+                identify_multivertex(searcher, sig, r, vertex_variance(view(minimal_edge,1:(k+1)),r,xs,k,view(searcher.ddd,1:(k+1))))
+                #println(" - $sig: vv_sig=$(vertex_variance(sig,r,xs,length(sig)-1))")
+                #println("-------------------------------------------------------------------------------------------------")
             end
-            if t==Inf 
-                (tau,t)=adjust_vertex_t(searcher,r,u,t,copy(sig),start)
-                b=true 
-            end
+        catch
+            my_vv=1.0
         end
-        if t == Inf
-            error("Could not find a vertex in both directions of current point." *
-                "Consider increasing search range (tmax)")
-        end
-        minimal_edge[k+1] = tau[findfirst(x->!(x in sig),tau)]
-        r = b ? r+t*u : new_vertex!(tau,searcher,r,u,t,sig,start)
-        sig = tau
-#        println(view(span,1:k),"  ",sig,"  ",vertex_variance(view(span,1:k),r,xs,k-1,searcher.ddd))
-#        println(view(span,1:k))
-        identify_multivertex(searcher, sig, r, vertex_variance(view(span,1:k),r,xs,k-1,view(searcher.ddd,1:k)))
-#        println(sig)
-        # we make u normal to the plane containing sig
-        lsig = length(sig)
-        max_projection = 0.0
-        max_i = 0
-        for i in 1:lsig  
-            new_projection = dot(u,xs[sig[i]]-base)
-            if abs(new_projection)>abs(max_projection) 
-                max_projection = new_projection
-                max_i = i
-            end
-        end
-        #println("max_i: $(xs[sig[max_i]]), base: $base, u=$u, difference=$(xs[sig[max_i]]-base), neu: $( u - max_projection*normalize(xs[sig[max_i]]-base))")
-        ortho_system[k] .= xs[sig[max_i]]-base
-        for i in 1:(k-1)
-            ortho_system[k] .+= ((-1.0)*dot(ortho_system[k],ortho_system[i])) .* ortho_system[i]
-        end
-        normalize!(ortho_system[k])
-#        println("ortho:  ", ortho_system[k],"   ",((-1.0)*dot(ortho_system[k],u))*ortho_system[k])
-        u .+= ((-1.0)*dot(ortho_system[k],u))*ortho_system[k]
-        (k<d) && (span[k+1] = sig[max_i])
-        normalize!(u)            
+        my_vv>searcher.variance_tol && continue
+        keep_searching = vertex_variance(view(minimal_edge,1:(dim+1)),r,xs,dim,view(searcher.ddd,1:(dim+1)))>searcher.variance_tol
     end
     sort!(sig)
-    span .= 0
     r = project(r,searcher.domain)
-    r,_ = walkray_correct_vertex(r, sig, searcher, true,minimal_edge=view(minimal_edge,1:d),new_generator=minimal_edge[d+1])
-    #println("Descent 1: $sig")
+    r,_ = walkray_correct_vertex(r, sig, searcher, true)
+
     return (sig, r)
 end
 
@@ -227,11 +232,13 @@ function walkray(edge::Sigma, r::Point, xs::Points, searcher, sig; ray=nothing, 
     #global walk_count=walk_count+1
     searcher.rare_events[SRI_walkray] += 1
     dim = length(r)
-    sig_del = edge #deleteat(_sig, i)
+    sig_del = edge # copy(edge) #deleteat(_sig, i)
+ #   print("sig_del_0=$sig_del -> ")
     success = true
     k= findfirst(x->!(x in edge),sig)
     Rest = sig[k]
     u = ray
+    # if no ray provided get your own one...
     if typeof(u)==Nothing
         u = randray(view(xs,sig_del),map(i->view(searcher.vectors,:,i),1:(dim-1)))
         value_max = 0.0
@@ -252,53 +259,19 @@ function walkray(edge::Sigma, r::Point, xs::Points, searcher, sig; ray=nothing, 
     end
     repeat = true
     while repeat
-#        print(2)
         repeat = false
         sig2, t = raycast(sig_del, r, u, xs, searcher, Rest,sig)
-        if t<0
-            println()
-            println("Error in: $sig,  r=$r,  vertex_variance=$(vertex_variance(sig,r,searcher.tree.extended_xs)) ")
-            println("          $sig,  u=$u, new_r=$(r + t*u), t=$t")
-            println("Active Boundaries: ",searcher.tree.active)
-            println("Extended sigma for various radii around r:")
-            println(" -5: ",_inrange(searcher.tree,r,norm(r-searcher.tree.extended_xs[sig[1]])*(1.0+1E-5)))
-            println(" -6: ",_inrange(searcher.tree,r,norm(r-searcher.tree.extended_xs[sig[1]])*(1.0+1E-6)))
-            println(" -7: ",_inrange(searcher.tree,r,norm(r-searcher.tree.extended_xs[sig[1]])*(1.0+1E-7)))
-            println(" -8: ",_inrange(searcher.tree,r,norm(r-searcher.tree.extended_xs[sig[1]])*(1.0+1E-8)))
-            println(" -9: ",_inrange(searcher.tree,r,norm(r-searcher.tree.extended_xs[sig[1]])*(1.0+1E-9)))
-            println("-10: ",_inrange(searcher.tree,r,norm(r-searcher.tree.extended_xs[sig[1]])*(1.0+1E-10)))
-            println("-11: ",_inrange(searcher.tree,r,norm(r-searcher.tree.extended_xs[sig[1]])*(1.0+1E-11)))
-            IR = _inrange(searcher.tree,r,norm(r-searcher.tree.extended_xs[sig[1]])*(1.0+1E-12))
-            println("-12: ",IR)
-            for k in _inrange(searcher.tree,r,norm(r-searcher.tree.extended_xs[sig[1]])*(1.0+1E-12))
-                println(" $k :  $(searcher.tree.extended_xs[k]), $(norm(searcher.tree.extended_xs[k]-r))")
-            end
-            k = searcher.visited[sig2[1]]
-            println("sig2[1]= $(sig2[1])")
-            if length(searcher.domain)<=d
-                @warn("the above output simply means that the machine precission is not high enough to properly calculate the Voronoi cells far away from the nodes. You should consider to place a large box around your sample.")
-                return sig_del, r, u, false
-            else 
-                error("There is a severe error in the walkray method. Probably you provided a node or an initial vertex outside of the domain or the coordinates of a given vertex are wrong.")
-            end
-            #u.*=-1.0
-            #sig2, t = raycast(sig_del, r, u, xs, searcher, Rest,sig)
-            println() 
-            return sig2, (r + t*u), u, nothing
-            #error("")
-        end
+        exception_raycast(t,r,sig,sig2,u,searcher)
         if t==0.0 
             return sig2, r, u, false
         end
         #if t<0  println("t=$t ;  ( $sig , $r ) <-> ( $sig2 , $(r + t*u))") end
         if t < Inf
-#            print(3)
             r2,_ = walkray_correct_vertex(r + t*u, sig2, searcher, false, minimal_edge=minimal_edge, new_generator=sig2[findfirst(x->!(x in sig_del),sig2)]) 
             active = false
             index = 0
             if !(r2 in searcher.domain) #&& sig2[end]<=length(xs)
                 index, t0 = intersect(searcher.domain,r,u, x-> !((x+searcher.tree.size) in sig_del)) 
- #               print("4: $t->$t0 ")
                 if t0<t
                     active = activate_mirror(searcher,sig_del[1],index)
                     sig2=sort!([sig_del;index+searcher.tree.size])
@@ -306,14 +279,18 @@ function walkray(edge::Sigma, r::Point, xs::Points, searcher, sig; ray=nothing, 
                 end
             end
             generator = sig2[findfirst(x->!(x in sig_del),sig2)]
-            r2,success,vv =  walkray_correct_vertex(r2, sig2, searcher, true, minimal_edge=minimal_edge, new_generator=generator)
+            success,vv = 0,0,0
+            try
+                r2,success,vv =  walkray_correct_vertex(r2, sig2, searcher, true, minimal_edge=minimal_edge, new_generator=generator)
+            catch
+                println(t)
+                success, vv = false, 1.0 
+            end
             if active && !success
-  #              print(5)
                 deactivate_mirror(searcher,sig_del[1],index)
                 return sig2, r2, u, success
             elseif active && success # make sure all nodes of vertex are found on irregular grids, hence need to repeat from beginning with new info. 
                                      # The performance loss on regular grids in 5 dimensions is approximately 0.001
-#                print(6)
                 repeat = true
                 continue
             else
@@ -365,9 +342,17 @@ function randray(xs::Points)
             v[i] = v[i] .- dot(v[i], v[j]) .* v[j]
         end
         v[i] = normalize(v[i])
+        for j in 1:(i-1)
+            v[i] = v[i] .- dot(v[i], v[j]) .* v[j]
+        end
+        v[i] = normalize(v[i])
     end
 
     u = randn(d)
+    for i in 1:k-1
+        u = u - dot(u, v[i]) * v[i]
+    end
+    u = normalize(u)
     for i in 1:k-1
         u = u - dot(u, v[i]) * v[i]
     end
@@ -386,9 +371,17 @@ function randray(xs::Points,v)
             v[i] .-= dot(v[i], v[j]) .* v[j]
         end
         normalize!(v[i])
+        for j in 1:(i-1)
+            v[i] .-= dot(v[i], v[j]) .* v[j]
+        end
+        normalize!(v[i])
     end
 
     u = randn(d)
+    for i in 1:k-1
+        u .-= dot(u, v[i]) .* v[i]
+    end
+    normalize!(u)
     for i in 1:k-1
         u .-= dot(u, v[i]) .* v[i]
     end
@@ -425,9 +418,19 @@ function walkray_correct_vertex(_r, _sig, searcher, correct_bulk, edge=nothing; 
     vv = searcher.variance_tol
     #println("hier mit $sig, $_r, $correct_bulk")
     sig = _sig
-    if correct_bulk 
+    if correct_bulk
         sig = true_sigma(_sig,dim,searcher,minimal_edge,new_generator) # even for irregular nodes find some "regular representative"
         vv = vertex_variance(sig,r,searcher.tree.extended_xs,dim,searcher.ddd)
+        b = vv>searcher.break_tol
+        i = 0
+        while i<3 && vv>0.0001*searcher.variance_tol
+            i += 1
+            r = _correct_vertex(sig,searcher.tree.extended_xs,searcher,r)
+            vv = vertex_variance(sig,r,searcher.tree.extended_xs,dim,searcher.ddd)
+        end
+
+        exception_walray_correct_vertex(b,vv,searcher,sig,r)
+        
         if vv>searcher.variance_tol && vv<searcher.break_tol && searcher.correcting
             r = _correct_vertex(sig,searcher.tree.extended_xs,searcher,r)
             vv = vertex_variance(sig,r,searcher.tree.extended_xs,dim,searcher.ddd)
@@ -472,7 +475,7 @@ function _correct_vertex(sig,xs,searcher,x)
     searcher.rhs.=x
     for i in 1:dim
         searcher.vectors[:,i]=xs[sig[i]] - xs[sig[dim+1]]
-        #searcher.rhs[i]=0.5*(sum(abs2,xs[sig[i]])-diff)
+
         searcher.rhs_cg.+=(0.5*(sum(abs2,xs[sig[i]])-diff)).*searcher.vectors[:,i]
     end
     searcher.symmetric.*=0
@@ -585,15 +588,16 @@ struct MyTree{T,TT}
     function MyTree{T,TT}(t,m,a,s,m2) where {T,TT}
         return new(t,m,a,s,m2)        
     end
-    function MyTree(xs,l=0)
-        t=KDTree(xs)
+    function MyTree(xs,l=0;perturbed_nodes=false)
+        t=KDTree(VoronoiNodes(xs,perturbation=perturbed_nodes ? 1.0E-10 : 0.0))
+        #t=BallTree(xs)#VoronoiNodes(xs,perturbation=perturbed_nodes ? 1.0E-10 : 0.0))
         m=append!(copy(xs),Vector{typeof(xs[1])}(undef,l))
         a=BitVector(zeros(Int8,l))
         return MyTree{typeof(t),typeof(xs[1])}(t,m,a,length(xs),l)
     end
 end
 
-function _nn(tree::MyTree,x::Point;skip=x->false)
+function _nn(tree::MyTree{T,TT},x::Point;skip=(x->false)::Function) where {T,TT}
     idx,dists=knn(tree.tree,x,1,false,skip)
     b=length(idx)>0
     index = b ? idx[1] : 0
@@ -625,6 +629,62 @@ function _inrange(tree::MyTree,x,r)
     return idx
 end
 
+
+########################################################################################################################################
+########################################################################################################################################
+########################################################################################################################################
+
+## MyBruteTree
+
+########################################################################################################################################
+########################################################################################################################################
+########################################################################################################################################
+
+struct MyBruteTree{TT}
+    extended_xs::Vector{TT}
+    ib::Vector{Int64}
+    valid_indeces::Vector{Int64}
+end
+
+function MyBruteTree(xs)
+    return MyTree{typeof(xs[1])}(xs,zeros(Int64,10),collect(1:length(xs)))
+end
+
+function _nn(tree::MyBruteTree{TT},x::Point;skip=x->false) where {TT}
+    index =  0
+    dist = Inf64
+    lxs = length(tree.extended_xs)
+    for i in tree.valid_indeces
+        skip(i)  && continue
+        d=norm(x-tree.extended_xs[i])
+        if d<dist
+            index=i
+            dist=d
+        end
+    end    
+    return index, dist
+end
+
+function _inrange(tree::MyBruteTree,x,r)
+    lib = length(tree.ib)
+    idx = tree.ib
+    count = 0
+    for i in 1:lm
+        d = norm(x-tree.extended_xs[i])
+        if d<r
+            count += 1
+            if count>lib
+                lib += 10
+                resize!(idx,lib)
+            end
+            idx[count] = i
+        end
+    end    
+    return copy(view(idx,1:count))
+end
+
+
+
 ########################################################################################################################################
 ########################################################################################################################################
 ########################################################################################################################################
@@ -636,7 +696,7 @@ end
 ########################################################################################################################################
 
 
-struct RaycastIncircleSkip{T,TT,TTT,TTTT}
+struct RaycastIncircleSkip{T,TTT,TTTT}
     tree::T
     lmesh::Int64
     visited::Vector{Int64}
@@ -656,12 +716,13 @@ struct RaycastIncircleSkip{T,TT,TTT,TTTT}
     rhs::Vector{Float64}
     rhs_cg::Vector{Float64}
     ddd::Vector{Float64}
-    domain::TT
+    domain::Boundary
     rare_events::Vector{Int64}
     dimension::Int64
     edgeiterator::TTT
     plane_tolerance::Float64
     new_verts_list::TTTT
+    ray_tol::Float64
 end
 
 # SRI = search rare index
@@ -710,24 +771,21 @@ function vp_print(searcher::RaycastIncircleSkip; rare_events=true,mirrors=false)
     end
 end
 
-function RaycastIncircleSkip(xs,recursive,variance_tol,break_tol,node_tol,b_tol,correcting,allow,force,dom,brut,planetol,fast=false)
+function RaycastIncircleSkip(xs,recursive,variance_tol,break_tol,node_tol,b_tol,correcting,allow,force,dom,brut,planetol,fast=false,periodic_searcher=1,rt=1.0E-12,perturbed_nodes=false)
     lxs=length(xs)
     dim=length(xs[1])
+    periodic_searcher = dim==2 ? 0 : periodic_searcher
     z1d_1=zeros(Float64,lxs)
     z1d_2=zeros(Float64,dim)
     z1d_3=zeros(Float64,dim)
     z1d_4=zeros(Float64,dim+1)
     z2d_1=zeros(Float64,dim,dim)
     z2d_2=zeros(Float64,dim,dim)
-    tree=brut ? BruteTree(xs) : MyTree(xs,length(dom))
-    EI = getEdgeIterator(fast,dim,lxs)
+    tree = brut ? MyBruteTree(xs) : MyTree(xs,length(dom),perturbed_nodes=perturbed_nodes)
+    EI = FastEdgeIterator(dim)
     nvl = Vector{Pair{Vector{Int64},typeof(xs[1])}}(undef,dim)
-    return RaycastIncircleSkip{typeof(tree),typeof(dom),typeof(EI),typeof(nvl)}( tree, lxs, zeros(Int64,lxs+length(dom)+3), zeros(Int64,dim), z1d_1, recursive, BitVector(zeros(Int8,length(xs))), variance_tol, break_tol, node_tol, b_tol,
-                                    correcting, allow, force, z2d_1, z2d_2, z1d_2, z1d_3, z1d_4, dom, zeros(Int64,SRI_max),dim,EI,planetol,nvl)
-end
-
-function getEdgeIterator(fast,dim,l)
-    return EdgeIterator(dim)
+    return RaycastIncircleSkip{typeof(tree),typeof(EI),typeof(nvl)}( tree, lxs, zeros(Int64,lxs+length(dom)+3), zeros(Int64,dim), z1d_1, recursive, BitVector(zeros(Int8,length(xs))), variance_tol, break_tol, node_tol, b_tol,
+                                    correcting, allow, force, z2d_1, z2d_2, z1d_2, z1d_3, z1d_4, dom, zeros(Int64,SRI_max),dim,EI,planetol,nvl,rt)
 end
 
 ########################################################################################################################################
@@ -739,22 +797,23 @@ end
 
 global RAYCAST_ERROR=0::Int64
 
-function raycast(edge::Sigma, r::Point, u::Point, xs::Points, searcher::RaycastIncircleSkip, old = 0,sig2=Int64[])
+function raycast(edge::Sigma, r::Point, u::Point, xs::Points, searcher::RaycastIncircleSkip{T,TTT,TTTT}, old = 0,sig2=Int64[]) where {T,TTT,TTTT}
     sig = isempty(sig2) ? edge : sig2
     x0 = xs[edge[1]]
-    #searcher.visited.=0
+
     visited = view(searcher.visited,4:length(searcher.visited))
     status = view(searcher.visited,1:3)
     status .= 0
-    #maxiterator(_sig,l,pos) = l==1 ? dot(xs[_sig[1]], u) : max( dot(xs[_sig[pos]], u), pos<l-1 ? maxiterator(_sig,l,pos+1) : dot(xs[_sig[pos+1]], u))
-    #c = maxiterator(sig,length(sig),1) #maximum(dot(xs[g], u) for g in sig)
-    c = maximum(dot(xs[g], u) for g in sig)+ searcher.plane_tolerance #*(1.0)#-1E-12)
+
+    c = maximum(dot(xs[g], u) for g in sig) 
+    #c += abs(c)*1.0E-14#searcher.plane_tolerance
+    c += abs(c)*searcher.plane_tolerance
     bb = isempty(sig2)
     # only consider points on the right side of the hyperplane
     skip(i) = (bb ? i ∈ sig : i ∈ sig2) || (dot(xs[i], u) <= c)
 
-    local i, t
-        i, t = _nn(searcher.tree, r + u * (u' * (x0-r)), skip=skip)
+    vvv = r + u * dot(u , (x0-r))
+    i, t = _nn(searcher.tree, vvv, skip=skip)
     t == Inf && return [0], Inf
 
     searcher.rare_events[SRI_nn]+=1
@@ -766,7 +825,6 @@ function raycast(edge::Sigma, r::Point, u::Point, xs::Points, searcher::RaycastI
     j=0
     while true
         if (i>length(xs)) || i<=0
-            global RAYCAST_ERROR+=1
             return [0], Inf
         end
         x = xs[i]
@@ -842,63 +900,30 @@ end
 ########################################################################################################################################
 ########################################################################################################################################
 
-function identify_multivertex(searcher,sig,r,VVar = vertex_variance(sig,r,searcher.tree.extended_xs,searcher.dimension,searcher.ddd))
+function identify_multivertex(searcher,sig,r,VVar = vertex_variance(sig,r,searcher.tree.extended_xs,searcher.dimension,searcher.ddd);verbose=true)
     if (searcher.allow_irregular_verteces && searcher.visited[1]!=0) || searcher.force_irregular_search
         searcher.visited[1] = 0
-        #println( sig)
-#println("here")
         measure = 0.0
+        #!verbose && println("ident multi: $sig")
         for s in sig
             measure = max(norm(searcher.tree.extended_xs[s]-r),measure)
         end
         idx = _inrange(searcher.tree,r,(1+searcher.node_tol)*measure)
+        #!verbose && println("ident multi, idx: $idx")
         for s in idx
             if !(s in sig) && measure > norm(searcher.tree.extended_xs[s]-r)
                 searcher.rare_events[20] += 1
-                #println(abs((measure - norm(searcher.tree.extended_xs[s]-r))/measure))
                 break
             end
         end
-        (length(idx) == searcher.dimension+1) && return
-        #vv = measure * 1.0E-10 #
+
+        (length(idx) == length(sig)) && return
+
         vv = max(VVar, searcher.variance_tol*10) * 100*measure
 
         add_multi_vert_inds(r,sig,idx,searcher,measure,vv)
-        #=vv2 = length(sig)>searcher.dimension ? vertex_variance(sig,r,searcher.tree.extended_xs) : searcher.variance_tol
-        #=if vv2>10*VVar #1.0E-20 #searcher.variance_tol
-            searcher.rare_events[19] += 1
-            println("vv2: $vv2  vs  VVar: $VVar")
-        end=#
-        idx = _inrange(searcher.tree,r,(1+1.0E-8)*measure)
-        if length(sig)!= length(idx)
-            searcher.rare_events[19] += 1
-            #println("discrepancy: sig=$sig,  idx=$idx")
-        end
-        idx = _inrange(searcher.tree,r,(1+1.0E-6)*measure)
-        if length(sig)!= length(idx)
-            searcher.rare_events[18] += 1
-            #println("discrepancy: sig=$sig,  idx=$idx")
-        end
-        idx3 = _inrange(searcher.tree,r,(1+1.0E-5)*measure)
-        if length(idx3)!= length(idx)
-            searcher.rare_events[17] += 1
-            #println("discrepancy: sig=$sig,  idx=$idx")
-        end
-        idx = _inrange(searcher.tree,r,(1+1.0E-4)*measure)
-        if length(idx3)!= length(idx)
-            searcher.rare_events[16] += 1
-            #println("discrepancy: sig=$sig,  idx=$idx")
-        end
-        idx2 = _inrange(searcher.tree,r,(1+1.0E-3)*measure)
-        if length(idx2)!= length(idx)
-            searcher.rare_events[15] += 1
-            #println("discrepancy: sig=$sig,  idx=$idx")
-        end
-        idx2 = _inrange(searcher.tree,r,(1+1.0E-2)*measure)
-        if length(idx2)!= length(idx)
-            searcher.rare_events[14] += 1
-            #println("discrepancy: sig=$sig,  idx=$idx")
-        end=#
+        #!verbose && println("Final: $sig")
+        exception_identify_multivertex(searcher,r,sig,measure,idx)
     end
 end
 
@@ -924,51 +949,7 @@ function add_multi_vert_inds(r,sig,idx,searcher,measure,vv)
 end
 
 function correct_multi_vertex(sig,minimal_edge,edge,generator,r,u,searcher)
-#    if vertex_variance(sig,r,searcher.tree.extended_xs,length(sig)-1,searcher.ts)<searcher.variance_tol
         return r
-#    end
-#=    my_sig = view(searcher.visited,1:searcher.dimension+1)
-    xs = searcher.tree.extended_xs
-    println("here")
-    println(sig)
-    dd = norm(r-xs[minimal_edge[1]])
-    for e in minimal_edge
-        print("$e: $(abs(norm(r-xs[e])-dd))  --  ")
-    end
-    println("non-minimal:")
-    for e in sig
-        e in minimal_edge && continue
-        print("$e: $(abs(norm(r-xs[e])-dd))  --  ")
-    end
-    for k in 1:searcher.dimension   
-        my_sig[k] = minimal_edge[k]  
-    end
-    count = 1
-    for s in sig
-        if !(s in edge || s==generator)
-            count += 1
-            searcher.visited[searcher.dimension+count] = s
-        end
-    end
-    if count>1
-        my_gens = view(searcher.visited,(searcher.dimension+2):(searcher.dimension+count))
-        gen = 0
-        dist = 0.0
-        for g in my_gens
-            d = dot(xs[g]-xs[minimal_edge[1]],u)
-            gen = d>dist ? g : gen
-            dist = max(d,dist)
-        end
-        my_sig[searcher.dimension+1] = gen
-        rr = _correct_vertex(my_sig,xs,searcher,r)
-        println("here2")
-        dd = norm(rr-xs[minimal_edge[1]])
-        println(sum(x->abs2(norm(rr-xs[x])-dd),sig))
-        
-    end
-    println("here3")
-    error("")
-    return r=#
 end
 
 

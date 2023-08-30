@@ -27,7 +27,7 @@
 end=#
 
 
-function systematic_refine!(domain::Discrete_Domain,Integrator,_new_xs::Points;intro="Refine discrete domain with $(length(_new_xs)) points",offset=0,short_log=true)
+function systematic_refine!(domain::Discrete_Domain,Integrator,_new_xs::Points;intro="Refine discrete domain with $(length(_new_xs)) points",offset=0,short_log=true,search_settings=[])
     vp_print(offset,intro)
     vp_line()
     Integral = Integrator.Integral
@@ -38,7 +38,7 @@ function systematic_refine!(domain::Discrete_Domain,Integrator,_new_xs::Points;i
 
     extended_boundary = domain.internal_boundary# extend_periodic_part(domain.boundary,Integral.MESH.nodes[1:(length(domain.references))])
     #println("hier 1")
-    iter = systematic_refine!(Integral,_new_xs,intro="refine with $(length(_new_xs)) points: ",subroutine_offset=sr_offset,domain=extended_boundary)
+    iter = systematic_refine!(Integral,_new_xs,intro="refine with $(length(_new_xs)) points: ",subroutine_offset=sr_offset,domain=extended_boundary,search_settings=search_settings)
     #println("hier 2")
     make_consistent!(Integrator) # make sure all new fields are initialized properly
     new_nodes_shift = old_length# length(domain.references)

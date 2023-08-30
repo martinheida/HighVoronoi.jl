@@ -26,7 +26,7 @@ function copy(I::Heuristic_Integrator)
 end
 
 function integrate(Integrator::Heuristic_Integrator; domain=Boundary(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
-    println("PolyInt: ")#$(length(relevant)), $(length(modified))")
+    #println("PolyInt: ")#$(length(relevant)), $(length(modified))")
     _integrate(Integrator; domain=domain, calculate=relevant, iterate=Base.intersect(union(modified,relevant),1:(length(Integrator.Integral)))) 
 end
 
@@ -52,6 +52,9 @@ end
 """
 #function integrate(domain,_Cell,iter,calcul,searcher,Integrator::Heuristic_Integrator)
 function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Heuristic_Integrator,ar,bulk_inte,inter_inte)    
+    #println(bulk_inte)
+    #println(inter_inte)
+    #println(ar)
     Integral  = Integrator.Integral
     (typeof(Integrator._function) == Nothing) && (return Integral.volumes[_Cell])
 
@@ -79,7 +82,9 @@ function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Heuri
     I=Integrator
     heuristic_integral(I._function, I.bulk, _Cell,  bulk_inte, ar, inter_inte, dim, neigh, 
                 _length,verteces,verteces2,emptydict,xs[_Cell],empty_vector,calculate,Integral,xs)
-
+    #println(bulk_inte)
+    #println(inter_inte)
+    #println(ar)
     return Integral.volumes[_Cell]
 end
 
@@ -116,7 +121,7 @@ function heuristic_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,neigh,
         isempty(bufferlist) && continue
         AREA_Int = Ay[k] # always: typeof(_function)!=Nothing
         AREA_Int.*=0
-        _Center = midpoint(bufferlist,emptylist,empty_vector,vector)
+        _Center = midpoint_points(bufferlist,emptylist,empty_vector,vector)
         _Center .+= vector # midpoint shifts the result by -vector, so we have to correct that ....
         count = 0
         while !(isempty(bufferlist))
@@ -128,7 +133,9 @@ function heuristic_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,neigh,
         AREA_Int .+= (1/dim).*_function(_Center) 
         thisarea = Full_Matrix.area[_Cell][k]
         AREA_Int .*= thisarea
+#        print("*")
         if _bulk # and finally the bulk integral, if whished
+#            print("b")
             distance= 0.5*norm(vector-xs[buffer]) #abs(dot(normalize(vector-xs[buffer]),vert))
             _y=_function(vector)
             _y.*=(thisarea/(dim+1))

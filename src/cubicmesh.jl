@@ -69,7 +69,7 @@ function heuristic_Cube_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,n
         isempty(bufferlist) && continue
         AREA_Int = Ay[k] # always: typeof(_function)!=Nothing
         AREA_Int.*=0
-        _Center = midpoint(bufferlist,emptylist,empty_vector,vector)
+        _Center = midpoint_points(bufferlist,emptylist,empty_vector,vector)
         _Center .+= vector # midpoint shifts the result by -vector, so we have to correct that ....
         count = 0
         while !(isempty(bufferlist))
@@ -245,9 +245,6 @@ function cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,domain,my_int
     if get_volumes
         quicksort!(Integrator.Integral.neighbors[1],Integrator.Integral.neighbors[1],Integrator.Integral.area[1])
         Integrator.Integral.volumes[1] = prod(vol_vector)
-        #println(Integrator.Integral.volumes[1])
-        #println(1024*Integrator.Integral.volumes[1])
-        #println(length(Integrator.Integral.volumes))
     else
         sort!(Integrator.Integral.neighbors[1])
     end
@@ -270,26 +267,6 @@ function cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,domain,my_int
         integrate_cube(pc.cell_index, data, Integrator,proto)    
         increase(pc)
     end
-    #println()
-    #println(Integrator.Integral.volumes)
-#=    aa = [1,1,1]
-    my_ind = index_from_array(aa,periodicity)
-    println("$aa - $my_ind :  $(Integrator.Integral.area[my_ind]), $(Integrator.Integral.neighbors[my_ind])")
-    aa = [2,1,1]
-    my_ind = index_from_array(aa,periodicity)
-    println("$aa - $my_ind :  $(Integrator.Integral.area[my_ind]), $(Integrator.Integral.neighbors[my_ind])")
-    aa = [1,2,1]
-    my_ind = index_from_array(aa,periodicity)
-    println("$aa - $my_ind :  $(Integrator.Integral.area[my_ind]), $(Integrator.Integral.neighbors[my_ind])")
-    aa = [1,1,2]
-    my_ind = index_from_array(aa,periodicity)
-    println("$aa - $my_ind :  $(Integrator.Integral.area[my_ind]), $(Integrator.Integral.neighbors[my_ind])")
-    aa = [2,2,2]
-    my_ind = index_from_array(aa,periodicity)
-    println("$aa - $my_ind :  $(Integrator.Integral.area[my_ind]), $(Integrator.Integral.neighbors[my_ind])")
-    aa = [3,3,3]
-    my_ind = index_from_array(aa,periodicity)
-    println("$aa - $my_ind :  $(Integrator.Integral.area[my_ind]), $(Integrator.Integral.neighbors[my_ind])")=#
     return Integrator
 end
 

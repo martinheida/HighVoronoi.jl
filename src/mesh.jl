@@ -9,12 +9,6 @@
 
 ##############################################################################
 
-const Point{T} = AbstractVector{T} where T<:Real
-const Points = AbstractVector{<:Point}
-const Sigma = AbstractVector{<:Integer}  # Encoded the vertex by the ids of its generators.
-const Vertex = Tuple{<:Sigma, <: Point}
-const Vertices = Dict{<:Sigma, <:Point}
-const ListOfVertices = AbstractVector{<:Vertices}
 
 function EmptyDictOfType(x)
     d=Dict(x)
@@ -25,6 +19,7 @@ end
 function VectorOfDict(x,len)
     proto = EmptyDictOfType( x )
     ret = Vector{typeof(proto)}(undef,len)
+    len==0 && return
     for i in 1:len
         ret[i]=copy(proto)
     end
@@ -32,18 +27,6 @@ function VectorOfDict(x,len)
 end
 
 
-# the following methods will be overwritten vor meshes, integrals and integrators
-
-import Base.prepend!
-import Base.append!
-import Base.copy
-import Base.length
-import Base.push!
-import Base.pop!
-import Base.haskey
-import Base.keepat!
-import Base.filter!
-#import show
 
 
 """
@@ -61,8 +44,81 @@ creates a list of points (as static vectors) from a matrix.
 """
 VoronoiNodes(x::Matrix) = map(SVector{size(x,1)}, eachcol(x))
 VoronoiNodes(x::Vector{<:Vector}) = map(SVector{length(x[1])}, x)
-VoronoiNodes(x::Vector{<:SVector}) = x
+VoronoiNodes(x::Vector{<:SVector};perturbation=0.0) = perturbation==0.0 ? x : perturbNodes(x,perturbation)
 VoronoiNodes(p::AbstractVector{Float64}) = VoronoiNodes([p])
+VoronoiNodes(ini,dim::Int,l::Int) = Vector{SVector{dim,Float64}}(ini,l)
+VoronoiNode(v) = SVector{length(v)}(v)
+
+function perturbNodes(x::Vector{<:SVector},perturbation)
+    x2 = copy(x)
+    lx2=length(x2)
+    dim=length(x2[1])
+    for i in 1:lx2
+        x2[i] = x[i] + perturbation*randn(dim)
+    end
+    return x2
+end
+
+function VoronoiNodes(nodes::Real;density = x->1.0, range=nothing, domain::Boundary=Boundary(),bounding_box::Boundary=Boundary(),resolution=nothing,criterium=x->true,silence = true)
+    if range==nothing
+        dimension = 0
+        total_length = length(domain) + length(bounding_box)
+        if total_length==0
+            error("There is not enough data to create a distribution of points: Provide either :range or :domain !")
+        end
+        halfspaces = []
+        for p in Iterators.flatten((domain.planes,bounding_box.planes))
+            dimension = length(p.normal)
+            push!(halfspaces,HalfSpace(p.normal, dot(p.normal,p.base)))
+        end
+        halfspaces = [h for h in halfspaces]
+        left = zeros(Float64,dimension)
+        right = zeros(Float64,dimension)
+        left .= Inf64
+        right .= -Inf64
+        poly_vol = 0.0
+        try
+            poly = polyhedron(hrep(halfspaces))
+            my_points = Polyhedra.points(vrep(poly))
+            for p in my_points
+                for k in 1:dimension
+                    left[k] = min(left[k],p[k])
+                    right[k] = max(right[k],p[k])
+                end
+            end
+            poly_vol = Polyhedra.volume(poly)
+        catch
+            error("It is not possible to create a polyhedron from :domain and :bounding_box")
+        end
+        box_vol = prod(k->right[k]-left[k],1:dimension)
+        if typeof(nodes)<:Integer && resolution==nothing
+            resolution = unsafe_trunc(Int64,((box_vol/poly_vol)*nodes*100)^(1/dimension))*(dimension==2 ? 10 : 1) + 1
+        end
+        range = DensityRange(resolution*ones(Int64,dimension),map(k->(left[k],right[k]),1:dimension))
+    end
+    println("total max resolution: $(prod(range.number_of_cells))")
+    if !(typeof(nodes)<:Integer)
+        nodes = round(Int64,prod(range.number_of_cells)*nodes)
+    else
+        nodes = min(nodes,prod(range.number_of_cells))
+    end
+    _criterium = x->(criterium(x) && (x in domain))
+    density = get_density(density,_criterium,range)
+    cell_vol = prod(range.dimensions)
+    ρ = x->1.0-(1.0-density(x)*cell_vol)^nodes+nodes*(nodes-1)*0.5*(density(x)*cell_vol)^2
+    oldstd = stdout
+    try
+        redirect_stdout(silence ? devnull : oldstd)
+        print("Calculated nodes so far: ")
+        res = get_nodes(x::Point->(_criterium(x) && rand()<ρ(x)),range)
+        println()
+        redirect_stdout(oldstd)
+        return res
+    catch
+        redirect_stdout(oldstd)
+        rethrow()
+    end
+end
 
 ####################################################################################################################################
 
@@ -95,6 +151,17 @@ struct boundary_vertex{T}
     end
 end
 
+@doc raw"""
+    intersect(B::Boundary,v::boundary_vertex)
+    returns the couple 'i','t' such that the line v.base+t*v.direction lies in B.planes[i]
+    'i' is such that 't' is the minimal positive value, i.e. B.planes[i] is actually 
+    the true part of the boundary that is hit by 'v'
+"""
+function intersect(B::Boundary,v::boundary_vertex,condition=(x->true))
+    return intersect(B,v.base,v.direction,condition)
+end
+
+
 
 """
     Voronoi_MESH{T}
@@ -113,9 +180,10 @@ struct Voronoi_MESH{T}
     All_Verteces::Vector{Dict{Vector{Int64},T}}
     Buffer_Verteces::Vector{Dict{Vector{Int64},T}}
     boundary_Verteces::Dict{Vector{Int64},boundary_vertex{T}}
+#    neighbors::Vector{Vector{Int64}}
 end
 function Voronoi_MESH(a,b,d)
-    mesh=Voronoi_MESH{typeof(a[1])}(a,b,VectorOfDict([0]=>a[1],length(a)),d)
+    mesh=Voronoi_MESH{typeof(a[1])}(a,b,VectorOfDict([0]=>a[1],length(a)),d)#,nn)
     new_Buffer_verteces!(mesh)      
     return mesh
 end
@@ -135,7 +203,9 @@ function Voronoi_MESH(xs::Points) #where {T}
     end
     bound=Dict([0]=>boundary_vertex{typeof(xs[1])}(xs[1],xs[1],1))
     pop!(bound)
-    tt=Voronoi_MESH{typeof(xs[1])}(xs,vertlist1,vertlist2,bound)
+    #nn = Vector{Vector{Int64}}(undef,length(xs))
+    #map!(x->Int64[],nn,1:length(xs))
+    tt=Voronoi_MESH{typeof(xs[1])}(xs,vertlist1,vertlist2,bound)#,nn)
     return tt
 end
 
@@ -207,29 +277,45 @@ function plausible(mesh::Voronoi_MESH,searcher=Raycast(mesh.nodes);report=false,
 end
 =#
 
+#=global FastEdgeIterators = Vector{Any}(undef,1)
 
-""" 
-    neighbors_of_cellneighbors_of_cell(_Cell,mesh,condition = r->true)  
+function GlobalFastEdgeIterator(dim)
+    fei = HighVoronoi.FastEdgeIterators
+    if dim>=length(fei)
+        resize!(fei,dim)
+    end
+    if !isassigned(fei,dim)
+        fei[dim] = FastEdgeIterator(dim)
+    end
+    return fei[dim]
+end
 
-    This function takes the verteces of a cell (calculated e.g. by systematic_voronoi) and returns 
-    an array containing the index numbers of all neighbors. A `neighbor` here is a cell that shares a full interface.
-    any lower dimensional edge/vertex is not sufficient as a criterion. This is equivalent with `_Cell` and
-    `neighbor` sharing at least `dimension` different verteces.
+global ___active_planes_list = Vector{Bool}(undef,100)
 
-    'condition' can be any condition on the coordinates of a vertex
-"""
-function neighbors_of_cell(_Cells,mesh,condition = r->true; adjacents=false)
-    neighbors = zeros(Int64,10)
-    counts = zeros(Int64,10)
+function _neighbors_of_cell(_Cells,mesh::Voronoi_MESH,condition = r->true; adjacents=false, extended_xs::Points = mesh.nodes,domain=nothing)
+    active = view(HighVoronoi.___active_planes_list,1:(domain!=nothing ? length(domain) : 0))
+    tree = (active=active, extended_xs=extended_xs, domain=domain, size=length(mesh))
+    return _neighbors_of_cell(_Cells,tree,mesh,condition,adjacents=adjacents)
+end
+
+function _neighbors_of_cell(_Cells,tree,mesh::Voronoi_MESH,condition = r->true; adjacents=false)
+    dim = length(mesh.nodes[1])
+    iterator = GlobalFastEdgeIterator(dim)
+    neighbors = zeros(Int64,10) 
     position = 1
     __max = 10
-    dim = length(mesh.nodes[1])
+    active = tree.active
+    extended_xs = tree.extended_xs
     adjacents = adjacents || length(_Cells)>1
     for _Cell in _Cells
+        active .= false
         for (sigma,r) in Iterators.flatten((mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell]))
-            regular = ( length(sigma)==(dim+1) )
-            for i in sigma
-                if i!=_Cell && (condition(r))
+            (!condition(r)) && continue
+            lsig = length(sigma)
+            (!adjacents) && activate_data_cell(tree,_Cell,sigma)
+            sig = adjacents ? sigma : ( lsig>(dim+1) ? neighbors_from_vertex(sigma,r,extended_xs,_Cell,iterator) : sigma )
+            for i in sig
+                if i!=_Cell 
                     f = findfirst(x->(x==i),neighbors)
                     if typeof(f)==Nothing
                         f = position
@@ -238,72 +324,85 @@ function neighbors_of_cell(_Cells,mesh,condition = r->true; adjacents=false)
                         if position>__max
                             __max += 10
                             append!(neighbors,zeros(Int64,10))
-                            append!(counts,zeros(Int64,10))
                         end
                     end
-                    counts[f] += regular || adjacents ? dim : counts[f]+1
                 end
             end
         end
     end
-    for i in 1:__max
-        if i>=position || counts[i]<dim
-            neighbors[i] = typemax(Int64)
-        end
-    end
+    resize!(neighbors, position-1)
     sort!(neighbors)
-    resize!(neighbors, findfirst(x->(x>typemax(Int64)-1),neighbors)-1)
+    return neighbors
+end
+=#
+
+global NeighborFinders = Vector{Any}(undef,5)
+
+function _NeighborFinder(dim) 
+    lnf=length(HighVoronoi.NeighborFinders)
+    dim>lnf && resize!(HighVoronoi.NeighborFinders,dim)
+    if !isassigned(HighVoronoi.NeighborFinders,dim)
+        HighVoronoi.NeighborFinders[dim] = NeighborFinder(dim,VoronoiNode(zeros(Float64,dim)))
+    end
+    #return reinterpret(DimNeighborFinder{S},HighVoronoi.NeighborFinders[dim])
+    return HighVoronoi.NeighborFinders[dim]
+end
+
+""" 
+    neighbors_of_cell(_Cell,mesh,condition = r->true)  
+
+    This function takes the verteces of a cell (calculated e.g. by systematic_voronoi) and returns 
+    an array containing the index numbers of all neighbors. A `neighbor` here is a cell that shares a full interface.
+    any lower dimensional edge/vertex is not sufficient as a criterion. This is equivalent with `_Cell` and
+    `neighbor` sharing at least `dimension` different verteces.
+
+    'condition' can be any condition on the coordinates of a vertex
+"""
+function neighbors_of_cell(_Cells,mesh::Voronoi_MESH,condition = r->true; adjacents=false, extended_xs::Points = mesh.nodes, edgeiterator =  nothing, neighbors = zeros(Int64,10))
+    return neighbors_of_cell_new(_Cells,mesh,condition,adjacents=adjacents,extended_xs=extended_xs,edgeiterator=edgeiterator,neighbors=neighbors)
+end
+
+
+function neighbors_of_cell_new(_Cells,mesh,condition = r->true; adjacents=true, extended_xs = mesh.nodes, edgeiterator = nothing, neighbors = zeros(Int64,10))
+    if neighbors[1]==0
+        position = 1
+        __max = 10
+        dim = length(mesh.nodes[1])
+        adjacents = adjacents || length(_Cells)>1
+        for _Cell in _Cells
+            for (sigma,r) in Iterators.flatten((mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell]))
+                ls_dim = length(sigma)<=dim+1
+                for i in sigma
+                    if i!=_Cell && (condition(r))
+                        f = findfirst(x->(x==i),neighbors)
+                        if typeof(f)==Nothing
+                            f = position
+                            neighbors[position] = i
+                            position += 1
+                            if position>__max
+                                __max += 10
+                                append!(neighbors,zeros(Int64,10))
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        for i in position:__max
+                neighbors[i] = typemax(Int64)
+        end
+        sort!(neighbors)
+        resize!(neighbors, findfirst(x->(x>typemax(Int64)-1),neighbors)-1)
+    end
     adjacents && (return neighbors)
     _Cell = _Cells
-    #return neighbors
-    ortho_system = Vector{Vector{Float64}}(undef,dim)
-    for i in 1:dim   ortho_system[i] = zeros(Float64,dim)  end
-    for i in 1:length(neighbors)
-        n = neighbors[i]
-        reference = nothing
-        position = 0
-        success = false
-        for (sig,r) in Iterators.flatten((mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell])) 
-            if n in sig
-                if reference==nothing
-                    reference = r
-                elseif position==0
-                    position+=1
-                    ortho_system[1].=reference-r
-                    normalize!(ortho_system[1])
-                    if dim==2
-                        success=true
-                        break
-                    end
-                else
-                    position+=1
-                    ortho_system[position].=reference-r
-                    norm_2 = sum(abs2,ortho_system[position])
-                    for j in 1:(position-1)
-                        part = (-1.0)*dot(ortho_system[position],ortho_system[j])
-                        ortho_system[position] .+= part.*ortho_system[j]
-                    end
-                    if sum(abs2,ortho_system[position])/norm_2 < 1.0E-20 
-                        position -= 1 
-                    elseif position==dim-1
-                        success=true
-                        break
-                    else
-                        normalize!(ortho_system[position])
-                    end # in this case have lower dimensional structure
-                end
-            end
-        end
-        !success && (neighbors[i]=typemax(Int64))
-    end
-    sort!(neighbors)
-    ff = findfirst(x->(x>typemax(Int64)-1),neighbors)
-    if ff==nothing
-        return neighbors
-    else
-        resize!(neighbors, ff-1)
-    end
+
+    nf = typeof(edgeiterator)!=Nothing ? edgeiterator : _NeighborFinder(dim)
+    reset(nf,neighbors,Iterators.flatten((mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell])),length(mesh.All_Verteces[_Cell])+length(mesh.Buffer_Verteces[_Cell]),extended_xs[_Cell])
+    correct_neighbors(nf,neighbors,xs=extended_xs,_Cell=_Cell)
+    return neighbors
 end
+
 
 """
     adjacents_of_cell(_Cell, mesh, condition = r->true)
@@ -350,6 +449,7 @@ end
 function rehash!(mesh::Voronoi_MESH)
     for i in 1:length(mesh)
         rehash!(mesh.All_Verteces[i])
+        rehash!(mesh.Buffer_Verteces[i])
     end
     rehash!(mesh.boundary_Verteces)
 end

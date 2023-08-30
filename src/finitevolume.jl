@@ -43,7 +43,7 @@ function VoronoiFVProblem_validate(;discretefunctions=nothing, integralfunctions
     typeof(discretefunctions)!=Nothing && !(typeof(discretefunctions)<:NamedTuple) && error("The field 'discretefunctions' must be given as a NamedTuple")
 end
 
-function VoronoiFVProblem(Geo::VoronoiGeometry; discretefunctions=nothing, integralfunctions=nothing, fluxes=nothing, rhs_functions=nothing, parent=nothing, integrator=Integrator_Type(Geo.Integrator), kwargs...)
+function VoronoiFVProblem(Geo::VoronoiGeometry; discretefunctions=nothing, integralfunctions=nothing, fluxes=nothing, rhs_functions=nothing, parent=nothing, integrator=Integrator_Type(Geo.Integrator), flux_integrals=nothing, bulk_integrals=nothing, kwargs...)
     VoronoiFVProblem_validate(discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions)
     if !(Integrator_Type(Geo.Integrator) in [VI_HEURISTIC,VI_MONTECARLO,VI_POLYGON])
         error("The Geometry comes up with an integrator of type $(Integrator_Name(Geo.Integrator)). This type does not provide relyable volume or area data.")
@@ -109,14 +109,14 @@ function VoronoiFVProblem(Geo::VoronoiGeometry; discretefunctions=nothing, integ
     my_data_i(i) = get_data_i(b_funcs,i_funcs,data,i)
     my_data_j(i,n) = get_data_j(b_funcs,i_funcs,data,i,n)
 
-    coefficients = VoronoiFVProblemCoefficients(data, Geo.domain.boundary, fluxes=fluxes, functions=rhs_functions, my_data_i=my_data_i, my_data_j=my_data_j)
+    coefficients = VoronoiFVProblemCoefficients(data, Geo.domain.boundary, fluxes=fluxes, functions=rhs_functions, flux_integrals=flux_integrals, bulk_integrals=bulk_integrals, my_data_i=my_data_i, my_data_j=my_data_j)
 
     parameters = (; kwargs..., discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions, integrator=integrator)
 
     return VoronoiFVProblem{typeof(coefficients),typeof(parent),typeof(pd),typeof(pu),typeof(parameters),typeof(my_data_i),typeof(my_data_j)}(Geo,coefficients,parent,pd,pu,parameters,data,my_data_i,my_data_j)
 end
 
-function VoronoiFVProblem(points, boundary=Boundary(); discretefunctions=nothing, integralfunctions=nothing, fluxes=nothing, rhs_functions=nothing, integrator=VI_POLYGON, integrand=nothing, kwargs...)
+function VoronoiFVProblem(points, boundary=Boundary(); discretefunctions=nothing, integralfunctions=nothing, fluxes=nothing, rhs_functions=nothing, flux_integrals=nothing, bulk_integrals=nothing, integrator=VI_POLYGON, integrand=nothing, kwargs...)
     VoronoiFVProblem_validate(discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions)
     !(integrator in [VI_POLYGON,VI_MONTECARLO]) && error("Calculating area or volume is not provided by $(Integrator_Name(integrator)).")
     i_functions = nothing
@@ -132,6 +132,13 @@ function VoronoiFVProblem(points, boundary=Boundary(); discretefunctions=nothing
     return VoronoiFVProblem(Geo,discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions ; kwargs..., integrand=i_functions, integrator=integrator)
 end
 
+function get_Bulkintegral(VP::VoronoiFVProblem,symb)
+    return VP.Coefficients.bulkintegrals[symb]
+end
+
+function get_Fluxintegral(VP::VoronoiFVProblem,symb)
+    return VP.Coefficients.fluxintegrals[symb]
+end
 
 """
     VoronoiFVProblem(Geo::VoronoiGeometry; parent = nothing)  # first variant
@@ -173,16 +180,18 @@ VoronoiFVProblem()
 #######################################################################################################################
 
 
-struct VoronoiFVProblemCoefficients{TF,TFU,TI}
+struct VoronoiFVProblemCoefficients{TF,TFU,TFI,BFI,TI}
     rows::Vector{Int64}
     cols::Vector{Int64}
     firstindex::Vector{Int64}
     fluxes::TF
     functions::TFU
+    fluxintegrals::TFI 
+    bulkintegrals::BFI 
     index::TI
 end
 
-function VoronoiFVProblemCoefficients(data::VoronoiData, boundary; fluxes=nothing, functions=nothing, my_data_i=nothing, my_data_j=nothing)
+function VoronoiFVProblemCoefficients(data::VoronoiData, boundary; fluxes=nothing, functions=nothing, my_data_i=nothing, my_data_j=nothing, flux_integrals=nothing, bulk_integrals=nothing)
     nodes = data.nodes
     neighbors = data.neighbors
     
@@ -223,7 +232,11 @@ function VoronoiFVProblemCoefficients(data::VoronoiData, boundary; fluxes=nothin
 
     myrhs = typeof(functions)!=Nothing ? map(f->right_hand_side(f,length(nodes),my_data_i),functions) : nothing
 
-    return VoronoiFVProblemCoefficients{typeof(myfluxes),typeof(myrhs),typeof(index)}(r,c,f,myfluxes,myrhs,index)
+    myfluxint = typeof(flux_integrals)!=Nothing ? map(f->flux_integral(f,data,boundary,index,length(r),my_data_i,my_data_j),flux_integrals) : nothing
+
+    mybulkint = typeof(bulk_integrals)!=Nothing ? map(f->bulk_integral(f,length(nodes),my_data_i),bulk_integrals) : nothing
+
+    return VoronoiFVProblemCoefficients{typeof(myfluxes),typeof(myrhs),typeof(myfluxint),typeof(mybulkint),typeof(index)}(r,c,f,myfluxes,myrhs,myfluxint,mybulkint,index)
 end
 
 
@@ -301,6 +314,26 @@ function conservative_flux(my_flux,data::VoronoiData,boundary,index,size,my_data
     return values
 end
 
+function flux_integral(my_flux,data::VoronoiData,boundary,index,size,my_data_i,my_data_j,_NEUMANN=Int64[])
+    nodes = data.nodes
+    lmesh = length(nodes)
+    flux = my_flux
+    
+    integral = 0.0
+    
+    for i in 1:lmesh
+        neigh=data.neighbors[i]
+        _para_i = my_data_i(i)
+        for n in 1:length(neigh)
+            j=neigh[n]
+            if j<i continue end
+            _para_j = my_data_j(i,n)
+            integral += flux(;_para_i...,_para_j...) 
+        end
+    end
+    return integral
+end
+
 function right_hand_side(f,size,my_data_i)
     rhs(i) = f(;my_data_i(i)...)
     values=Vector{typeof(rhs(1))}(undef,size)
@@ -308,6 +341,15 @@ function right_hand_side(f,size,my_data_i)
         values[i]=rhs(i)
     end
     return values
+end
+
+function bulk_integral(f,size,my_data_i)
+    rhs(i) = f(;my_data_i(i)...)
+    integral = 0.0
+    for i in 1:size
+        integral += rhs(i)
+    end
+    return integral
 end
 
 #######################################################################################################################
@@ -356,7 +398,7 @@ Takes a `VoronoiFVProblem` and a `flux::Symbol` and creates a linear problem. `f
     rows, cols, vals, rhs = linearVoronoiFVProblem(vd::VoronoiFVProblem;flux,kwargs...)
 - `rows, cols, vals` are the row and coloumn indeces of values. Create e.g. `A=sparse(rows,cols,vals)` and sovle\n  ``A*u=rhs``
 """
-function linearVoronoiFVProblem(vd::VoronoiFVProblem;flux,rhs=nothing,Neumann=nothing,Dirichlet=nothing,bulk=(1:(length(vd.voronoidata.nodes))))
+function linearVoronoiFVProblem(vd::VoronoiFVProblem;flux,rhs=nothing,Neumann=nothing,Dirichlet=nothing,bulk=(1:(length(vd.voronoidata.nodes))),enforcement_node=1)
     if !(typeof(flux)<:Symbol) || !haskey(vd.Coefficients.fluxes,flux)
         error("linearVoronoiFVProblem: you need to provide a flux as Symbol in the VoronoiFVProblem data. You provided flux=$flux instead.")
     end
@@ -386,21 +428,35 @@ function linearVoronoiFVProblem(vd::VoronoiFVProblem;flux,rhs=nothing,Neumann=no
 
     flux_data = vd.parameters[:fluxes][flux]
     boundary = vd.Geometry.domain.boundary
+    lmesh = length(data.nodes)
     harmonic = FVevaluate_boundary(x->0.0)
-    _, _NEUMANN, _DIRICHLET = split_boundary_indeces(boundary)
+#    println(Neumann)
+    _PERIODIC, _NEUMANN, _DIRICHLET = split_boundary_indeces(boundary)
     neumann_bc, neurange = unify_BC_format(Neumann,_NEUMANN, typeof(Neumann)<:Function ? Neumann : harmonic)
     dirichlet_bc, dirrange = unify_BC_format(Dirichlet,_DIRICHLET, typeof(Dirichlet)<:Function ? Dirichlet : harmonic)
+#    println("first:")
+#    println(neurange)
+#    println(dirrange)
     deleteat!( neumann_bc[1][1], map( k->(neumann_bc[1][1][k] in dirrange), collect(1:length(neumann_bc[1][1])) ) )
     deleteat!( dirichlet_bc[1][1], map( k->(dirichlet_bc[1][1][k] in neurange), collect(1:length(dirichlet_bc[1][1])) ) )
-
+#    println("second:")
+#    println(neurange)
+#    println(dirrange)
+    _NEUMANN = neurange
     #println(neumann_bc)
     #println(dirichlet_bc)
-
     # calculate the boundary functions and store the boundary conditions in a unified sparse vector data structure
     bc_functions = sparsevec(collect(1:length(boundary)).+length(data.nodes), extract_BC(neumann_bc,dirichlet_bc,length(boundary)), length(data.nodes)+length(boundary) )
     bc_conditions = sparsevec(_NEUMANN.+length(data.nodes),-1.0*ones(Float64,length(_NEUMANN)),length(data.nodes)+length(boundary))
-
+#    println(bc_conditions)
     #return keepat!(rows,keep), keepat!(cols,keep), keepat!(myvalues,keep) , myrhs
+    need_enforcement = true
+    for k in 1:length(boundary)
+        if !((k in _PERIODIC) || (bc_conditions[lmesh+k]<0))
+            need_enforcement = false
+            break
+        end
+    end
 
     for i in 1:length(vd.voronoidata.nodes)
         neighbors = vd.voronoidata.neighbors[i]
@@ -409,18 +465,34 @@ function linearVoronoiFVProblem(vd::VoronoiFVProblem;flux,rhs=nothing,Neumann=no
         for j in 1:length(neighbors)
             n = neighbors[j]
             if (n in bulk)
+                #println(values[index(n,i)])
+#                print("|$(round(values[index(n,i)]))")
                 myvalues[index_ii] += (-1)*values[index(n,i)] 
                 continue
             end
             my_j = vd.my_data_j(i,j)
             u = (-1)*(bc_functions[n])(;my_i...,my_j...)
             if bc_conditions[n]<0 # Neumann case
-                myrhs[i] += u * my_j[:m_ij]
+                myrhs[i] += u * my_j[:mass_ij]
+                #print("|$u $(round(values[index(n,i)]))")
+                #myvalues[index_ii] += (-1)*values[index(n,i)] 
             else #Dirichlet case
+#                abs(u)!=0 && println("$u, $(values[index(i,n)])")
                 myrhs[i] += values[index(i,n)] * u
+#                n==401 && print("*$(round(values[index(i,n)] * u)) $(round(values[index(n,i)]))")
                 myvalues[index_ii] += (-1)*values[index(n,i)] 
             end
         end
+    end
+    if need_enforcement
+        neighbors = vd.voronoidata.neighbors[enforcement_node]
+        for i in neighbors
+            i==enforcement_node && continue
+            myvalues[index(i,enforcement_node)] = 0.0
+            myvalues[index(enforcement_node,i)] = 0.0
+        end
+        myvalues[index(enforcement_node,enforcement_node)] = 1.0
+        myrhs[enforcement_node] = 0.0
     end
     return keepat!(rows,keep), keepat!(cols,keep), keepat!(myvalues,keep) , myrhs
 end

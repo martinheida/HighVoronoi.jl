@@ -45,7 +45,7 @@ Generates MetaPost of VG output in the file with name filename for a two-dimensi
 - `drawEdges` : Set this value to "false" in order to not show the edges in the output  
 """
 function draw2D(VG::VoronoiGeometry, filename::String; board=MetaPostBoard(), drawNodes=true, drawVerteces=true, drawEdges=true)
-    draw2D(VG.Integrator.Integral,filename,domain=VG.domain.boundary,draw_nodes=drawNodes,draw_verteces=drawVerteces,draw_edges=drawEdges)
+    draw2D(VG.Integrator.Integral,filename,domain=VG.domain.boundary,draw_nodes=drawNodes,draw_verteces=drawVerteces,draw_edges=drawEdges, board=board)
 end
 
 """

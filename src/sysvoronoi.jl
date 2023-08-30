@@ -5,8 +5,8 @@
 ####################################################################################################################################
 
 
-struct Geometry_Integrator
-    Integral::Voronoi_Integral
+struct Geometry_Integrator{T}
+    Integral::Voronoi_Integral{T}
     function Geometry_Integrator(mesh::Voronoi_MESH,neigh=false)
         N=(Vector{Int64})[]
         if neigh
@@ -15,13 +15,13 @@ struct Geometry_Integrator
             N=Vector{Vector{Int64}}(undef,l)
             for i in 1:l N[i]=copy(emptyint) end
         end
-        return new(Voronoi_Integral{typeof(mesh.nodes[1])}(N,[],[],[],[],mesh))
+        return new{typeof(mesh.nodes[1])}(Voronoi_Integral{typeof(mesh.nodes[1])}(N,[],[],[],[],mesh))
     end
     function Geometry_Integrator(points::Points,neigh=false)
         return Geometry_Integrator(Voronoi_MESH(points),neigh)
     end
     function Geometry_Integrator(Inte::Voronoi_Integral)
-        return new(Inte)
+        return new{typeof(Inte.MESH.nodes[1])}(Inte)
     end
 end
 
@@ -32,11 +32,21 @@ end
 function integrate(xs,c,a,b,s,I::Geometry_Integrator)
 end
 
-function integrate(Integrator::Geometry_Integrator; domain=nothing, relevant=1:2, modified=1:(length(Integrator.Integral))) 
+#=function integrate(Integrator::Geometry_Integrator; domain=nothing, relevant=1:2, modified=1:(length(Integrator.Integral))) 
     for i in modified
         Integrator.Integral.neighbors[i] = neighbors_of_cell(i,Integrator.Integral.MESH)
     end
+end=#
+
+function integrate_cell(vol::Bool,ar::Bool,bulk::Bool,inter::Bool,  _Cell::Int, iterate, calculate, data, Integrator::Geometry_Integrator)
+    I = Integrator.Integral
+    #print("$_Cell : $(length(I.MESH.All_Verteces[_Cell])+length(I.MESH.Buffer_Verteces[_Cell])), ")
+    adj = neighbors_of_cell(_Cell,I.MESH,adjacents=true)
+    activate_data_cell(data,_Cell,adj)
+    I.neighbors[_Cell] = neighbors_of_cell(_Cell,I.MESH,extended_xs=data.extended_xs,edgeiterator=data.NFfind, neighbors=adj)
 end
+
+
 
 function prototype_bulk(Integrator::Geometry_Integrator)
     return Float64[]
@@ -119,7 +129,7 @@ function voronoi(Integrator; Iter=1:(length(Integrator.Integral.MESH.nodes)), se
     if initialize>0 initialize_voronoi(initialize,mesh,TODO,searcher) end
     iteration_count=1
     TODO_count=length(TODO)
-    new_verteces=0::Int64
+    new_verteces=0
     while repeat
         if iteration_count>4
             println("There is some serious problem with the mesh: $iteration_count iterations are not a good sign")
@@ -191,7 +201,7 @@ function voronoi(Integrator; Iter=1:(length(Integrator.Integral.MESH.nodes)), se
         vp_line()
     end
     printsearcher && (vp_print(searcher))
-    println(searcher.force_irregular_search)
+    #println(searcher.force_irregular_search)
     return Integrator, searcher
 end
 
@@ -201,15 +211,15 @@ end
 
 ##############################################################################################################################
 
-global NO_VERTEX=0::Int64
+#=global NO_VERTEX=0::Int64
 global VER_VAR=0.0::Float64
 global CORRECTIONS=0::Int64
 global SUCCESSFUL=0::Int64
 global FIRSTCORRECTIONS=0::Int64
-global SECONDCORRECTIONS=0::Int64
+global SECONDCORRECTIONS=0::Int64=#
 
 function systematic_explore_cell(xs::Points,_Cell,mesh::Voronoi_MESH,edgecount_local,boundary,searcher::RaycastIncircleSkip)
-    new_verteces=0::Int64
+    new_verteces=0
     dimension=length(xs[1])
     lmesh = length(mesh)
     #load all known vertices of the current cell
@@ -224,12 +234,34 @@ function systematic_explore_cell(xs::Points,_Cell,mesh::Voronoi_MESH,edgecount_l
     queue = EmptyDictOfType(Int64[]=>xs[1]) #copy(allverts)
     lxs=length(xs)
 #    println("1: $(round.(Vector(searcher.tree.extended_xs[_Cell]),digits=3))")
+    #print("queue: ")
     for (sig,r) in Iterators.flatten((verts,allverts))
+    #    print("$sig, ")
         queue_edges(sig,r,_Cell,edgecount_local,searcher)#,vertex_edges)
     end
+    #println("ende")
 #    println("2")
 
     if length(verts)==0 &&  length(allverts)==0 #i.e. if length(queue)==0
+        #for _ in 1:100
+        sig=[0]
+        r=xs[1]
+        k=0
+        vv = 1.0
+        while (sig[1]<_Cell) || vv>searcher.variance_tol # in quasi-periodic media, sig[1]<_Cell with positive probability
+            #println("$k : descent - start $vv")
+            k += 1
+            sig, r = descent(xs,searcher,_Cell)
+            vv = vertex_variance(sig,r,searcher)
+            #println(sig,"  ",vv)
+            #println("descent - ende:   $sig")
+            k>=10 && break
+        end
+        #println("desc: $sig")
+         queue_vertex(sig,r,mesh,queue,edgecount_local,searcher)
+        #end
+    end
+    #=for _ in 1:1000 #i.e. if length(queue)==0
         sig=[0]
         r=xs[1]
         k=0
@@ -242,13 +274,11 @@ function systematic_explore_cell(xs::Points,_Cell,mesh::Voronoi_MESH,edgecount_l
             #println("descent - ende:   $sig")
             k>=10 && break
         end
+        #println("desc: $sig")
          queue_vertex(sig,r,mesh,queue,edgecount_local,searcher)
-#        println(sig,"  ",length(edgecount_local))
-#        println(edgecount_local)
-        #error("")
-        #if sig[1]!=_Cell println("problem at $_Cell: found $sig") end
-    end
-#    println("3")
+    end=#
+
+    #    println("3")
 
     for (sig,r) in allverts
         if (sig[1]!=_Cell)# && !get(edgecount_global, deleteat(sig, i), '0') != '2') # in case the vertex was found in an earlier step, but the second entry is already _Cell
@@ -308,6 +338,7 @@ function systematic_explore_vertex(xs,sig,R,_Cell,edgecount_local,mesh,queue,bou
     new_verts = searcher.new_verts_list
     count_verts = 1
     l_newverts = length(new_verts)
+#    print("s")
     # ------------------------------------------------------------------------------------------
     if lsig == dim+1 # the "standard" case
         while b
@@ -324,17 +355,18 @@ function systematic_explore_vertex(xs,sig,R,_Cell,edgecount_local,mesh,queue,bou
                 continue
             end
             (!success) && return
+            #print("a: $new_sig -- ")
             if new_sig[1]<_Cell
                 searcher.rare_events[SRI_out_of_line_vertex] += 1
                 if length(new_sig)>dim+1   searcher.rare_events[SRI_out_of_line_is_multi] += 1    end
             else
-                if length(new_sig)>2^dim
+                #=if length(new_sig)>2^dim
                     searcher.rare_events[SRI_out_of_line_is_severe_multi] += 1
                             println("$sig,  $edge,  $(round.(Vector{Float64}(R),digits=3))->$(round.(Vector{Float64}(r),digits=3)),  $success,  $(round.(u,digits=3))")
                             for s in new_sig    print(sum(abs2,r-xs[s])," - ")      end
                             for (_sig,_) in mesh.All_Verteces[new_sig[1]]   print(_sig," - ")   end
                             error(" ")
-                end
+                end=#
                 if count_verts>l_newverts
                     push!(new_verts,new_sig=>r)
                 else
@@ -348,29 +380,78 @@ function systematic_explore_vertex(xs,sig,R,_Cell,edgecount_local,mesh,queue,bou
         #-------------------------------------------------------------------------------------------
     else # the "quasi-periodic" case
         local_edges = searcher.edgeiterator
-        b = reset(local_edges,findfirst(x->(x==_Cell),sig),sig,searcher)
-        #=if local_edges.params[EI_mode]!=1 
-            println("problem $sig")
-            println(keys(local_edges.local_edges[1]))
-            error("")
-        end=#
-        #println()
-        #println("$sig,  $(round.(Vector(R),digits=3))")
-        #println(edgecount_local)
+        #print("|")
+        #b = reset(local_edges,findfirst(x->(x==_Cell),sig),sig,searcher,R)
+#        print("a")
+        b = reset(local_edges,sig,R,searcher.tree.extended_xs,_Cell,searcher)
+#        print("b")
+        ccc = 0
         while b
+            ccc += 1
+#            print("+")
             plausible, edge = update_edge(local_edges,searcher,searcher.visited)
             if !plausible
                 b=false
                 break
             end
             edge = view(sig,edge)
-            u = local_edges.rays[dim]
+            u = ray(local_edges)
 #            println("ray : $(round.(Vector(u),digits=3)), $edge")
-            if !('1'==get(edgecount_local, edge, '0')) #>= '2'  #if edge explored, cancel routine 
+            
+            if !('1'==get(edgecount_local, view(sig,minimal_edge(local_edges,searcher)), '0')) #>= '2'  #if edge explored, cancel routine 
                 continue
             end
-            new_sig, r,u, success = walkray(edge, R, xs, searcher, sig, ray=u, minimal_edge=view(sig,minimal_edge(local_edges,searcher)) ) # provide missing node "j" of new vertex and its coordinate "r" 
+            
+            #println("$sig, $(minimal_edge(local_edges,searcher))")
+            new_sig, r, success =  0, 0, 0
+            try
+                new_sig, r,u, success = walkray(edge, R, xs, searcher, sig, ray=u, minimal_edge=view(sig,minimal_edge(local_edges,searcher)) ) # provide missing node "j" of new vertex and its coordinate "r" 
                                                     # together with edge orientation 'u'
+                #print("b: $new_sig -- ")
+                
+            catch
+                println("Error: $sig, $edge, $(local_edges.rays[dim])")
+                for k in sig
+                    println("$k: $(dot(local_edges.rays[dim],searcher.tree.extended_xs[k]-searcher.tree.extended_xs[sig[1]]))")
+                end
+                MDIS = maximum(map(s->norm(R-searcher.tree.extended_xs[s]),sig))
+                for k in 12:-1:1
+                    idxk = _inrange(searcher.tree,R,MDIS*(1.0+10.0^(-k)))
+                    sort!(idxk)
+                    println("has key: $(haskey(queue,idxk)), $(haskey(mesh.All_Verteces[idxk[1]],idxk))")
+                    identify_multivertex(searcher,copy(sig),R,verbose=false)
+                    if length(idxk)>length(sig)
+                        println(" -$k: $sig -> $idxk, $MDIS")
+                        u = local_edges.rays[dim]
+                        m0 = 0.0
+                        x0 = searcher.tree.extended_xs[edge[1]]
+                        for s in idxk
+                            print("$s: $(norm(searcher.tree.extended_xs[s]-R))")
+                            if !(s in sig)
+                                x = searcher.tree.extended_xs[s]
+                                print(" -> ",(sum(abs2, R - x) - sum(abs2, R - x0)) / (2 * dot(u,(x-x0))))
+                                m0 = max(m0,(sum(abs2, R - x) - sum(abs2, R - x0)) / (2 * dot(u,(x-x0))))
+                            end
+                            println()
+                        end
+                        R2 = R + m0*u
+                        println("$m0 -> new distances")
+                        for s in idxk
+                            n1 = norm(searcher.tree.extended_xs[s]-R2)
+                            n2 = norm(searcher.tree.extended_xs[s]-R)
+                            if !(s in sig)
+                                print("!")
+                            end
+                            println("$s: $(n1)  $(n2)   $(abs(n1-n2))")
+                        end
+                        break
+                    end
+                end
+                println("ende gelände...")
+            rethrow()
+            end
+#            println("klappt")
+#            error("klappt")
             if new_sig == edge #if oldnode==newnode then we found a boundary element and we can cancel 
                 push!(boundary, new_sig=>boundary_vertex(R,typeof(R)(u),_Cell))
                 continue
@@ -380,13 +461,13 @@ function systematic_explore_vertex(xs,sig,R,_Cell,edgecount_local,mesh,queue,bou
                 searcher.rare_events[SRI_out_of_line_vertex] += 1
                 if length(new_sig)>dim+1   searcher.rare_events[SRI_out_of_line_is_multi] += 1    end
             else
-                if length(new_sig)>2^dim
+                #=if length(new_sig)>2^dim
                     searcher.rare_events[SRI_out_of_line_is_severe_multi] += 1
                             println("$sig,  $edge,  $(round.(Vector{Float64}(R),digits=3))->$(round.(Vector{Float64}(r),digits=3)),  $success,  $(round.(u,digits=3))")
                             for s in new_sig    print(sum(abs2,r-xs[s])," - ")      end
                             for (_sig,_) in mesh.All_Verteces[new_sig[1]]   print(_sig," - ")   end
                             error(" ")
-                end
+                end=#
                 if count_verts>l_newverts
                     push!(new_verts,new_sig=>r)
                 else
@@ -396,6 +477,11 @@ function systematic_explore_vertex(xs,sig,R,_Cell,edgecount_local,mesh,queue,bou
                 #queue_vertex(new_sig,r,mesh,queue,edgecount_local,searcher)
             end
         end
+        #=if ccc>40
+            println(ccc, "  ",local_edges.iterators[1].valid_nodes) 
+        else
+            print(" + ")
+        end=#
 #        error("")
     end
     for i in 1:(count_verts-1)      
@@ -404,20 +490,9 @@ function systematic_explore_vertex(xs,sig,R,_Cell,edgecount_local,mesh,queue,bou
     end
 end
 
-#=function test_vertex(searcher,sig,_Cell)
-    local_edges = EdgeIterator(searcher.dimension)
-    b = reset(local_edges,findfirst(x->(x==_Cell),sig),sig,searcher)
-    count = 0
-    searcher.rare_events[SRI_check_fake_vertex] += 1
-    while b
-        b, edge = update_edge(local_edges,searcher,searcher.visited)
-        count += b ? 1 : 0
-    end
-#    print(count)
-    return count
-end=#
 
-function queue_edges(sig,r,_Cell,edgecount_local,searcher,le=nothing;print=x->nothing)
+
+function queue_edges(sig,r,_Cell,edgecount_local,searcher)#,le=nothing;print=x->nothing)
     ret = 0
     dim = searcher.dimension
     edgeview = view(searcher.visited,1:dim) #searcher.edge_buffer
@@ -435,7 +510,7 @@ function queue_edges(sig,r,_Cell,edgecount_local,searcher,le=nothing;print=x->no
         end
     else
         local_edges = searcher.edgeiterator
-        b = reset(local_edges,findfirst(x->(x==_Cell),sig),sig,searcher)
+        b = reset(local_edges,findfirst(x->(x==_Cell),sig),sig,searcher,r)
         kk = 0        
         while b
             #=if print
@@ -445,12 +520,14 @@ function queue_edges(sig,r,_Cell,edgecount_local,searcher,le=nothing;print=x->no
             plausible, new_edge_view = update_edge(local_edges,searcher,edgeview_2)
             if plausible
                 #print && ( Base.println("$(view(sig,new_edge_view)) , $(round.(Vector(local_edges.rays[dim]),digits=3))") )
-                ret = increase_edge(sig,new_edge_view,edgecount_local,ret)
+                #println("$sig, $new_edge_view")
+                ret = increase_edge(sig,minimal_edge(local_edges,searcher),edgecount_local,ret)
                 #print && println("   - done")
             else
                 #print && println("")
                 b=false
             end
+        
         end
     end
     edgeview .= 0
@@ -547,11 +624,11 @@ end
 
 function queue_vertex(sig,r,mesh,queue,edgecount_local,searcher)
     ret = 0
-        if !haskey(mesh.All_Verteces[sig[1]], sig) && !haskey(queue, sig) #in case we really have new vertex ....
+        if !haskey(mesh.All_Verteces[sig[1]], sig) && !haskey(queue, sig) && length(sig)>length(r) #in case we really have new vertex ....
             push!(queue, sig => r)  # put it to the queue
             searcher.rare_events[SRI_vertex] += 1
             sig[end]>length(mesh) && (searcher.rare_events[SRI_boundary_vertex]+=1)
-            ret += queue_edges(sig,r,sig[1],edgecount_local,searcher,print=Base.print)
+            ret += queue_edges(sig,r,sig[1],edgecount_local,searcher)#,print=Base.print)
         end
     return ret
 end

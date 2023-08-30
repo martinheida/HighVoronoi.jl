@@ -11,20 +11,65 @@ using Crayons
 using JLD2
 using Polyhedra
 using GLPK
+#using Traceur
 
-# data storage
+const Point{T} = AbstractVector{T} where T<:Real
+const Points = AbstractVector{<:Point}
+const Sigma = AbstractVector{<:Integer}  # Encoded the vertex by the ids of its generators.
+const Vertex = Tuple{<:Sigma, <: Point}
+const Vertices = Dict{<:Sigma, <:Point}
+const ListOfVertices = AbstractVector{<:Vertices}
+const UseNeighborFinderDimension = 3
+
+# the following methods will be overwritten vor meshes, integrals and integrators
+
+import Base.prepend!
+import Base.append!
+import Base.copy
+import Base.length
+import Base.push!
+import Base.pop!
+import Base.haskey
+import Base.keepat!
+import Base.filter!
+import Base.show
+#import show
+
+# only meaningful for debugging
+include("exceptions.jl")
+
+# edge iterators for periodic grids / non-general verteces
+include("edgeiterate.jl")
+
+# composing functions
 include("composer.jl")
-include("mesh.jl")
+
+# neighbor iterator
+include("neighbors.jl")
+
+# iterator to set up distriubutions according to given density
+include("densityrange.jl")
+
+# boundary type
 include("boundary.jl")
+
+# The Voronoi mesh
+include("mesh.jl")
+
+# Storing integral data
 include("integral.jl")
 
 # handling mesh on the level of the user
 include("domain.jl")
-include("domainrefine.jl")
-include("geometry.jl")
+include("domainrefine.jl") # refinement of domains
+include("geometry.jl") # VoronoiGeometry
+include("substitute.jl") # refinement by substitution
 
-# output:
+
+# Functions for diplay of progress
 include("progress.jl") 
+
+# 2D MetaPost output
 include("draw.jl")
 
 # integrate functions and volume
@@ -32,9 +77,9 @@ include("integrate.jl")
 include("polyintegrator.jl")
 include("heuristic.jl")
 include("mcintegrator.jl")
+include("heuristic_mc.jl")
 
 # calculate voronoi mesh on the very lowes levels
-include("edgeiterate.jl")
 include("raycast.jl")
 include("sysvoronoi.jl")
 include("meshrefine.jl")
@@ -52,7 +97,9 @@ include("finitevolume.jl")
 include("statistics.jl")
 
 # What will be exported:
+export DensityRange
 export VoronoiNodes
+export VoronoiNode
 export VoronoiGeometry
 export PeriodicVoronoiBasis
 export integrate!
@@ -85,7 +132,18 @@ export VoronoiFVProblem
 export linearVoronoiFVProblem
 export FVevaluate_boundary
 
+export VoronoiKDTree
+export StepFunction
+export DiameterFunction
+export InterfaceFunction
+export PeriodicFunction
+export FunctionFromData
+export get_Bulkintegral
+export get_Fluxintegral
+
 export SearchGeneral
 export SearchExpectRandom
 export SearchRandom
+
+export show
 end # module

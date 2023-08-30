@@ -1,13 +1,14 @@
-const VI_MIN=0
 const VI_TEST=0
 const VI_TEST_2=1
+const VI_MIN=2
 const VI_POLYGON=2
 const VI_MONTECARLO=3
 const VI_GEOMETRY=4
 const VI_HEURISTIC=5
 const VI_HEURISTIC_INTERNAL=6
 const VI_HEURISTIC_CUBE=7
-const VI_MAX=VI_HEURISTIC_CUBE
+const VI_HEURISTIC_MC=8
+const VI_MAX=VI_HEURISTIC_MC
 
 function backup_Integrator(I,b)
     return I
@@ -21,12 +22,14 @@ function Integrator_Name(I)
             return "MONTECARLO"
         elseif I==VI_GEOMETRY
             return "GEOMETRY"
-        elseif I==VI_TEST
+        #=elseif I==VI_TEST
             return "TEST"
         elseif I==VI_TEST_2
-            return "TEST_2"
+            return "TEST_2"=#
         elseif I==VI_HEURISTIC
             return "HEURISTIC"
+        elseif I==VI_HEURISTIC_MC
+            return "HEURISTIC_MC"
         else 
             return "STRANGE"
         end
@@ -37,12 +40,14 @@ function Integrator_Name(I)
         return "MONTECARLO"
     elseif (typeof(I)<:Geometry_Integrator)
         return "GEOMETRY"
-    elseif (typeof(I)<:TestIntegrator)
+    #=elseif (typeof(I)<:TestIntegrator)
         return "TEST"
     elseif (typeof(I)<:TestIntegrator2)
-        return "TEST_2"
+        return "TEST_2"=#
     elseif (typeof(I)<:Heuristic_Integrator)
         return "HEURISTIC"
+    elseif (typeof(I)<:HeuristicMCIntegrator)
+        return "HEURISTIC_MC"
     else 
         return "STRANGE"
     end
@@ -55,12 +60,14 @@ function Integrator_Type(I)
         return VI_MONTECARLO
     elseif (typeof(I)<:Geometry_Integrator)
         return VI_GEOMETRY
-    elseif (typeof(I)<:TestIntegrator)
+    #=elseif (typeof(I)<:TestIntegrator)
         return VI_TEST
     elseif (typeof(I)<:TestIntegrator2)
-        return VI_TEST_2
+        return VI_TEST_2=#
     elseif (typeof(I)<:Heuristic_Integrator)
         return VI_HEURISTIC
+    elseif (typeof(I)<:HeuristicMCIntegrator)
+        return VI_HEURISTIC_MC
     else 
         return -1
     end
@@ -87,14 +94,14 @@ function Integrator(mesh::Voronoi_MESH;type=VI_GEOMETRY,integrand=nothing,bulk_i
         fb = f 
         fi = f
     end
-    if type==VI_TEST
+    if type==VI_POLYGON
+        return Polygon_Integrator(mesh,f,true) 
+    #=elseif type==VI_TEST
         println("WARNING: This Integrator (VI_TEST) is though for internal tests only")
         return TestIntegrator(Voronoi_Integral(mesh,integrate_interface=true,integrate_bulk=true))
     elseif type==VI_TEST_2
         println("WARNING: This Integrator (VI_TEST_2) is though for internal tests only")
-        return TestIntegrator2(Voronoi_Integral(mesh,integrate_interface=true,integrate_bulk=true))
-    elseif type==VI_POLYGON
-        return Polygon_Integrator(mesh,f,true) 
+        return TestIntegrator2(Voronoi_Integral(mesh,integrate_interface=true,integrate_bulk=true))=#
     elseif type==VI_HEURISTIC
         return Heuristic_Integrator(mesh,f,true) 
     elseif type==VI_MONTECARLO
@@ -104,6 +111,8 @@ function Integrator(mesh::Voronoi_MESH;type=VI_GEOMETRY,integrand=nothing,bulk_i
         return Geometry_Integrator(mesh,true) # let the integrator also calculate the neighbors of the cell
     elseif type==VI_HEURISTIC_INTERNAL
         return Heuristic_Integrator{typeof(f),typeof(integral)}(f,true,integral)
+    elseif type==VI_HEURISTIC_MC
+        return HeuristicMCIntegrator(mesh,f, mc_accurate)
     elseif type==VI_HEURISTIC_CUBE
         return Heuristic_Cube_Integrator(mesh,f,true) 
     else
@@ -117,7 +126,9 @@ end
 
 ###############################################################################################################
 
-struct IntegrateData
+_NeighborFinder(dim,x) = NeighborFinder(dim,x)#dim>=UseNeighborFinderDimension ? NeighborFinder(dim,x) : nothing
+
+struct IntegrateData{T}
     extended_xs::Points
     domain::Boundary
     size::Int64
@@ -125,25 +136,43 @@ struct IntegrateData
     float_vec_buffer::Vector{Float64}
     float_vec_vec_buffer::Vector{Vector{Float64}}
     dimension::Int64
+#    NF::FastEdgeIterator
+    NFfind::T
+    counts::Vector{Int64}
+    accepted::Vector{Bool}
+    deprecated::Vector{Bool}
     function IntegrateData(xs,dom)
+        dim = length(xs[1])
         l=length(dom)
         m=append!(copy(xs),Vector{typeof(xs[1])}(undef,l))
         a=BitVector(zeros(Int8,l))
-        return new(m,dom,length(xs),a,Float64[],(Vector{Float64})[],length(xs[1]))
+        nf = NeighborFinder(dim,xs[1])
+        c = Vector{Int64}(undef,length(m))
+        a = Vector{Bool}(undef,length(m))
+        d = Vector{Bool}(undef,length(m))
+        return new{typeof(nf)}(m,dom,length(xs),a,Float64[],(Vector{Float64})[],length(xs[1]),nf,c,a,d)
     end
 end
 
-function activate_data_cell(tree::IntegrateData,_Cell,neigh)
+function activate_data_cell(tree,_Cell,neigh)
     tree.active .*= 0
     lxs=tree.size
     for n in neigh
         if n>lxs 
             plane=n-lxs
+            tree.active[plane] && continue
             tree.active[plane]=true
             tree.extended_xs[lxs+plane]=reflect(tree.extended_xs[_Cell],tree.domain,plane)
         end
     end
 end
+
+function neighbors_of_cell(_Cell::Int,mesh::Voronoi_MESH,data::IntegrateData, condition = r->true)
+    adj = neighbors_of_cell(_Cell,mesh,adjacents=true)
+    activate_data_cell(data,_Cell,adj)
+    return neighbors_of_cell(_Cell,mesh,extended_xs=data.extended_xs,edgeiterator=data.NFfind, neighbors=adj)
+end
+
 
 ###############################################################################################################
 
@@ -218,12 +247,15 @@ function _integrate(Integrator; domain=Boundary(), calculate=1:(length(Integrato
     max_string_todo = length(string(TODO_count, base=10)) 
     vol_sum = 0.0
     count=0 
+    #println(Integrator.Integral.area)
     for k in 1:TODO_count # initialize and array of length "length(xs)" to locally store verteces of cells
         vp_print(position_0,"Cell $(string(TODO[k], base=10, pad=max_string_i)) (in cycle: $(string(k, base=10, pad=max_string_todo)) of $TODO_count)")
         integrate_cell(vol,ar,bulk,inter,TODO[k],iterate, calculate, data,Integrator)
-        vol_sum+=Integral.volumes[TODO[k]]
-        count += Integral.volumes[TODO[k]]<1E-10
-        print("  vol = $(Integral.volumes[TODO[k]]), s=$(round(vol_sum,digits=6)),  $count")
+        if vol
+            vol_sum+=Integral.volumes[TODO[k]]
+            count += Integral.volumes[TODO[k]]<1E-10
+        end
+        print("  vol = $(vol ? Integral.volumes[TODO[k]] : 0.0), s=$(round(vol_sum,digits=6)),  $count")
     end
     #vp_line_up(1)
     if (!compact) vp_line() end 
@@ -239,15 +271,31 @@ It sorts the entries according to the modified order of neighbors and fills up g
 afterwards it calls the true integration function that is provided by the Integrator.
 """
 function integrate_cell(vol::Bool,ar::Bool,bulk::Bool,inter::Bool,  _Cell, iterate, calculate, data, Integrator)
-    new_neighbors=neighbors_of_cell(_Cell,Integrator.Integral.MESH)
-    #println(new_neighbors)
-    old_neighbors=Integrator.Integral.neighbors[_Cell]
+    I=Integrator.Integral
+    #Integrator_Type(Integrator)==VI_HEURISTIC && println(I.area)
+    #Integrator_Type(Integrator)==VI_HEURISTIC && println(ar)
+    #Integrator_Type(Integrator)==VI_HEURISTIC && println(I.area[_Cell])
+
+    adj = neighbors_of_cell(_Cell,I.MESH,adjacents=true)
+    activate_data_cell(data,_Cell,adj)
+    new_neighbors = neighbors_of_cell(_Cell,I.MESH,extended_xs=data.extended_xs,edgeiterator=data.NFfind, neighbors=adj)
+    #activate_data_cell(data,_Cell,neighbors_of_cell(_Cell,I.MESH,adjacents=true))
+    #new_neighbors = neighbors_of_cell(_Cell,I.MESH,extended_xs=data.extended_xs,edgeiterator=data.NFfind)
+    
+    old_neighbors = I.neighbors[_Cell]
     #println(old_neighbors)
     #println(new_neighbors)
-    I=Integrator.Integral
     #isdefined(I.area,_Cell) && println("$(I.area[_Cell])")
+    #println(ar)
+    if ar && !isassigned(I.area,_Cell)
+        I.area[_Cell]=zeros(Float64,length(old_neighbors))
+    end
+    #Integrator_Type(Integrator)==VI_HEURISTIC && println(I.area[_Cell])
     proto_bulk=prototype_bulk(Integrator)
     proto_interface=prototype_interface(Integrator)
+    #if ar && !isdefined(I.area,_Cell)
+    #    I.area[_Cell]=zeros(Float64,length(old_neighbors))
+    #end
     if (length(old_neighbors)>0)
         #print(" ho  ")
         if bulk && (!(isdefined(I.bulk_integral,_Cell)) || length(I.bulk_integral[_Cell])!=length(proto_bulk))
@@ -303,14 +351,22 @@ function integrate_cell(vol::Bool,ar::Bool,bulk::Bool,inter::Bool,  _Cell, itera
             (I.interface_integral[_Cell])[i]=copy(proto_interface) 
         end)
     end
+    #=Integrator_Type(Integrator)==VI_HEURISTIC && println(I.area[_Cell])
+    Integrator_Type(Integrator)==VI_HEURISTIC && error("")
+    Integrator_Type(Integrator)==VI_HEURISTIC && println(I.area)
+    Integrator_Type(Integrator)==VI_HEURISTIC && println(ar)
+    Integrator_Type(Integrator)==VI_HEURISTIC && println(I.area[_Cell])
+    Integrator_Type(Integrator)==VI_HEURISTIC && error("")=#
     activate_data_cell(data,_Cell,old_neighbors)
     dfvb=data.float_vec_buffer
     dfvvb=data.float_vec_vec_buffer
-    #println("$(I.area[_Cell])")
+#    println(I.area[_Cell])
     V=integrate(old_neighbors,_Cell,iterate, calculate, data,Integrator, ar ? I.area[_Cell] : dfvb , bulk ? I.bulk_integral[_Cell] : dfvb , inter ? I.interface_integral[_Cell] : dfvvb)
+#    println(I.area[_Cell])
     if (vol)
         I.volumes[_Cell]=V
     end
+#    error("")
 end
 
 ####################################################################################################################
@@ -322,6 +378,7 @@ end
 function merge_integrate(Integrator,Integrator2; domain=Boundary(), calculate=1:(length(Integrator.Integral)+length(domain)), iterate=1:(length(Integrator.Integral)), 
                     I_data=nothing, use1=x->true, compact=false, intro="") 
     TODO=collect(iterate)
+    #use1=x->true
     vp_print(0,intro)
     position_0 = length(intro)+5
     vp_print(position_0-5," \u1b[0K")
@@ -343,7 +400,11 @@ function merge_integrate(Integrator,Integrator2; domain=Boundary(), calculate=1:
     for k in 1:TODO_count # initialize and array of length "length(xs)" to locally store verteces of cells
         vp_print(position_0,"Cell $(string(TODO[k], base=10, pad=max_string_i)) (in cycle: $(string(k, base=10, pad=max_string_todo)) of $TODO_count)")
         if typeof(Integrator)==Geometry_Integrator
-            Integrator.Integral.neighbors[TODO[k]] = neighbors_of_cell(TODO[k],Integrator.Integral.MESH)
+            _Cell = TODO[k]
+            I = Integrator.Integral
+            activate_data_cell(data,_Cell,neighbors_of_cell(_Cell,I.MESH,adjacents=true))
+        
+            Integrator.Integral.neighbors[TODO[k]] = neighbors_of_cell(_Cell,I.MESH,extended_xs=data.extended_xs)
         else 
             integrate_cell(vol,ar,bulk,inter,TODO[k],iterate, calculate, data,use1(TODO[k]) ? Integrator : Integrator2)
         end
@@ -364,7 +425,7 @@ struct TestIntegrator
     Integral::Voronoi_Integral
 end
 
-function copy(I::TestIntegrator)
+#=function copy(I::TestIntegrator)
     return TestIntegrator(copy(I.Integral))
 end
 
@@ -384,12 +445,12 @@ function integrate(neighbors,_Cell,iterate, calculate, data,Integrator::TestInte
     bulk_inte.+=100+_Cell
     return 1.0*_Cell
 end
-
+=#
 
 struct TestIntegrator2
     Integral::Voronoi_Integral
 end
-
+#=
 function copy(I::TestIntegrator2)
     return TestIntegrator2(copy(I.Integral))
 end
@@ -409,3 +470,4 @@ function integrate(neighbors,_Cell,iterate, calculate, data,Integrator::TestInte
     end
     return 1.0*_Cell
 end
+=#

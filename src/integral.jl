@@ -38,6 +38,36 @@ struct Voronoi_Integral{T}
 end
 
 
+function DiameterFunction(Integral::Voronoi_Integral,_boundary::Boundary,lref;tree = KDTree(Integral.MESH.nodes))
+    nodes = Integral.MESH.nodes
+    _av = Integral.MESH.All_Verteces
+    _bv = Integral.MESH.Buffer_Verteces
+    _neigh = Integral.neighbors
+    function dists(index,av,bv,boundary,neigh,lref)
+        R = 0.0
+        for (sig,r) in Iterators.flatten((av[index],bv[index]))
+            nn = norm(r-nodes[index])
+            R = max(R,nn)
+        end
+        r = 2*R
+        ln = length(neigh)+lref
+        for n in neigh[index]
+            if n<=ln
+                nn = norm(nodes[n]-nodes[index])
+                r = min(r,nn)
+            else
+                bi = n-ln
+                nn = abs(dot(nodes[index]-boundary.planes[bi].base,boundary.planes[bi].normal))
+                r = min(r,nn)
+            end
+        end
+        return [r,R]
+    end
+    
+    return x->dists(nn_id(tree,x),_av,_bv,_boundary,_neigh[(lref+1):end],lref)
+end
+
+
 # For developing and testing only:
 #=
 function show_integral(I::Voronoi_Integral;volume=true,bulk=true,area=true,interface=true)
@@ -212,8 +242,112 @@ function contains_only(sig,keeps,lmax)
     return true
 end
 
+struct Valid_Vertex_Checker{S,T}
+    sig::Vector{Int64}
+    r::MVector{S,Float64}
+    xs::Vector{T}
+    boundary::Boundary
+    localbase::Vector{MVector{S,Float64}}
+    localxs::Vector{MVector{S,Float64}}
+    function Valid_Vertex_Checker(xs,boundary::Boundary)
+        dim = length(xs[1])
+        return Valid_Vertex_Checker{dim,xs[1]}(zeros(Int64,2^dim),MVector{dim,Float64}(zeros(Float64,dim)),boundary,empty_local_Base(dim),empty_local_Base(dim))
+    end
+end
+
+function check(VVC::Valid_Vertex_Checker,sig,r,keeps,lmax,modified_tracker)
+    lsig = length(sig)
+    localdim = 1
+    dim = length(r)
+    lsig<=dim && (return false)
+
+    for i in 1:dim
+        VVC.localbase[dim][i] = randn()
+    end
+    normalize!(VVC.localbase[dim])
+    sig_end = lsig
+    mydim = 1
+    for i in lsig:-1:1
+        sig[i]<=lmax && break
+        VVC.boundary.planes[sig[i]-lmax].BC>1 && continue
+        sig_end -= 1
+        mydim += 1
+        VVC.localbase[i] .= VVC.boundary.planes[sig[i]-lmax].normal
+        rotate(VVC.localbase,i,dim)
+        rotate(VVC.localbase,i,dim)
+    end
+
+    sigpos = 2
+    while mydim<=dim
+        sigpos>sig_end && (return false)
+        while sigpos<=sig_end
+            VVC.localbase[mydim] .= xs[sig[sigpos]]
+            VVC.localbase[mydim] .-= xs[sig[1]]
+            normalize!(VVC.localbase[mydim])
+            sigpos += 1
+            ( !(sig[sigpos] in keeps) ) && continue
+            if abs(dot(VVC.localbase[mydim],VVC.localbase[dim]))>1.0E-10
+                rotate(VVC.localbase,mydim,dim)
+                rotate(VVC.localbase,mydim,dim)
+                break                
+            end
+        end
+        mydim += 1
+    end
+    return true
+end
+
+struct ModifiedTracker
+    data::Vector{BitVector}
+    neighbors::Vector{Vector{Int64}}
+    function ModifiedTracker(neighbors)
+        ln = length(neighbors)
+        data = Vector{BitVector}(undef,ln)
+        for i in 1:ln
+            data[i] = BitVector(undef,length(neighbors[i]))
+            data[i] .= false
+        end
+        return new(data,neighbors)
+    end
+end
+
+function set_index(mt::ModifiedTracker,node,neigh,val)
+    if neigh in mt.neighbors[node] 
+        f = findfirst(n->n==neigh,mt.neighbors[node])
+        mt.data[node][f] = val
+    end
+end
+
+function check(VVC::Valid_Vertex_Checker,sig,r,keeps,lmax,modified_tracker::ModifiedTracker)
+    c = check(VVC,sig,r,keeps,lmax,1)
+    if c==false
+        lsig = length(sig)
+        for i in 1:lsig
+            s = sig[i]
+            s>lmax && break
+            (!(s in keeps)) && continue
+            for j in 1:lsig
+                j==i && continue
+                set_index(modified_tracker,s,sig[j],true)
+            end
+        end
+    end
+    return c
+end
+
+function reduce_sig(sig,keeps,lmax)
+    pos = 1
+    for i in 1:length(sig)
+        if sig[i] in keeps || sig[i]>lmax
+            sig[pos] = sig[i]
+            pos += 1
+        end
+    end
+    resize!(sig,pos-1)
+end
+
 """keeps n in Integral.MESH.nodes if either filter_nodes(reference[n])==true xor  filter_nodes(n)==true. Keeps a vertex only if all nodes are kept. Shortens references accordingly. rehashes only if required """
-function filter!(filter_nodes,filter_verteces,Integral::Voronoi_Integral,references,reference_shifts,lb,keeps=BitVector(undef,length(Integral.MESH.nodes)),modified=BitVector(undef,length(Integral.MESH.nodes)),rehash=false)
+function filter!(filter_nodes,filter_verteces,Integral::Voronoi_Integral,references,reference_shifts,lb,keeps=BitVector(undef,length(Integral.MESH.nodes)),modified=BitVector(undef,length(Integral.MESH.nodes)),rehash=false;valid_vertex_checker=nothing,modified_tracker=nothing)
     nodes = Integral.MESH.nodes
     mesh = Integral.MESH
     ln1 = length(Integral.MESH.nodes)
@@ -225,12 +359,14 @@ function filter!(filter_nodes,filter_verteces,Integral::Voronoi_Integral,referen
     #    println(n,"   ",Integral.neighbors[n])
     #end
     #modified = map!(n->(!keeps[n]) || (!first_is_subset(Integral.neighbors[n],old_node_indeces,ln1)),modified,1:ln1)
-    mycondition(sig,r) = contains_only(sig,keeps,ln1)
+    vertex_check = typeof(valid_vertex_checker)!=Nothing
+    mycondition(sig,r) = valid_vertex_checker==nothing ? contains_only(sig,keeps,ln1) : check(valid_vertex_checker,sig,r,keeps,ln1,modified_tracker)
     num_verteces_old = map!(n->length(mesh.All_Verteces[n])+length(mesh.Buffer_Verteces[n]),Vector{Int64}(undef,ln1),1:ln1)
     filter!((sig,r)->mycondition(sig,r) && filter_verteces(sig,r,modified),Integral.MESH)#,affected=keeps)
     map!(n->!keeps[n] || ((length(mesh.All_Verteces[n])+length(mesh.Buffer_Verteces[n])-num_verteces_old[n])!=0),modified,1:ln1)
     keepat!(modified,keeps)
     keepnodes = BitVector(undef,ln1)
+    tracker = typeof(modified_tracker)==ModifiedTracker
     for n in 1:ln1
         (!keeps[n]) && continue
         neigh = Integral.neighbors[n]
@@ -239,6 +375,7 @@ function filter!(filter_nodes,filter_verteces,Integral::Voronoi_Integral,referen
         map!(k->k>ln1 || keeps[k],keepnodes,neigh)
         if length(Integral.area)>0  && (isassigned(Integral.area,n)) keepat!(Integral.area[n],keepmynodes) end
         if length(Integral.interface_integral)>0 && (isassigned(Integral.interface_integral,n))  keepat!(Integral.interface_integral[n],keepmynodes) end
+        tracker && keepat!(modified_tracker.data[n],keepmynodes) 
         keepat!(Integral.neighbors[n],keepmynodes)
     end
     keepat!(Integral,keeps)
@@ -254,6 +391,7 @@ function filter!(filter_nodes,filter_verteces,Integral::Voronoi_Integral,referen
     for n in 1:length(mesh)
         for (sig,_) in mesh.All_Verteces[n]
     #        print(sig)
+            vertex_check && reduce_sig(sig,keeps,ln1)
             switch_indeces(sig)
     #        print(" ->  $sig  ;  ")
             #for i in 1:length(sig)
