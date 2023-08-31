@@ -91,7 +91,7 @@ function voronoi(xs::Points; searcher=Raycast(xs),initialize=0,Iter=1:length(xs)
     return voronoi(Geometry_Integrator(xs),searcher=searcher,initialize=initialize,Iter=Iter,intro=intro,compact=compact,printsearcher=printsearcher)
 end
 
-function initialize_voronoi(initialize,mesh,TODO,searcher)
+#=function initialize_voronoi(initialize,mesh,TODO,searcher)
     i=1
     println("init")
     while i<=length(TODO)
@@ -99,7 +99,7 @@ function initialize_voronoi(initialize,mesh,TODO,searcher)
         if !haskey(mesh.All_Verteces[sig[1]],sig) push!(mesh.All_Verteces[sig[1]],sig=>r) end
         i+=initialize
     end    
-end
+end=#
  
 function voronoi(Integrator; Iter=1:(length(Integrator.Integral.MESH.nodes)), searcher=Raycast(Integrator.Integral.MESH.nodes)::RaycastIncircleSkip,initialize=0, subroutine_offset=0,intro="Calculating Voronoi cells:",iteration_reset=true,compact=false, printsearcher=false) 
     v_offset=subroutine_offset
@@ -126,7 +126,7 @@ function voronoi(Integrator; Iter=1:(length(Integrator.Integral.MESH.nodes)), se
     TODO=collect(Iter) 
     repeat=true
     #distances=zeros(Float64,dimension+1)
-    if initialize>0 initialize_voronoi(initialize,mesh,TODO,searcher) end
+    #if initialize>0 initialize_voronoi(initialize,mesh,TODO,searcher) end
     iteration_count=1
     TODO_count=length(TODO)
     new_verteces=0
@@ -410,44 +410,7 @@ function systematic_explore_vertex(xs,sig,R,_Cell,edgecount_local,mesh,queue,bou
                 #print("b: $new_sig -- ")
                 
             catch
-                println("Error: $sig, $edge, $(local_edges.rays[dim])")
-                for k in sig
-                    println("$k: $(dot(local_edges.rays[dim],searcher.tree.extended_xs[k]-searcher.tree.extended_xs[sig[1]]))")
-                end
-                MDIS = maximum(map(s->norm(R-searcher.tree.extended_xs[s]),sig))
-                for k in 12:-1:1
-                    idxk = _inrange(searcher.tree,R,MDIS*(1.0+10.0^(-k)))
-                    sort!(idxk)
-                    println("has key: $(haskey(queue,idxk)), $(haskey(mesh.All_Verteces[idxk[1]],idxk))")
-                    identify_multivertex(searcher,copy(sig),R,verbose=false)
-                    if length(idxk)>length(sig)
-                        println(" -$k: $sig -> $idxk, $MDIS")
-                        u = local_edges.rays[dim]
-                        m0 = 0.0
-                        x0 = searcher.tree.extended_xs[edge[1]]
-                        for s in idxk
-                            print("$s: $(norm(searcher.tree.extended_xs[s]-R))")
-                            if !(s in sig)
-                                x = searcher.tree.extended_xs[s]
-                                print(" -> ",(sum(abs2, R - x) - sum(abs2, R - x0)) / (2 * dot(u,(x-x0))))
-                                m0 = max(m0,(sum(abs2, R - x) - sum(abs2, R - x0)) / (2 * dot(u,(x-x0))))
-                            end
-                            println()
-                        end
-                        R2 = R + m0*u
-                        println("$m0 -> new distances")
-                        for s in idxk
-                            n1 = norm(searcher.tree.extended_xs[s]-R2)
-                            n2 = norm(searcher.tree.extended_xs[s]-R)
-                            if !(s in sig)
-                                print("!")
-                            end
-                            println("$s: $(n1)  $(n2)   $(abs(n1-n2))")
-                        end
-                        break
-                    end
-                end
-                println("ende gelände...")
+                walkray_failure_exception()
             rethrow()
             end
 #            println("klappt")

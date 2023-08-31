@@ -7,3 +7,6 @@ end
 
 function exception_identify_multivertex(searcher,r,sig,measure,idx)
 end
+
+function walkray_failure_exception()
+end

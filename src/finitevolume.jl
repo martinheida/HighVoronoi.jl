@@ -129,7 +129,7 @@ function VoronoiFVProblem(points, boundary=Boundary(); discretefunctions=nothing
 
     Geo = VoronoiGeometry(points,boundary; kwargs..., integrand=i_functions, integrator=integrator)
 
-    return VoronoiFVProblem(Geo,discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions ; kwargs..., integrand=i_functions, integrator=integrator)
+    return VoronoiFVProblem(Geo,discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions ; kwargs..., integrand=i_functions, integrator=integrator, flux_integrals=flux_integrals, bulk_integrals=bulk_integrals)
 end
 
 function get_Bulkintegral(VP::VoronoiFVProblem,symb)

@@ -647,7 +647,7 @@ struct MyBruteTree{TT}
 end
 
 function MyBruteTree(xs)
-    return MyTree{typeof(xs[1])}(xs,zeros(Int64,10),collect(1:length(xs)))
+    return MyBruteTree{typeof(xs[1])}(xs,zeros(Int64,10),collect(1:length(xs)))
 end
 
 function _nn(tree::MyBruteTree{TT},x::Point;skip=x->false) where {TT}
@@ -669,7 +669,7 @@ function _inrange(tree::MyBruteTree,x,r)
     lib = length(tree.ib)
     idx = tree.ib
     count = 0
-    for i in 1:lm
+    for i in 1:lib
         d = norm(x-tree.extended_xs[i])
         if d<r
             count += 1

@@ -57,6 +57,7 @@ include("boundary.jl")
 include("mesh.jl")
 
 # Storing integral data
+include("vertexchecker.jl")
 include("integral.jl")
 
 # handling mesh on the level of the user

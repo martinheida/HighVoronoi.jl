@@ -469,7 +469,7 @@ function midpoint(vertslist,vertslist2,empty_vector,cell_center=Float64[])
     return empty_vector
 end
 
-function midpoint(vertslist,vertslist2,dim::Int)
+#=function midpoint(vertslist,vertslist2,dim::Int)
     empty_vector=zeros(Float64,dim)
     for (_,r) in vertslist
         empty_vector.+=r
@@ -479,15 +479,15 @@ function midpoint(vertslist,vertslist2,dim::Int)
     end
     empty_vector.*= 1/(length(vertslist)+length(vertslist2))
     return empty_vector
-end
+end=#
 
 
-function dist_to_facett(Center,Midpoint,base)
+#=function dist_to_facett(Center,Midpoint,base)
     difference=Center-Midpoint
     dist=(-1)*sum(x->x^2,difference)
     for i in 1:length(base)
         dist+=dot(base[i],difference)^2
     end
     return sqrt(abs(dist))
-end
+end=#
 
