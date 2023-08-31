@@ -54,6 +54,9 @@ using SparseArrays
                 #try
                     xs=VoronoiNodes(1000,density=x->x[1]*sin(x[2]*π),domain=cuboid(5,periodic=[]))
                     xs2 = HighVoronoi.perturbNodes(xs,0.0001)
+                    btree = HighVoronoi.MyBruteTree(xs2)
+                    HighVoronoi._nn(btree,zeros(Float64,5))
+                    HighVoronoi._inrange(btree,zeros(Float64,5),0.1)
                     vg = VoronoiGeometry(xs,integrator=HighVoronoi.VI_GEOMETRY,integrand = x->[norm(x),1],silence=global_silence)
                     vd = VoronoiData(vg, getvertices=true)
                     HighVoronoi.export_geometry(vg.Integrator.Integral)
@@ -214,13 +217,24 @@ using SparseArrays
         
         myRHS__2(;para_i,mass_i,kwargs...) = mass_i * para_i[:f] 
         
+        function surface_int(;para_i,para_j,mass_ij,normal,kwargs...) 
+            # kwargs... collects all additional parameters which are not used in the current function.
+            weight = mass_ij * sqrt(para_i[:kappa]*para_j[:kappa])
+            return weight
+        end
+        
+        b_int(;para_i,mass_i,kwargs...) = mass_i * para_i[:f] #* para_i[:κ]^2         
         
         function test_FV_3D(nop)
             vfvp = VoronoiFVProblem( VoronoiNodes( rand(3,nop) ), cuboid(3,periodic=[]), 
                                         discretefunctions = (f=x->sin(2*pi*x[1]),), # evaluate f pointwise
                                         integralfunctions = (kappa=x->1.0+norm(x)^2,), # calculate averages of kappa over cells and interfaces
                                         fluxes = ( j1 = myflux, ),
-                                        rhs_functions = (F = myRHS__2,) )
+                                        rhs_functions = (F = myRHS__2,), 
+                                        flux_integrals = ( fi = surface_int, ),
+                                        bulk_integrals = (bi = b_int,) )
+            println( get_Fluxintegral(vfvp,:fi) )
+            println( get_Bulkintegral(vfvp,:bi))
             # turn functions that depend on x into the format HighVoronoi needs:
             homogeneous = FVevaluate_boundary(x->0.0) 
             one = FVevaluate_boundary(x->1.0)
