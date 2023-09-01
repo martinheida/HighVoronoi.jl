@@ -99,17 +99,18 @@ function integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Montecar
     directions=I.directions 
     x = xs[_Cell]
     d = data.dimension
+    lneigh = length(neighbors)
+
     # Bulk computations: V stores volumes y stores function values in a vector format
     V = 0.0
     ar.*= 0.0
     bulk_inte.*=0.0
-
     for i in 1:(length(inter_inte))
-        inter_inte[i].*=0.0
+        inter_inte[i] .= 0.0
     end
 
     normals=Vector{typeof(xs[1])}(undef,length(neighbors))
-    for j in 1:(length(neighbors))
+    for j in 1:lneigh
         normals[j]=normalize(xs[neighbors[j]] - xs[_Cell])
     end
 
@@ -144,7 +145,41 @@ function integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Montecar
 
     bulk_inte .*= (c_area / I.NMC_interface / I.NMC_bulk)
     inter_inte .*= (c_area / I.NMC_interface)
-
+    #return V
+    #=V_0 = 0.0
+    for k in 1:lneigh
+        n = neighbors[k]
+        dist = 0.5*norm(xs[n] - xs[_Cell])
+        factor = dist/d 
+        V_0 += ar[k]*factor        
+    end=#
+    #println(abs(V_0-V))
+    if I.area
+        lmesh = length(I.Integral.MESH)
+        for k in 1:lneigh
+            n = neighbors[k]
+            n>lmesh && continue
+            if n in iterate ? n<_Cell : true
+                neigh_area = get_area(Integrator.Integral,n,_Cell)
+                #println("$neigh_area, $n, $_Cell")
+                old_area = ar[k]
+                new_area = abs(neigh_area)<old_area*1.0E-10 ? old_area : 0.5*(old_area+neigh_area) 
+                dist = 0.5*norm(xs[n] - xs[_Cell])
+                factor = dist/d 
+                V1 = Integrator.Integral.volumes[n] +V 
+                Integrator.Integral.volumes[n] += (new_area-neigh_area)*factor
+                V += (new_area-old_area)*factor
+                #println((Integrator.Integral.volumes[n] + V-V1)/V1)
+                ar[k] = new_area
+                set_area(Integrator.Integral,n,_Cell,new_area)
+                typeof(I.interface)==Nothing && continue
+                old_int = inter_inte[k]
+                new_int = !isassigned_integral(Integrator.Integral,n,_Cell) ? old_int : 0.5*(old_int+get_integral(Integrator.Integral,n,_Cell)) 
+                inter_inte[k] = new_int
+                set_integral(Integrator.Integral,n,_Cell,copy(new_int))
+            end
+        end
+    end
     
     return V
 end

@@ -385,6 +385,34 @@ function export_geometry(Integral::Voronoi_Integral)
     return new_Integral
 end
 
+function set_integral(Integral::Voronoi_Integral,_Cell,Neigh,val)
+    k=1
+    neighbors=Integral.neighbors[_Cell]
+    if length(Integral.interface_integral)==0 return Float64[] end
+    while k<=length(neighbors)
+        if Neigh==neighbors[k] break end
+        k+=1
+    end
+    if k<=length(neighbors) && isassigned(Integral.interface_integral,_Cell) && isassigned(Integral.interface_integral[_Cell],k)
+        (Integral.interface_integral[_Cell])[k] = val
+    end
+end
+
+function set_area(Integral::Voronoi_Integral,_Cell,Neigh,val)
+    k=1
+    neighbors=Integral.neighbors[_Cell]
+    while k<=length(neighbors)
+        if Neigh==neighbors[k] break end
+        k+=1
+    end
+    if k<=length(neighbors) && isassigned(Integral.area,_Cell) && isassigned(Integral.area[_Cell],k) 
+        (Integral.area[_Cell])[k] = val
+    end
+end
+
+
+
+
 function get_integral(Integral::Voronoi_Integral,_Cell,Neigh)
     k=1
     neighbors=Integral.neighbors[_Cell]
@@ -393,13 +421,24 @@ function get_integral(Integral::Voronoi_Integral,_Cell,Neigh)
         if Neigh==neighbors[k] break end
         k+=1
     end
-    if k<=length(neighbors)
+    if k<=length(neighbors) && isassigned(Integral.interface_integral,_Cell) && isassigned(Integral.interface_integral[_Cell],k)
         return (Integral.interface_integral[_Cell])[k]
     else
         y=copy((Integral.interface_integral[_Cell])[1])
         y.*=0.0
         return y
     end
+end
+
+function isassigned_integral(Integral::Voronoi_Integral,_Cell,Neigh)
+    k=1
+    neighbors=Integral.neighbors[_Cell]
+    if length(Integral.interface_integral)==0 return Float64[] end
+    while k<=length(neighbors)
+        if Neigh==neighbors[k] break end
+        k+=1
+    end
+    return isassigned(Integral.interface_integral,_Cell) && isassigned(Integral.interface_integral[_Cell],k)
 end
 
 function get_area(Integral::Voronoi_Integral,_Cell,Neigh)
@@ -409,7 +448,7 @@ function get_area(Integral::Voronoi_Integral,_Cell,Neigh)
         if Neigh==neighbors[k] break end
         k+=1
     end
-    if k<=length(neighbors)
+    if k<=length(neighbors) && isassigned(Integral.area,_Cell) && isassigned(Integral.area[_Cell],k)
         return (Integral.area[_Cell])[k]
     else
         return 0
