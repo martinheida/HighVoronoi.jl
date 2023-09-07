@@ -6,7 +6,7 @@ DocMeta.setdocmeta!(HighVoronoi, :DocTestSetup, :(using HighVoronoi); recursive=
 makedocs(;
     modules=[HighVoronoi],
     authors="Martin Heida",
-    #repo="https://github.com/martinheida/HighVoronoi.jl/blob/{commit}{path}#{line}",
+    repo="https://github.com/martinheida/HighVoronoi.jl/blob/{commit}{path}#{line}",
     sitename="HighVoronoi.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
