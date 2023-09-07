@@ -74,6 +74,7 @@ end
 """
 #function integrate(domain,_Cell,iter,calcul,searcher,Integrator::Polygon_Integrator)
 function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Polygon_Integrator,ar,bulk_inte,inter_inte)    
+#    return integrate_general(neighbors,_Cell,iterate, calculate, data,Integrator,ar,bulk_inte,inter_inte)    
     Integral  = Integrator.Integral
     verteces2 = Integral.MESH.Buffer_Verteces[_Cell]
     verteces  = Integral.MESH.All_Verteces[_Cell]
@@ -260,6 +261,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
 
         taboo[dim]=_Cell
         AREA=zeros(Float64,1)
+        _Center = MVector{dim}(zeros(Float64,dim))
         for k in 1:_length
             buffer=neigh[k] # this is the (further) common node of all verteces of the next iteration
                             # in case dim==space_dim the dictionary "bufferlist" below will contain all 
@@ -278,10 +280,13 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
                     #test_idc(dc,_Cell,buffer,1)
 
                     AREA_Int.*=0
-                    _Center=midpoint(bufferlist,emptylist,empty_vector,vector)
-                    _Center.+=vector # midpoint shifts the result by -vector, so we have to correct that .... 
+                    _Center2=midpoint(bufferlist,emptylist,empty_vector,vector)
+                    _Center2.+=vector # midpoint shifts the result by -vector, so we have to correct that .... 
+                    _Center .= _Center2
                     iterative_volume(_function, _bulk, _Cell, V, y, AREA, AREA_Int, dim-1, neigh, _length, bufferlist, emptylist, emptylist,vector,empty_vector,all_dd,all_determinants,calculate,Full_Matrix,xs,taboo,dc)
                     neigh[k]=buffer
+                    norm(_Center)>0.2 && println(_Center)
+ 
                     # Account for dimension (i.e. (d-1)! to get the true surface volume and also consider the distance="height of cone")
                     empty!(bufferlist) # the bufferlist is empty
                     distance= 0.5*norm(vector-xs[buffer]) #abs(dot(normalize(vector-xs[buffer]),vert))
