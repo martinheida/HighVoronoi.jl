@@ -217,7 +217,7 @@ function cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,domain,my_int
     _function = integrand
     Integrator.Integral.neighbors[1] = neighbors_of_cell(1,Integrator.Integral.MESH)
     get_volumes = fast && length(Integrator.Integral.volumes)>0
-    data = (fast && integrand!=nothing) ? IntegrateData(Integrator.Integral.MESH.nodes,domain) : nothing
+    data = (fast && integrand!=nothing) || !fast ? IntegrateData(Integrator.Integral.MESH.nodes,domain) : nothing
     
     # data for first cell:
     dim = length(xs[1])
@@ -272,6 +272,7 @@ end
 
 function CubicVoronoiGeometry(matrix_data::Matrix; search_settings=[], fast=true, periodic=[], scale=ones(Float64,size(matrix_data,1)), repeat = 2*ones(Int64,size(matrix_data,1)), dimensions=ones(Float64,size(matrix_data,1)), integrator=VI_POLYGON, integrand=nothing, mc_accurate=(1000,100,20))
     dim = size(matrix_data,1)
+    fast = true
     fast = fast || integrand==nothing
     _scale = diagm(scale)
     data = _scale*matrix_data
@@ -311,9 +312,9 @@ function CubicVoronoiGeometry(matrix_data::Matrix; search_settings=[], fast=true
     searcher = Raycast(xs; search...)
     Integrator = cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,extended_cube,m->HighVoronoi.Integrator(m,type=integrator,integrand=integrand,mc_accurate=mc_accurate),integrand,fast)
 
-    if fast
+#    if fast
         return PeriodicVoronoiGeometry(Integrator,cube,extended_cube,periodic,periodicity,integrator=integrator,integrand=integrand,mc_accurate=mc_accurate,search=search)
-    else
+#=    else
         my_integrator = integrator
         if integrator!=VI_GEOMETRY && integrator!=VI_POLYGON && integrator!=VI_MONTECARLO
             println(Integrator_Name(integrator),"-method makes no sense. I use ",Integrator_Name(VI_POLYGON)," instead...")
@@ -322,7 +323,7 @@ function CubicVoronoiGeometry(matrix_data::Matrix; search_settings=[], fast=true
         I2=HighVoronoi.Integrator(Integrator.Integral.MESH,type=integrator,integrand=integrand,mc_accurate=mc_accurate)
         integrate(backup_Integrator(I2,true),domain=extended_cube,relevant=1:(lmesh+2*dim))
         PeriodicVoronoiGeometry(I2,cube,extended_cube,periodic,periodicity,integrator=integrator,integrand=integrand,mc_accurate=mc_accurate,search=search)
-    end
+    end=#
 end
 
 

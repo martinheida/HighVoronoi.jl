@@ -65,19 +65,6 @@ end
 
 deleteat(sig, i) = deleteat!(copy(sig), i)
 
-function my_deleteat(sig,i,dim)
-    newsig=Array{Int64}(undef,dim) #zeros(Int64,dim)
-    k=1
-    while k<i
-        newsig[k]=sig[k] #push!(newsig,sig[k])
-        k+=1
-    end
-    while k<=dim
-        newsig[k]=sig[k+1] #push!(newsig,sig[k+1]) #
-        k+=1
-    end
-    return newsig
-end
 
 
 
@@ -546,7 +533,8 @@ function increase_edgeview_fast( edgeview, lsig, dim, local_edges,sig)
 end
 =#
 
-function increase_edgeview( edgeview, lsig, dim;taboo=nothing)
+function increase_edgeview( edgeview, lsig, dim)
+    taboo=nothing
     if edgeview[dim]<lsig && taboo!=nothing
         edgeview[dim] += 1
         while edgeview[dim]<=lsig && (taboo[edgeview[dim]])

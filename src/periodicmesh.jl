@@ -27,14 +27,14 @@ function PeriodicData(rep,width,nodes,_offset)
     return PeriodicData(rep,d,width,fac,nodes,_offset)    
 end
 
-function PeriodicData(rep)
+#=function PeriodicData(rep)
     d = length(rep)
     fac = ones(Int64,d+1)
     for i in 2:(d+1)
         fac[i] = rep[i-1]*fac[i-1]
     end
     return PeriodicData(rep,d,zeros(Float64,d),fac,1,zeros(Float64,d))    
-end
+end=#
 
 function array_from_index(index,p::PeriodicData,arr=zeros(Int64,p.dim))
     ind = index
@@ -84,11 +84,11 @@ function Periodic_Counter(data::PeriodicData)
     return Periodic_Counter(1,ones(Int64,data.dim),copy(data.offset),data.factorials[data.dim+1],data)
 end
 
-function reset_Periodic_Counter(counter::Periodic_Counter)
+#=function reset_Periodic_Counter(counter::Periodic_Counter)
     counter.cell_array .= 1
     counter.cell_offset .= counter.data.offset
     counter.cell_index = 1
-end
+end=#
 
 function increase(counter::Periodic_Counter)
     counter.cell_index += 1    
@@ -680,7 +680,7 @@ function periodic_copy_data(counter::Periodic_Counter, mesh::Voronoi_MESH, domai
 end
 
 
-function periodic_statistics(dim,nn)
+#=function periodic_statistics(dim,nn)
     verts = zeros(Int64,nn)
     counts = zeros(Int64,nn)
     c = 0
@@ -697,7 +697,7 @@ function periodic_statistics(dim,nn)
         end
     end
     println(round.(Vector{Float64}(verts)./c,digits=3),"   ",round.(Vector{Float64}(counts)./c,digits=3),"  $ff")
-end
+end=#
 
 #=
 function PeriodicVoronoiGeometryTest(matrix_data::Matrix; search_settings=[], fast=true, periodic=[], scale=ones(Float64,size(matrix_data,1)), repeat = 2*ones(Int64,size(matrix_data,1)), dimensions=ones(Float64,size(matrix_data,1)), integrator=VI_POLYGON, integrand=nothing, mc_accurate=(40000,2,20))
