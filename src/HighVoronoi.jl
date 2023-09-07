@@ -92,7 +92,7 @@ include("cubicmesh.jl")
 include("Leibnitzrule.jl")
 
 # L1 projection onto subgrids
-include("polygonvolume.jl")
+#include("polygonvolume.jl")
 include("l1projection_new.jl")
 #include("l1projection_fast.jl")
 include("finitevolume.jl")
