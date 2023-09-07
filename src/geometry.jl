@@ -16,13 +16,12 @@ struct VoronoiGeometry{T,TT}
     Integrator::T
     adress::Vector{Int64}
     nodes::Points
-    basic_mesh::Voronoi_MESH
     domain::Discrete_Domain
     integrand::TT
     refined::Vector{Bool}
     searcher::NamedTuple
     function VoronoiGeometry{T,TT}(a1,a2,a3,a4,a5,a6,a7) where {T,TT}
-        return new(a1,a2,a3,a4,a5,a6,[false],a7)
+        return new(a1,a2,a3,a5,a6,[false],a7)
     end
 end
 
@@ -148,6 +147,9 @@ function VoronoiGeometry(file::String; _myopen=jldopen, offset="", search_settin
         xs=UndefInitializer
         mesh=UndefInitializer
         _myopen(file, "r") do myfile
+            if read(myfile, offset*"version")!=1
+                error("The version of this file format is not compatible with your HighVoronoi distribution. It is recommended to update your version.")
+            end
             VI=read(myfile, offset*"type")
             if integrator<0
                 _integrator=VI
@@ -224,6 +226,53 @@ end
     samplenodes = VoronoiNodes()
 end
 =#
+###############################################################################################################################
+
+## Memory usage inside VoronoiGeometry .....
+
+###############################################################################################################################
+
+function memory_allocations(vg::VoronoiGeometry;verbose=false)
+    return memory_usage(vg,verbose)
+end
+
+function memory_usage(x,verbose=false,step=0)
+    size = sizeof(x)
+    typeof(x)==HighVoronoi.Boundary && (verbose=false)
+    mystring = ""
+    if typeof(x) <: AbstractArray  # Check if it's an array
+        for item in x
+            size += memory_usage(item,verbose,step+1)[1]
+        end
+    elseif typeof(x) <: AbstractDict  # Check if it's a dictionary
+        for (key, value) in x
+            size += memory_usage(key,verbose,step+1)[1]
+            size += memory_usage(value,verbose,step+1)[1]
+        end
+    elseif isstructtype(typeof(x))  # Check if it's a struct
+        for field in fieldnames(typeof(x))
+            mysize = 0
+            newstring = ""
+            if field==:Buffer_Verteces
+                bv = getfield(x, field)
+                mysize = sizeof(bv)+2*length(bv)*8    
+            elseif field==:searcher
+                mysize = sizeof(getfield(x, field))
+            else
+                mysize, newstring = memory_usage(getfield(x, field),verbose,step+1)
+            end
+            size += mysize
+            mystring *= verbose ? ("  "^step)*"$field: $mysize \n"*newstring : ""
+        end
+    end
+    if step==0
+        verbose && println("Total size: $size")
+        verbose && println(mystring)
+        return size
+    end
+    return size, mystring
+end
+
 
 ###############################################################################################################################
 
@@ -256,8 +305,8 @@ function refine!(VG::VoronoiGeometry,xs::Points,update=true;silence=false,search
     return VG
 end
 
-function refine(VG::VoronoiGeometry,xs::Points,update=true)
-    return refine!(copy(VG),xs,update)
+function refine(VG::VoronoiGeometry,xs::Points,update=true;silence=false,search_settings=[])
+    return refine!(copy(VG),xs,update,silence=silence,search_settings=search_settings)
 end
 
 function periodic_bc_filterfunction(sig,periodic) 
@@ -381,6 +430,7 @@ function write_jld(Geo::VoronoiGeometry,file,offset="")
     #_myopen(filename, "w") do file
         I=Geo.Integrator.Integral
         storevalues=BitVector([length(I.volumes)>0,length(I.area)>0,length(I.bulk_integral)>0,length(I.interface_integral)>0])
+        write(file,offset*"version",1)
         write(file, offset*"type", Integrator_Type(Geo.Integrator))
         write(file, offset*"compactdata", CompactVoronoiData(length(I.MESH.nodes)-length(Geo.domain.references),length(Geo.domain.references),length(I.MESH.nodes[1]),length(prototype_bulk(Geo.Integrator))))
         #write(file, "onenode", I.MESH.nodes[1])
@@ -616,7 +666,7 @@ The call of `VoronoiData(VG)` provides the following options:
 - `sorted=true`: During the reduction of the internal pseude periodic mesh to the fully periodic output, the neighbors (jointly with their respective properties) get sorted by their numbers
 """
 function VoronoiData(VG::VoronoiGeometry;reduce_to_periodic=true,getorientations=false,getvertices=false,getboundarynodes=false,onboundary=false,sorted=true,view_only=false)
-    mesh=VG.basic_mesh
+    mesh=VG.Integrator.Integral.MESH
     domain=VG.domain
     I=VG.Integrator.Integral
     lref=length(domain.references)

@@ -340,7 +340,7 @@ function PeriodicVoronoiGeometry(matrix_data::Matrix; silence=false, search_sett
             my_integrator = VI_POLYGON
         end
         Integrator = HighVoronoi.Integrator(Voronoi_MESH(xs),type=my_integrator,integrand=integrand,mc_accurate=mc_accurate)
-        Integrator2 = integrand!=nothing ? HighVoronoi.Integrator(Integrator.Integral.MESH,type=VI_HEURISTIC_INTERNAL,integrand=integrand,mc_accurate=mc_accurate,integral=Integrator.Integral) : nothing
+        Integrator2 = integrand!=nothing && my_integrator!=VI_GEOMETRY ? HighVoronoi.Integrator(Integrator.Integral.MESH,type=VI_HEURISTIC_INTERNAL,integrand=integrand,mc_accurate=mc_accurate,integral=Integrator.Integral) : nothing
         search = RaycastParameter(search_settings,(domain=extended_cube,))
         searcher = Raycast(xs; search...)
         I_data = IntegrateData(xs, extended_cube)

@@ -59,37 +59,43 @@ function perturbNodes(x::Vector{<:SVector},perturbation)
     return x2
 end
 
+function poly_box(domain::Boundary, bounding_box::Boundary)
+    dimension = 0
+    total_length = length(domain) + length(bounding_box)
+    if total_length==0
+        error("There is not enough data to create a distribution of points: Provide either :range or :domain !")
+    end
+    halfspaces = []
+    for p in Iterators.flatten((domain.planes,bounding_box.planes))
+        dimension = length(p.normal)
+        push!(halfspaces,HalfSpace(p.normal, dot(p.normal,p.base)))
+    end
+    halfspaces = [h for h in halfspaces]
+    left = zeros(Float64,dimension)
+    right = zeros(Float64,dimension)
+    left .= Inf64
+    right .= -Inf64
+    poly_vol = 0.0
+    try
+        poly = polyhedron(hrep(halfspaces))
+        my_points = Polyhedra.points(vrep(poly))
+        for p in my_points
+            for k in 1:dimension
+                left[k] = min(left[k],p[k])
+                right[k] = max(right[k],p[k])
+            end
+        end
+        poly_vol = Polyhedra.volume(poly)
+    catch
+        error("It is not possible to create a polyhedron from :domain and :bounding_box")
+    end
+    return left, right, poly_vol
+end
+
 function VoronoiNodes(nodes::Real;density = x->1.0, range=nothing, domain::Boundary=Boundary(),bounding_box::Boundary=Boundary(),resolution=nothing,criterium=x->true,silence = true)
     if range==nothing
-        dimension = 0
-        total_length = length(domain) + length(bounding_box)
-        if total_length==0
-            error("There is not enough data to create a distribution of points: Provide either :range or :domain !")
-        end
-        halfspaces = []
-        for p in Iterators.flatten((domain.planes,bounding_box.planes))
-            dimension = length(p.normal)
-            push!(halfspaces,HalfSpace(p.normal, dot(p.normal,p.base)))
-        end
-        halfspaces = [h for h in halfspaces]
-        left = zeros(Float64,dimension)
-        right = zeros(Float64,dimension)
-        left .= Inf64
-        right .= -Inf64
-        poly_vol = 0.0
-        try
-            poly = polyhedron(hrep(halfspaces))
-            my_points = Polyhedra.points(vrep(poly))
-            for p in my_points
-                for k in 1:dimension
-                    left[k] = min(left[k],p[k])
-                    right[k] = max(right[k],p[k])
-                end
-            end
-            poly_vol = Polyhedra.volume(poly)
-        catch
-            error("It is not possible to create a polyhedron from :domain and :bounding_box")
-        end
+        left, right, poly_vol = poly_box(domain,bounding_box)
+        dimension = length(left)
         box_vol = prod(k->right[k]-left[k],1:dimension)
         if typeof(nodes)<:Integer && resolution==nothing
             resolution = unsafe_trunc(Int64,((box_vol/poly_vol)*nodes*100)^(1/dimension))*(dimension==2 ? 10 : 1) + 1

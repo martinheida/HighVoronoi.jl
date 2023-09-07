@@ -76,6 +76,7 @@ include("draw.jl")
 # integrate functions and volume
 include("integrate.jl")
 include("polyintegrator.jl")
+include("polyintegrator_general.jl")
 include("heuristic.jl")
 include("mcintegrator.jl")
 include("heuristic_mc.jl")
@@ -92,8 +93,8 @@ include("Leibnitzrule.jl")
 
 # L1 projection onto subgrids
 include("polygonvolume.jl")
-include("l1projection.jl")
-include("l1projection_fast.jl")
+include("l1projection_new.jl")
+#include("l1projection_fast.jl")
 include("finitevolume.jl")
 include("statistics.jl")
 
@@ -115,6 +116,7 @@ export refine
 export indeces_in_subset
 export substitute!
 export interactionmatrix
+export memory_allocations
 
 export Boundary
 export cuboid
@@ -147,4 +149,10 @@ export SearchExpectRandom
 export SearchRandom
 
 export show
+
+export VI_GEOMETRY
+export VI_HEURISTIC
+export VI_HEURISTIC_MC
+export VI_MONTECARLO
+export VI_POLYGON
 end # module

@@ -5,7 +5,8 @@ struct HeuristicMCIntegrator{T}
     f::T
 end
 
-function HeuristicMCIntegrator(mesh::Voronoi_MESH,f, mc_accurate=(1000,10,20))
+function HeuristicMCIntegrator(mesh::Voronoi_MESH,f, mc_accurate=(1000,1,20))
+    mc_accurate = (mc_accurate[1],1,mc_accurate[3])
     mc = Integrator(mesh,type=VI_MONTECARLO,mc_accurate=mc_accurate,integrand=nothing)
     heu = Integrator(mesh,type=VI_HEURISTIC_INTERNAL,integrand=f,mc_accurate=mc_accurate,integral=mc.Integral)
     lmesh = length(mesh)

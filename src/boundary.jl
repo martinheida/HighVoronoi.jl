@@ -266,6 +266,31 @@ end
 
 #############   HANDLING BOUNDARIES   ###############################
 
+function compare(B1::Boundary,B2::Boundary,bc=false)
+    length(B1)==length(B2) && length(B1)==0 && (return true)
+    (length(B1)==0 || length(B2)==0) && (return false) 
+    (length(B1)!=length(B2) || length(B1.planes[1].normal)!=length(B2.planes[1].normal)) && (return false)
+    lB = length(B1)
+    identified = zeros(Bool,lB)
+    for k in 1:lB
+        for i in 1:lB
+            identified[i] && continue
+            if abs(dot(B1.planes[k].normal,B2.planes[i].normal)-1.0)<1.0E-10
+                if abs(dot(B1.planes[k].base-B2.planes[i].base,B1.planes[k].normal))<1.0E-8
+                    identified[i] = true
+                    if bc
+                        B1.planes[k].BC>0 && B2.planes[k].BC<=0 && (return false) 
+                        B1.planes[k].BC<=0 && B2.planes[k].BC>0 && (return false) 
+                    end
+                else 
+                    return false
+                end
+            end
+        end
+    end
+    return true
+end
+
 function split_boundary_indeces(B::Boundary)
     inds=collect(1:length(B))
     dir = keepat!(copy(inds),map(k->(B.planes[k].BC==0),inds))

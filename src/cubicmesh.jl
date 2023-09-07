@@ -1,10 +1,10 @@
 
 
-function    integrate_cube(_Cell, data,Integrator,proto)    
+function    integrate_cube(_Cell, data,Integrator,proto,_function)    
     Integral  = Integrator.Integral
     neigh = Integral.neighbors[_Cell]
 
-    if (typeof(Integrator._function) == Nothing) 
+    if (length(proto)==0) 
         return
     end 
 
@@ -37,7 +37,7 @@ function    integrate_cube(_Cell, data,Integrator,proto)
 
     # do the integration
     I=Integrator
-    heuristic_Cube_integral(I._function, I.bulk, _Cell,  bulk_inte, ar, inter_inte, dim, neigh, 
+    heuristic_Cube_integral(_function, true, _Cell,  bulk_inte, ar, inter_inte, dim, neigh, 
                 _length,verteces,verteces2,emptydict,xs[_Cell],empty_vector,1:length(xs),Integral,xs)
 
 
@@ -81,14 +81,12 @@ function heuristic_Cube_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,n
         AREA_Int .+= (1/dim).*_function(_Center) 
         thisarea = Full_Matrix.area[_Cell][k]
         AREA_Int .*= thisarea
-        if _bulk # and finally the bulk integral, if whished
             distance= 0.5*norm(vector-xs[buffer]) #abs(dot(normalize(vector-xs[buffer]),vert))
             _y=_function(vector)
             _y.*=(thisarea/(dim+1))
             _y.+=(AREA_Int*(dim/(dim+1))) # there is hidden a factor dim/dim  which cancels out
             _y.*=(distance/dim)
             y.+=_y
-        end
     end
 end
 
@@ -216,6 +214,7 @@ function cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,domain,my_int
     vp_print(0,"Calculate first cell...")
     mesh = first_cube(xs,deviation,cell_size,searcher)
     Integrator = my_integrator(mesh)
+    _function = integrand
     Integrator.Integral.neighbors[1] = neighbors_of_cell(1,Integrator.Integral.MESH)
     get_volumes = fast && length(Integrator.Integral.volumes)>0
     data = (fast && integrand!=nothing) ? IntegrateData(Integrator.Integral.MESH.nodes,domain) : nothing
@@ -227,7 +226,7 @@ function cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,domain,my_int
     vol_vector2 = cell_size - deviation
     Integrator.Integral.neighbors[1] = Vector{Int64}(undef,2*dim)
     get_volumes && (Integrator.Integral.area[1] = Vector{Float64}(undef,2*dim))
-    proto = 0.0*(typeof(Integrator._function)!=Nothing ? Integrator._function(Integrator.Integral.MESH.nodes[1]) : Float64[])
+    proto = prototype_bulk(Integrator)# 0.0*(typeof(Integrator._function)!=Nothing ? Integrator._function(Integrator.Integral.MESH.nodes[1]) : Float64[])
 
     index = ones(Int64,dim)
     bit = BitVector(ones(Int8,dim))
@@ -249,7 +248,7 @@ function cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,domain,my_int
         sort!(Integrator.Integral.neighbors[1])
     end
 
-    integrate_cube(1, data,Integrator,proto)    
+    integrate_cube(1, data,Integrator,proto,_function)    
 
     pc = Periodic_Counter(periodicity)
     increase(pc)
@@ -264,7 +263,7 @@ function cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,domain,my_int
             count=0
         end
         cubic_voronoi_copy_verteces(Integrator.Integral,deviation,pc,domain,get_volumes,vol_vector./cell_size,vol_vector2./cell_size,indeces)
-        integrate_cube(pc.cell_index, data, Integrator,proto)    
+        integrate_cube(pc.cell_index, data, Integrator,proto,_function)    
         increase(pc)
     end
     return Integrator
