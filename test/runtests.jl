@@ -58,6 +58,7 @@ using SparseArrays
                     HighVoronoi._nn(btree,zeros(Float64,5))
                     HighVoronoi._inrange(btree,zeros(Float64,5),0.1)
                     vg = VoronoiGeometry(xs,integrator=HighVoronoi.VI_GEOMETRY,integrand = x->[norm(x),1],silence=global_silence)
+                    HighVoronoi.memory_usage(vg)
                     vd = VoronoiData(vg, getvertices=true)
                     HighVoronoi.export_geometry(vg.Integrator.Integral)
                     HighVoronoi.copy_volumes(vg.Integrator.Integral)
@@ -150,34 +151,15 @@ using SparseArrays
     end
 
     @testset "volume matrix" begin
-        function test_interactionmatrix1()
-            s = 0.0
-            for k in 1:10
-                VG = VoronoiGeometry(VoronoiNodes(rand(2,20)),cuboid(2,periodic = [1,2]),integrator=HighVoronoi.VI_POLYGON,silence=global_silence)
-                VG2 = copy(VG)
-                refine!(VG2,VoronoiNodes(0.2*rand(2,4)),silence=global_silence)
-                v1,v2,vols=interactionmatrix(VG,VG2,false)
-                s += sum(vols)
-            end
-            return true #abs(1.0-s/10)<0.1
-        end
         function test_interactionmatrix2()
-            s = 0.0
-            count = 0
-            for k in 1:10
-                try
                     VG = VoronoiGeometry(VoronoiNodes(rand(2,20)),cuboid(2,periodic = [1,2]),integrator=HighVoronoi.VI_POLYGON,silence=global_silence)
                     VG2 = copy(VG)
-                    refine!(VG2,VoronoiNodes(0.2*rand(2,4)),silence=global_silence)
-                    v1,v2,vols=interactionmatrix(VG,VG2,true)
-                    s+=sum(vols)
-                    count+=1
-                catch
-                end
-            end
-            return abs(1.0-s/count)<0.1
+                    VG2 = refine(VG,VoronoiNodes(0.2*rand(2,4)),silence=global_silence)
+                    r,c,vals=interactionmatrix(VG2,VG)
+                    A = sparse(r,c,vals)
+                    u = A*ones(Float64,20)
+                    return abs(sum(u)-24)<0.01
         end
-        @test test_interactionmatrix1()
         @test test_interactionmatrix2()
     end
 
