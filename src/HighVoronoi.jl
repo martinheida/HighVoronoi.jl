@@ -76,7 +76,7 @@ include("draw.jl")
 # integrate functions and volume
 include("integrate.jl")
 include("polyintegrator.jl")
-include("polyintegrator_general.jl")
+#include("polyintegrator_general.jl")
 include("heuristic.jl")
 include("mcintegrator.jl")
 include("heuristic_mc.jl")
