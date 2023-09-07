@@ -1,4 +1,4 @@
-# Refinement and Substitution of Subdomains
+# [Refinement and Substitution of Subdomains](@id refinementsection)
 
 `HighVoronoi.jl` allows you to refine a mesh in two different ways: 
 - refinement by locally adding addional points 

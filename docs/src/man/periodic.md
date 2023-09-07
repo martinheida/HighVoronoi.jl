@@ -58,6 +58,16 @@ HighVoronoi.redundancy([3,5,2,6,8]) # returns 0.8875
     ```
     However, since other cells can be partically recycled, numerical experiments show even higher gain in performance.
 
+## Memory usage
+
+The lower geometric complexity of periodic meshes leads to less memory being used. This can be checked with the command applied to a geometry with nodes in general position and to a periodic geometry with comparable amount of generators.
+
+```julia
+    size = memory_allocations(vg::VoronoiGeometry;verbose=false)
+```
+
+which returns the memory allocated by `vg` in Bytes. `verbose=true` prints to the shell which internal part of the geometry data structure occupies how much memory. 
+
 ## Advantage for numerics and some statistics
 
 Another advantage of periodic meshes with a low number of generating nodes is the following: In a cubic grid every node has $2d$ neighbors, while in a regular grid the number of neighbors grows super-linear. E.g. in 5 dimensions, tests suggest around $90\pm 10$ neighbors compared to $10$ neighbors in a cubic grid. At the same time, a periodic grid generated from 3 points shows an average neighboring of $20$. Thus, matrices generated in this way will be much sparser than matrices for regular grids.

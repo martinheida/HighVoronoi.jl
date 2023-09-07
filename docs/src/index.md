@@ -2,7 +2,7 @@
 CurrentModule = HighVoronoi
 ```
 
-# HighVoronoi: $N\log N$ complexity Voronoi Grids in $\mathbb{R}^d$
+# HighVoronoi 1.0.0: $N\log N$ complexity Voronoi Grids in $\mathbb{R}^d$
 
 Documentation for [HighVoronoi](https://github.com/martinheida/HighVoronoi.jl). Voronoi mesh generation in arbitrary dimensions + Finite Volume setup, also for vertices with $d+k$, $k>1$ generators.
 
@@ -119,9 +119,8 @@ savefig("plot.pdf")
 - `write_jld`: Store a `VoronoiGeometry`
 - `refine!`: refine a `VoronoiGeometry` by new nodes
 - `substitute!`: refine a `VoronoiGeometry` by erasing the points in a given subdomain and replacing them by a finer precalculated grid. Automatically fills out all the gaps.
+- `interactionmatrix`: constructs a projectoin from a function on one geometry to a function on a second geometry.
 - `linearVoronoiFVProblem`: Extract the Matrix and right-hand-side from a given `VoronoiFVProblem` and for given boundary conditions.
 
 ### To be implemented in a forthcoming version
 - refine a `VoronoiFVProblem`. Project a given "rough" FV solution of a `linearVoronoiFVProblem` onto the refined solution space. 
-- a projection operator that allows to project piecewise constant functions from one Voronoi diagram onto another with no loss of mass.
-- improving nearest neighbor search fitted to spacial distribution of points.

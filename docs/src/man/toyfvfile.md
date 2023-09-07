@@ -196,6 +196,7 @@ end
 # create parameters
 my_set = make_set(x->sin(x[1]*2*π)^2 * sin(x[2]*2*π)^2, x->1.0, 2, 
                 periodic=[1], dirichlet_boundary=3, neumann_boundary=4)
+                # reminder: periodic=[1] identifies boundary 1 with boundary 2
 # perform simulation
 nodes, values = simulation(my_set)
 # plot results
