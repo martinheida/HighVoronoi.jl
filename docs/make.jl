@@ -8,7 +8,7 @@ makedocs(;
     authors="Martin Heida",
     repo="https://github.com/martinheida/HighVoronoi.jl/blob/{commit}{path}#{line}",
     sitename="HighVoronoi.jl",
-    version = "stable",
+    #version = "stable",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
         canonical="https://martinheida.github.io/HighVoronoi.jl",
