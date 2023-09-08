@@ -1,4 +1,4 @@
-# Voronoi Nodes and Voronoi geometry
+# Voronoi: Nodes and Geometry, Integrators
 
 ## [Nodes](@id differentnodegenerators)
 The most basic thing is the creation of a list of Points. We advise to use the following:
@@ -88,20 +88,20 @@ To create a Voronoi mesh it is most convenient to call either of the following m
 VoronoiGeometry()
 ```
 
-## [Overview over Integrators](@id integratoroverview)
+## [Integrators (overview)](@id integratoroverview)
 
 As discussed above there is a variety of integrators available to the user, plus some internal integrators that we will not discuss in this manual. The important integrators for the user are:
-    * `VI_GEOMETRY`: Only the basic properties of the mesh are provided: the verteces and an implicit list of neighbors of each node. This is the fastes way to generate a `VoronoiGeometry`
-    * `VI_MONTECARLO`: Volumes, interface areas and integrals are calculated using a montecarlo algorithm introduced by A. Sikorski in `VoronoiGraph.jl` and discussed in a forthcoming article by Heida, Sikorski, Weber. 
-        This particular integrator comes up with the following additional paramters:
-        + `mc_accurate=(int1,int2,int3)`: Montecarlo integration takes place in `int1` directions, over `int2` 
+
+* `VI_GEOMETRY`: Only the basic properties of the mesh are provided: the verteces and an implicit list of neighbors of each node. This is the fastes way to generate a `VoronoiGeometry`
+* `VI_MONTECARLO`: Volumes, interface areas and integrals are calculated using a montecarlo algorithm introduced by A. Sikorski in `VoronoiGraph.jl` and discussed in a forthcoming article by Heida, Sikorski, Weber. This particular integrator comes up with the following additional paramters:
+    + `mc_accurate=(int1,int2,int3)`: Montecarlo integration takes place in `int1` directions, over `int2` 
             volumetric samples (vor volume integrals only). It reuses the same set of directions `int3`-times to save memory allocation time.
             Standard setting is: `(1000,100,20)`.
-    * `VI_POLYGON`: We use the polygon structure of the mesh to calculate the exact values of interface area and volume. The 
+* `VI_POLYGON`: We use the polygon structure of the mesh to calculate the exact values of interface area and volume. The 
         integral over functions is calculated using the values at the center, the verteces and linear interpolation between. Also this method is to be discussed in the anounced article by Heida, Sikorski, Weber.  
-    * `VI_HEURISTIC`: When this integrator is chosen, you need to provide a fully computed Geometry including volumes and interface areas.
+* `VI_HEURISTIC`: When this integrator is chosen, you need to provide a fully computed Geometry including volumes and interface areas.
         `VI_HEURISTIC` will then use this information to derive the integral values.
-    * `VI_HEURISTIC_MC`: This combines directly `VI_MONTECARLO` calculations of volumes and interfaces and calculates integral values 
+* `VI_HEURISTIC_MC`: This combines directly `VI_MONTECARLO` calculations of volumes and interfaces and calculates integral values 
         of functions based on those volumes and areas. In particular, it also relies on `mc_accurate`!
 
 It is important to have in mind that the polygon-integrator will be faster in low dimensions, whereas the Montecarlo integrator will outperform from 5 dimensions and higher. However, when volumes and integrals are to be calculated in high dimensions, the `VI_HEURISTIC_MC` is highly recommended, as it works with much less function evaluations than the `VI_MONTECARLO`. 
