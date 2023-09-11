@@ -285,7 +285,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
                     _Center .= _Center2
                     iterative_volume(_function, _bulk, _Cell, V, y, AREA, AREA_Int, dim-1, neigh, _length, bufferlist, emptylist, emptylist,vector,empty_vector,all_dd,all_determinants,calculate,Full_Matrix,xs,taboo,dc)
                     neigh[k]=buffer
-                    norm(_Center)>0.2 && println(_Center)
+                    #norm(_Center)>0.2 && println(_Center)
  
                     # Account for dimension (i.e. (d-1)! to get the true surface volume and also consider the distance="height of cone")
                     empty!(bufferlist) # the bufferlist is empty
