@@ -80,6 +80,7 @@ end
 
 
 
+u_default(a,b,c) = u_qr(a,b,c)
 
 function u_qr(sig, xs::Points, i)
     n = length(sig)
