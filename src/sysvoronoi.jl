@@ -115,7 +115,7 @@ function voronoi(Integrator; Iter=1:(length(Integrator.Integral.MESH.nodes)), se
                 end
             end
             TODO_count=count-1
-            searcher.positions.*=0
+            searcher.positions .= false
         end 
         iteration_count+=1
         #break
@@ -153,7 +153,7 @@ function systematic_explore_cell(xs::Points,_Cell,mesh::Voronoi_MESH,edgecount,b
     boundary = searcher.domain
     allverts = mesh.All_Verteces[_Cell]
     bufferverts = mesh.Buffer_Verteces[_Cell]
-    searcher.tree.active.*=0
+    searcher.tree.active .= false
     activate_cell( searcher, _Cell, collect((searcher.lmesh+1):(searcher.lmesh+searcher.lboundary) ))
     empty!(queue)
     for (sig,r) in Iterators.flatten((allverts,bufferverts))
