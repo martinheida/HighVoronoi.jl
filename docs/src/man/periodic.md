@@ -10,8 +10,9 @@ A fast and efficient way to generate meshes in high dimension are quasi-periodic
 This is automatised in the following call:
 
 ```julia
+    dim = 3 
     VG = HighVoronoi.VoronoiGeometry( VoronoiNodes(rand(dim,N)), 
-        periodic_grid = ( periodic=[], dimensions=ones(Float64,dim), 
+        periodic_grid = ( dimensions=ones(Float64,dim), 
             scale=0.25*ones(Float64,dim), repeat=4*ones(Int64,dim), 
             periodic=[], fast=true ) )
 ```
