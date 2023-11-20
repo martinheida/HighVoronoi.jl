@@ -23,6 +23,7 @@ makedocs(;
             "Examples Voronoi Generation" => "man/short.md",
             "man/workflowmesh.md",
             "man/geometry.md",
+            "man/improving.md",
             "man/boundaries.md",
             "Advanced Options" => "man/advanced.md",
             "man/periodic.md",
@@ -46,6 +47,6 @@ makedocs(;
 deploydocs(;
     repo="github.com/martinheida/HighVoronoi.jl",
     devbranch="main",
-    devurl = "v1.0.2",
+#    devurl = "v1.0.2",
 #    versions = ["stable" => "v^", "v#.#.#",],
 )
