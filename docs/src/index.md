@@ -2,13 +2,19 @@
 CurrentModule = HighVoronoi
 ```
 
-# HighVoronoi 1.0.0: $N\log N$ complexity Voronoi Grids in $\mathbb{R}^d$
+# HighVoronoi 1.1.0: $N\log N$ complexity Voronoi Grids in $\mathbb{R}^d$
 
 Documentation for [HighVoronoi](https://github.com/martinheida/HighVoronoi.jl). Voronoi mesh generation in arbitrary dimensions + Finite Volume setup, also for vertices with $d+k$, $k>1$ generators.
 
 - [QUICK START on VORONOI generation: Click here](@ref quickVG) / [The ABSTRACT WORKFLOW is here](@ref workflowgeometry) 
 - [QUICK START on FINITE VOLUME methods: Click here](@ref QuickFV) / [The ABSTRACT WORKFLOW is here](@ref workflowfv)  
 - [Toy file for testing numerical solver](@ref toyfile)
+
+News to version 1.1.0:
+
+- improved algorithms for faster calculation of all features
+- 3D output
+- autmaticaly improving geometric quality of meshes if wanted by user: Nodes will be locally modified until voronoi nodes almost coincide with center of gravity of cells.
 
 There is a recent [PREPRINT](http://www.wias-berlin.de/preprint/3041/wias_preprints_3041.pdf) where I outline the algorithm and provide a mathematical proof that it works. 
 
