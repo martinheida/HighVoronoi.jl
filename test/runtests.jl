@@ -33,6 +33,11 @@ using SparseArrays
             A3 = HighVoronoi.collect_statistics(rand(dim,2),dim,2*ones(Int64,dim),3*ones(Int64,dim),txt="test3.txt",fast=true,silence=true)
             return true            
         end
+        function test_number_and_names(i)
+            VG = VoronoiGeometry(VoronoiNodes(rand(3,100)),cuboid(3,periodic=[1],neumann=[2,-3]),integrator=i,integrand=x->[x[1]^2],silence=i==1 ? false : global_silence)
+            println("$i: $(HighVoronoi.Integrator_Name(i)) vs. $(HighVoronoi.Integrator_Name(VG.Integrator)) vs. $(HighVoronoi.Integrator_Name(HighVoronoi.Integrator_Type(VG.Integrator))) ")
+            return 5<i<8 ? true : HighVoronoi.Integrator_Number(VG.Integrator)==i            
+        end
         @test statistics()
         @test boundary_tests()        
         # Test all Integrators
@@ -40,7 +45,7 @@ using SparseArrays
         println("testing integrators")
         println("-----------------------------------------------------------------")
         for i in HighVoronoi._VI__MIN:HighVoronoi._VI__MAX
-            @test length(VoronoiGeometry(VoronoiNodes(rand(3,100)),cuboid(3,periodic=[1],neumann=[2,-3]),integrator=i,integrand=x->[x[1]^2],silence=i==1 ? false : global_silence).nodes)>=100
+            @test test_number_and_names(i)
         end
 
         # Test full space, so bad cases will happen and will be corrected
@@ -65,6 +70,9 @@ using SparseArrays
                     vd = VoronoiData(vg, getvertices=true)
                     HighVoronoi.export_geometry(vg.Integrator.Integral)
                     HighVoronoi.copy_volumes(vg.Integrator.Integral)
+                    m2 = vg.Integrator.Integral.MESH
+                    @test HighVoronoi.verify_vertex(pop!(m2.All_Verteces[1])...,m2.nodes,HighVoronoi.Raycast(m2.nodes))
+            
                     HighVoronoi.append!(vg.Integrator.Integral,VoronoiNodes(rand(5,100)))
                 #catch
                 #    b = i<=3
