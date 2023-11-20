@@ -12,7 +12,6 @@ using JLD2
 using Polyhedra
 using GLPK
 using Plots
-using Cthulhu
 #using Traceur
 
 const Point{T} = AbstractVector{T} where T<:Real
