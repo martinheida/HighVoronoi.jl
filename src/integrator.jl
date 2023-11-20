@@ -124,7 +124,7 @@ function Integrator_Name(I)
     elseif (typeof(I)<:HeuristicMCIntegrator)
         return "HEURISTIC_MC"
     else 
-        return "STRANGE"
+        return "$(typeof(I)): STRANGE"
     end
 end
 

@@ -181,7 +181,7 @@ function systematic_explore_cell(xs::Points,_Cell,mesh::Voronoi_MESH,edgecount,b
     return new_vertices
 end
 
-function check_new_edge(edge,edgecount_local,searcher)
+#=function check_new_edge(edge,edgecount_local,searcher)
     haskey(edgecount_local, edge) && (return true)
     get(edgecount_local, edge, '0')
 end
@@ -205,7 +205,7 @@ function regular_ray(xs,edge,searcher,sig)
     end
     return u,true
 end
-
+=#
 function get_full_edge(sig,r,edge,edgeIterator::General_EdgeIterator,xs)
     i = 0
     while true
@@ -285,7 +285,7 @@ function increase_edgeview( edgeview, lsig, dim)
         
     return true, ret
 end
-
+#=
 function increase_edge2(sig,j,edgecount_local,ret)
     edge = _deleteat(sig, j)
     a = edgecount_local[edge] = get(edgecount_local, edge, '0') + 1
@@ -308,3 +308,4 @@ function increase_edge(sig,edgeview,edgecount_local,ret2)
     return ret
 end
 
+=#

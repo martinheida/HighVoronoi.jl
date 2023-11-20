@@ -354,7 +354,7 @@ function get_sup_edge(dc::IterativeDimensionChecker,edges,xs)
     return r,r2,val
 end
 
-function getedge(idc::IterativeDimensionChecker,verteces,space_dim,xs,_Cell)
+#=function getedge(idc::IterativeDimensionChecker,verteces,space_dim,xs,_Cell)
     lv = length(verteces)
     if lv<=1
         return false, 0, 0
@@ -376,6 +376,10 @@ function getedge(idc::IterativeDimensionChecker,verteces,space_dim,xs,_Cell)
     end
     return false, 0, 0
 end
+=#
+
+
+
 #=
 function joint_neighbors(idc::IterativeDimensionChecker,sig,sig2)
     count = 0

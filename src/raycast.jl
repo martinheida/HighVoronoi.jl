@@ -28,14 +28,7 @@ Initializes the standard searcher for computation of Voronoi meshes.
             default `1` in higher dimensions
 """
 function Raycast(xs;periodic_searcher=1,recursive=true,correcting=true,allow_irregular=true,force_irregular_search=true,domain=Boundary(),bruteforce=false,fastiterator=false,kwargs...) 
-    dim = length(xs[1])
-    if dim>length(RaycastData)
-        resize!(RaycastData,dim)
-    end
-    if !isdefined(RaycastData,dim)
-        RaycastData[dim] = (ray_tol=1.0E-12,plane_tol=1.0E-12,variance_tol=1.0E-15,break_tol=1.0E-5,nodes_tol=1.0E-8,b_nodes_tol=1.0E-7,perturb_nodes=false,)
-    end
-    args = (;RaycastData[dim]...,kwargs...)
+    args = (;ray_tol=1.0E-12,plane_tol=1.0E-12,variance_tol=1.0E-15,break_tol=1.0E-5,nodes_tol=1.0E-8,b_nodes_tol=1.0E-7,perturb_nodes=false,kwargs...)
     return RaycastIncircleSkip(xs,recursive,args[:variance_tol],args[:break_tol],args[:nodes_tol],args[:b_nodes_tol],correcting,allow_irregular,force_irregular_search,domain,bruteforce,args[:plane_tol],fastiterator,periodic_searcher,args[:ray_tol],args[:perturb_nodes])
 end
 
@@ -162,7 +155,7 @@ function walkray(full_edge::Sigma, r::Point, xs::Points, searcher, sig, u, edge)
 end
 
 
-""" generate a random ray orthogonal to the subspace spanned by the given points """
+#=""" generate a random ray orthogonal to the subspace spanned by the given points """
 function randray(xs::Points)
     k = length(xs)
     d = length(xs[1])
@@ -191,7 +184,7 @@ function randray(xs::Points)
     end
     u = normalize(u)
     return u
-end
+end=#
 
 function randray(xs::Points,v)
     k = length(xs)

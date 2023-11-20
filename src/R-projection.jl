@@ -1,8 +1,12 @@
 
+R_proj_tree(tree::Nothing,VG) = VoronoiKDTree(VG)
+R_proj_tree(tree,VG) = tree
+R_proj_diam(diameters::Nothing,VG,tree) = DiameterFunction(VG,tree=tree)
+R_proj_diam(diameters,VG,tree) = diameters
 
 function R_projection(u::Function,VG::VoronoiGeometry; rays=100, tree=nothing, diameters=nothing, factor=1.0,only_vector=false)
-    tree = tree!=nothing ? tree : VoronoiKDTree(VG)
-    diams = diameters!=nothing ? diameters : DiameterFunction(VG,tree=tree)
+    tree = R_proj_tree(tree,VG)
+    diams = R_proj_diam(diameters,VG,tree) 
     factor = abs(min(1.0,factor))
 
     points = Vector{Vector{Float64}}(undef,rays)
