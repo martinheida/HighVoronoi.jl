@@ -143,7 +143,7 @@ function periodic_cells(periodic,periodicity,dim)
     buffer = copy(pc.cell_array)
     while !eol(pc) 
         index = pc.cell_index
-        this_boundary.*=0
+        this_boundary .= false
         sig = pc.cell_array
         buffer .= pc.cell_array
         for k in 1:length(sig)
@@ -349,7 +349,7 @@ function PeriodicVoronoiGeometry(matrix_data::Matrix,dispatch_resolve; silence=f
         I_data = IntegrateData(xs, extended_cube)
         affected = BitVector(zeros(Int8,length(xs)+length(cube)))
         #affected[1:number_of_nodes] .= 1
-        affected[(length(xs)+1):((length(xs)+length(cube)))] .= 1
+        affected[(length(xs)+1):((length(xs)+length(cube)))] .= true
     
         pc = Periodic_Counter(periodicity)
         max_string_len = length(string(pc.maxindex, base=10))
@@ -583,7 +583,7 @@ function periodic_copy_data(counter::Periodic_Counter, mesh::Voronoi_MESH, domai
         end
         filter!(x->x!=0, my_neighbors)
         append!(my_neighbors,b_neighbors)
-        searcher.tree.active.*=0
+        searcher.tree.active .= false
         if my_neighbors[end]>lmesh
             iff = findfirst(x->x>lmesh,my_neighbors)
             activate_cell( searcher, k, view(my_neighbors,iff:length(my_neighbors)) )
