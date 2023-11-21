@@ -47,6 +47,6 @@ makedocs(;
 deploydocs(;
     repo="github.com/martinheida/HighVoronoi.jl",
     devbranch="main",
-#    devurl = "v1.0.2",
+    devurl = "stable",#"v1.0.2",
 #    versions = ["stable" => "v^", "v#.#.#",],
 )
