@@ -57,7 +57,7 @@ function improve_mesh(Integrator::Geometry_Integrator,b,_domain; max_iterations=
         searcher=Raycast(mesh.nodes;search...)
         tree = searcher.tree
         for i in 1:lmesh
-            searcher.tree.active.*=0
+            searcher.tree.active .= false
             activate_cell( searcher, i, neighbors_of_cell(i,mesh,adjacents=true) )
             for (sig,r) in mesh.All_Verteces[i]
                 sig[1]==0 && continue

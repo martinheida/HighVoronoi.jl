@@ -325,6 +325,8 @@ end
 function vor_calc_statistics_fast(unit_nodes::Matrix,dim,iterator,eval_data,entry,silence=true,cycle=1)
     searchdata = zeros(Int64,20)
     matrix_data = unit_nodes
+    matrix_data .*= 0.99
+    matrix_data .+= 0.005*ones(Float64,dim)
     NN = prod(iterator)*size(matrix_data,2)
     print("--- Fast periodic Voronoi in dim $dim: $NN nodes")
     counts = [1]
