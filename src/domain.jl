@@ -295,7 +295,7 @@ function periodic_nodes(mesh::Voronoi_MESH,boundary::Boundary)
     end
     this_boundary=BitVector(zeros(Int8,lb))
     for i in 1:lm
-        this_boundary.*=0
+        this_boundary .= false
         for (sig,r) in Iterators.flatten((AV[i],BV[i]))
             for k in (length(sig)):-1:1
                 if sig[k]>lm
