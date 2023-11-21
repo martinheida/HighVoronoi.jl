@@ -70,8 +70,8 @@ using SparseArrays
                     vd = VoronoiData(vg, getvertices=true)
                     HighVoronoi.export_geometry(vg.Integrator.Integral)
                     HighVoronoi.copy_volumes(vg.Integrator.Integral)
-                    #m2 = vg.Integrator.Integral.MESH
-                    #@test HighVoronoi.verify_vertex(pop!(m2.All_Verteces[1])...,m2.nodes,HighVoronoi.Raycast(m2.nodes))
+                    m2 = vg.Integrator.Integral.MESH
+                    @test HighVoronoi.verify_vertex(pop!(m2.All_Verteces[1])...,m2.nodes,HighVoronoi.Raycast(m2.nodes))
             
                     HighVoronoi.append!(vg.Integrator.Integral,VoronoiNodes(rand(5,100)))
                 #catch
