@@ -54,30 +54,30 @@ using SparseArrays
         println("-----------------------------------------------------------------")
         function test_2000()
             # the following is necessary since unbounded domains can lead to a crash in very rare events
-            b = true
-            i = 1
-            #while b
-                b = false
-                i += 1
                 #try
+                println("-------- 1  ---------------------------------------------------")
                     xs=VoronoiNodes(1000,density=x->x[1]*sin(x[2]*π),domain=cuboid(5,periodic=[]))
                     xs2 = HighVoronoi.perturbNodes(xs,0.0001)
+                    println("-------- 2  ---------------------------------------------------")
                     btree = HighVoronoi.MyBruteTree(xs2)
                     HighVoronoi._nn(btree,zeros(Float64,5))
                     HighVoronoi._inrange(btree,zeros(Float64,5),0.1)
+                    println("-------- 3  ---------------------------------------------------")
                     vg = VoronoiGeometry(xs,integrator=HighVoronoi.VI_GEOMETRY,integrand = x->[norm(x),1],silence=global_silence)
                     HighVoronoi.memory_usage(vg)
                     vd = VoronoiData(vg, getvertices=true)
+                    println("-------- 4  ---------------------------------------------------")
                     HighVoronoi.export_geometry(vg.Integrator.Integral)
                     HighVoronoi.copy_volumes(vg.Integrator.Integral)
-                    #m2 = vg.Integrator.Integral.MESH
-                    #@test HighVoronoi.verify_vertex(pop!(m2.All_Verteces[1])...,m2.nodes,HighVoronoi.Raycast(m2.nodes))
+                    println("-------- 5  ---------------------------------------------------")
+                    m2 = vg.Integrator.Integral.MESH
+                    @test HighVoronoi.verify_vertex(pop!(m2.All_Verteces[1])...,m2.nodes,HighVoronoi.Raycast(m2.nodes))
+                    println("-------- 6  ---------------------------------------------------")
             
                     HighVoronoi.append!(vg.Integrator.Integral,VoronoiNodes(rand(5,100)))
                 #catch
                 #    b = i<=3
                 #end
-            #end
             return true                
         end
         @test test_2000()
