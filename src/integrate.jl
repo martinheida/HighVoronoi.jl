@@ -79,7 +79,7 @@ struct IntegrateData{T,VP}
 end
 
 function activate_data_cell(tree,_Cell,neigh)
-    tree.active .*= 0
+    tree.active .= false
     lxs=tree.size
     for n in neigh
         if n>lxs 
