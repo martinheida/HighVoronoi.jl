@@ -43,7 +43,7 @@ function periodize_mirrors(domain::Discrete_Domain, Integral::Voronoi_Integral, 
     mirrors=EmptyDictOfType(0=>[1])
     myshifts=BitVector(zeros(Int8,lp))
     for k in (lrs+1):length(Integral)
-        myshifts .= 0
+        myshifts .= false
         neigh=neighbors_of_cell(k,mesh,adjacents=true)
         for n in neigh
             if n in 1:lrs
@@ -57,7 +57,7 @@ function periodize_mirrors(domain::Discrete_Domain, Integral::Voronoi_Integral, 
                 break
             end
         end
-        b && (myshifts.=0)
+        b && (myshifts.=false)
         number_of_shifts=sum(myshifts)
         if number_of_shifts>0
             list=zeros(Int64,number_of_shifts)
@@ -305,7 +305,7 @@ function periodic_nodes(mesh::Voronoi_MESH,boundary::Boundary)
                 end
             end            
         end
-        this_boundary.*=periodic_boundary # only periodic boundaries are of interest
+        this_boundary .&= periodic_boundary # only periodic boundaries are of interest
         list=zeros(Int64,sum(this_boundary))
         count=1
         for k in 1:lb
@@ -396,8 +396,8 @@ function reflect_nodes(shifts,planes,nodes,mirrors,domain=nothing)
     taboo=BitVector(falses(numberOfPlanes))
     current_shift=BitVector(falses(numberOfPlanes))
     for (k,list) in mirrors
-        taboo.*=0
-        current_shift.*=0
+        taboo .= false
+        current_shift .= false
         c_old=count
         count=iteratively_reflected_points!(new_xs,reference,reference_shifts,current_shift,count,shifts,planes, nodes[k],list,1,taboo,k)
     end
