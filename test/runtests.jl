@@ -52,6 +52,10 @@ using SparseArrays
         println("-----------------------------------------------------------------")
         println("testing Voronoi Data and related stuff")
         println("-----------------------------------------------------------------")
+        function test_fast_poly()
+            VG = VoronoiGeometry(VoronoiNodes(rand(4,500)),cuboid(4,periodic=[]),integrator=HighVoronoi.VI_FAST_POLYGON,silence=true,integrate=true,integrand=x->[x[1],x[2]^2])
+            return abs(0.5-sum(VG.Integrator.Integral.bulk_integral)[1])<0.05
+        end
         function test_2000()
             # the following is necessary since unbounded domains can lead to a crash in very rare events
                 #try
@@ -81,7 +85,7 @@ using SparseArrays
             return true                
         end
         @test test_2000()
-
+        @test test_fast_poly()
         println("-----------------------------------------------------------------")
         println("testing Heuristic integrator in high dimensions")
         println("-----------------------------------------------------------------")
