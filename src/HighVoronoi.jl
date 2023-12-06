@@ -83,6 +83,7 @@ include("draw.jl")
 # integrate functions and volume
 include("integrate.jl")
 include("polyintegrator.jl")
+include("fastpolyintegrator.jl")
 #include("polyintegrator_general.jl")
 include("heuristic.jl")
 include("mcintegrator.jl")
@@ -166,4 +167,5 @@ export VI_HEURISTIC
 export VI_HEURISTIC_MC
 export VI_MONTECARLO
 export VI_POLYGON
+export VI_FAST_POLYGON
 end # module
