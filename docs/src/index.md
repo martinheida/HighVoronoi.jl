@@ -10,11 +10,21 @@ Documentation for [HighVoronoi](https://github.com/martinheida/HighVoronoi.jl). 
 - [QUICK START on FINITE VOLUME methods: Click here](@ref QuickFV) / [The ABSTRACT WORKFLOW is here](@ref workflowfv)  
 - [Toy file for testing numerical solver](@ref toyfile)
 
-News to version 1.1.0:
+### News to version 1.1.0:
 
 - improved algorithms for faster calculation of all features
 - 3D output
 - autmaticaly improving geometric quality of meshes if wanted by user: Nodes will be locally modified until voronoi nodes almost coincide with center of gravity of cells.
+
+
+### News to version 1.1.0:
+
+- further improved algorithms for faster calculation of all features
+- `VI_POLYGON` has been modified. I uses more memory but is more than twice as fast in higher dimensions.
+- A new `Integrator` has been implemented: `VI_FAST_POLYGON`, see [here](@ref integratoroverview). Even more precise than `VI_POLYGON`, very fast (50 secs for 500 nodes in 6D) but using a lot of memory.
+- Bug fixes for unbounded domains in the far field.
+
+### Preprints
 
 There is a recent [PREPRINT](http://www.wias-berlin.de/preprint/3041/wias_preprints_3041.pdf) where I outline the algorithm and provide a mathematical proof that it works. 
 
