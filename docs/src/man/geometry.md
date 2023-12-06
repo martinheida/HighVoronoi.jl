@@ -98,7 +98,8 @@ As discussed above there is a variety of integrators available to the user, plus
             volumetric samples (vor volume integrals only). It reuses the same set of directions `int3`-times to save memory allocation time.
             Standard setting is: `(1000,100,20)`.
 * `VI_POLYGON`: We use the polygon structure of the mesh to calculate the exact values of interface area and volume. The 
-        integral over functions is calculated using the values at the center, the verteces and linear interpolation between. Also this method is to be discussed in the anounced article by Heida, Sikorski, Weber.  
+        integral over functions is calculated using the values at the center, the verteces and linear interpolation between. Also this method is to be discussed in the anounced article by Heida, Sikorski, Weber. 
+* `VI_FAST_POLYGON`: Even more precise than `VI_POLYGON`, very fast (50 secs for 500 nodes in 6D) but using a lot of memory. It is advised to use this integrator if you insists on accuracy over performance and if you have large RAM (advised >=4GB of FREE RAM). On my personal machine with total 16GB RAM `VI_FAST_POLYGON` is by factor 15 faster than `VI_POLYGON` for 500 nodes in 6 dimensions and integrating $x\rightarrow(x_1,x_2^2)$.
 * `VI_HEURISTIC`: When this integrator is chosen, you need to provide a fully computed Geometry including volumes and interface areas.
         `VI_HEURISTIC` will then use this information to derive the integral values.
 * `VI_HEURISTIC_MC`: This combines directly `VI_MONTECARLO` calculations of volumes and interfaces and calculates integral values 
