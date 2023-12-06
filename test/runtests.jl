@@ -56,6 +56,19 @@ using SparseArrays
             VG = VoronoiGeometry(VoronoiNodes(rand(4,500)),cuboid(4,periodic=[]),integrator=HighVoronoi.VI_FAST_POLYGON,silence=true,integrate=true,integrand=x->[x[1],x[2]^2])
             return abs(0.5-sum(VG.Integrator.Integral.bulk_integral)[1])<0.05
         end
+        function test_fraud()
+            # make sure fraud vertex routine is called
+            println("testing fraud")
+            VoronoiGeometry(VoronoiNodes(rand(2, 300000)), Boundary(), silence=true,integrate = false)
+            dim = 2 
+            println("testing periodic/cubic 2D edge iterator")
+            VG = VoronoiGeometry( [VoronoiNode([0.5,0.5])], 
+                    periodic_grid = ( dimensions=ones(Float64,dim), 
+                        scale=0.25*ones(Float64,dim), repeat=4*ones(Int64,dim), 
+                        periodic=[], fast=true ) )
+            VG2 = VoronoiGeometry(VG.Integrator.Integral.MESH.nodes,cuboid(2,periodic=[]),silence=true,integrate = false)
+            return true
+        end
         function test_2000()
             # the following is necessary since unbounded domains can lead to a crash in very rare events
                 #try
@@ -86,6 +99,7 @@ using SparseArrays
         end
         @test test_2000()
         @test test_fast_poly()
+        @test test_fraud()
         println("-----------------------------------------------------------------")
         println("testing Heuristic integrator in high dimensions")
         println("-----------------------------------------------------------------")
