@@ -396,7 +396,7 @@ function correct_cast(r,r2,u,edge,generator,origin,searcher,cast_type::Raycast_B
     return r3
 end
 
-function verify_edge(sig,r,u,edge,searcher,origin,xs)
+#=function verify_edge(sig,r,u,edge,searcher,origin,xs)
     ortho = sum(s->abs(dot(u,xs[s]-xs[edge[1]])),sig) # should be almost zero
     check = sum(s->max(0.0,dot(u,xs[s]-xs[edge[1]])),origin) # should be zero
     check2 = sum(s->dot(u,xs[s]-xs[edge[1]])<-1E-10 ? 1 : 0 , origin)+length(sig)-length(origin) # should be zero  
@@ -414,6 +414,7 @@ end
 
 function display_ortho_process(sig,r,xs,searcher)
 end
+=#
 
 function verify_vertex(sig,r,xs,searcher)
     idx = sort!(_inrange(searcher.tree,r,norm(r-xs[sig[1]])*(1+1E-8)))
@@ -552,13 +553,13 @@ function identify_multivertex(searcher,sig,r,VVar = vertex_variance(sig,r,search
 
         vv = max(VVar, searcher.variance_tol*10) * 100*measure
 
-        add_multi_vert_inds(r,sig,idx,searcher,measure,vv)
+        #add_multi_vert_inds(r,sig,idx,searcher,measure,vv)
         #!verbose && println("Final: $sig")
         exception_identify_multivertex(searcher,r,sig,measure,idx)
     end
 end
 
-function add_multi_vert_inds(r,sig,idx,searcher,measure,vv)
+#=function add_multi_vert_inds(r,sig,idx,searcher,measure,vv)
     xs = searcher.tree.extended_xs
     buffer = searcher.visited
     count = 1
@@ -578,5 +579,5 @@ function add_multi_vert_inds(r,sig,idx,searcher,measure,vv)
     end    
 end
 
-
+=#
 

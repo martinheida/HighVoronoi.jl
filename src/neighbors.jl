@@ -356,11 +356,13 @@ function get_sup_edge(dc::IterativeDimensionChecker,edges,xs)
 end
 
 function getedge(idc::IterativeDimensionChecker,verteces,space_dim,xs,_Cell)
+    (sig,r)=pop!(verteces)
+    sig2,r2 = sig,r
     lv = length(verteces)
-    if lv<=1
-        return false, 0, 0
+    b = true
+    if lv==0
+        b=false
     else
-        (sig,r)=pop!(verteces)
         (sig2,r2)=pop!(verteces) # isempty(verteces) ? ([0],r) : pop!(verteces)
         nu = r2-r
         while length(verteces)>0
@@ -372,10 +374,8 @@ function getedge(idc::IterativeDimensionChecker,verteces,space_dim,xs,_Cell)
                 r2 = rr
             end
         end
-        push!(verteces,sig=>r)
-        return true, r, r2
     end
-    return false, 0, 0
+    return b, r, r2
 end
 
 

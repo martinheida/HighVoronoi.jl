@@ -13,7 +13,7 @@
 ####################################################################################################################################
 
 
-deleteat(sig, i) = deleteat!(copy(sig), i)
+#deleteat(sig, i) = deleteat!(copy(sig), i)
 
 
 
@@ -281,16 +281,6 @@ function fraud_vertex(dim,sig,r,lsig2,searcher,xs)
 end
 
 function increase_edgeview( edgeview, lsig, dim)
-    taboo=nothing
-    if edgeview[dim]<lsig && taboo!=nothing
-        edgeview[dim] += 1
-        while edgeview[dim]<=lsig && (taboo[edgeview[dim]])
-            edgeview[dim] += 1
-        end
-        edgeview[dim]<=lsig && (return true, dim)
-        edgeview[dim] = lsig
-        taboo .= 0
-    end 
     i = dim
     while ( i>1 && edgeview[i]==(lsig-(dim-i)) ) i=i-1 end
     
