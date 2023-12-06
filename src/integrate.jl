@@ -52,7 +52,7 @@ end
 
 _NeighborFinder(dim,x) = NeighborFinder(dim,x)#dim>=UseNeighborFinderDimension ? NeighborFinder(dim,x) : nothing
 
-struct IntegrateData{T,VP}
+struct IntegrateData{T,VP,TT}
     extended_xs::VP
     domain::Boundary
     size::Int64
@@ -65,17 +65,22 @@ struct IntegrateData{T,VP}
     counts::Vector{Int64}
     accepted::Vector{Bool}
     deprecated::Vector{Bool}
-    function IntegrateData(xs,dom)
-        dim = length(xs[1])
-        l=length(dom)
-        m=append!(copy(xs),Vector{typeof(xs[1])}(undef,l))
-        a=BitVector(zeros(Int8,l))
-        nf = NeighborFinder(dim,xs[1])
-        c = Vector{Int64}(undef,length(m))
-        a = Vector{Bool}(undef,length(m))
-        d = Vector{Bool}(undef,length(m))
-        return new{typeof(nf),typeof(m)}(m,dom,length(xs),a,Float64[],(Vector{Float64})[],length(xs[1]),nf,c,a,d)
-    end
+    buffer_data::TT
+end
+function IntegrateData(xs,dom,tt)
+    return _IntegrateData(xs,dom,0)
+end
+
+function _IntegrateData(xs,dom,tt)
+    dim = length(xs[1])
+    l=length(dom)
+    m=append!(copy(xs),Vector{typeof(xs[1])}(undef,l))
+    a=BitVector(zeros(Int8,l))
+    nf = NeighborFinder(dim,xs[1])
+    c = Vector{Int64}(undef,length(m))
+    a = Vector{Bool}(undef,length(m))
+    d = Vector{Bool}(undef,length(m))
+    return IntegrateData{typeof(nf),typeof(m),typeof(tt)}(m,dom,length(xs),a,Float64[],(Vector{Float64})[],length(xs[1]),nf,c,a,d,tt)
 end
 
 function activate_data_cell(tree,_Cell,neigh)
@@ -144,6 +149,8 @@ function integrate(Integrator; domain=Boundary(), relevant=1:(length(Integrator.
     _integrate(Integrator; domain=domain, calculate=relevant, iterate=modified) 
 end
 
+__integrate_getdata(I_data::Nothing,Integral,domain,Integrator) = IntegrateData(Integral.MESH.nodes,domain,Integrator) 
+__integrate_getdata(I_data,Integral,domain,Integrator) = I_data
 """
 Iterates integrate_cell over all elements of iterate. 
 It thereby passes the information on whether volume, areas, bulk- or surface integrals shall be calculated.
@@ -155,7 +162,7 @@ function _integrate(Integrator; domain=Boundary(), calculate=1:(length(Integrato
     position_0 = length(intro)+5
     vp_print(position_0-5," \u1b[0K")
     Integral=Integrator.Integral
-    data = typeof(I_data)!=Nothing ? I_data : IntegrateData(Integral.MESH.nodes,domain)
+    data = __integrate_getdata(I_data::Nothing,Integral,domain,Integrator)
 
     if length(TODO)==0 
         vp_print(position_0,"nothing to integrate")
@@ -275,6 +282,8 @@ function integrate_cell(vol::Bool,ar::Bool,bulk::Bool,inter::Bool,  _Cell, itera
     dfvb=data.float_vec_buffer
     dfvvb=data.float_vec_vec_buffer
 #    println(I.area[_Cell])
+    #@descend integrate(old_neighbors,_Cell,iterate, calculate, data,Integrator, ar ? I.area[_Cell] : dfvb , bulk ? I.bulk_integral[_Cell] : dfvb , inter ? I.interface_integral[_Cell] : dfvvb)
+    #error("")
     V=integrate(old_neighbors,_Cell,iterate, calculate, data,Integrator, ar ? I.area[_Cell] : dfvb , bulk ? I.bulk_integral[_Cell] : dfvb , inter ? I.interface_integral[_Cell] : dfvvb)
 #    println(I.area[_Cell])
     if (vol)
@@ -289,8 +298,8 @@ end
 ## Merge two Integrators.
 
 ####################################################################################################################
-merge_integrate_data(Integral,domain,I_data::Nothing) = IntegrateData(Integral.MESH.nodes,domain)
-merge_integrate_data(Integral,domain,I_data) = I_data
+merge_integrate_data(Integral,domain,I_data::Nothing,Integrator) = IntegrateData(Integral.MESH.nodes,domain,Integrator)
+merge_integrate_data(Integral,domain,I_data,Integrator) = I_data
 
 function merge_integrate(Integrator,Integrator2; domain=Boundary(), calculate=1:(length(Integrator.Integral)+length(domain)), iterate=1:(length(Integrator.Integral)), 
                     I_data=nothing, use1=x->true, compact=false, intro="") 
@@ -300,7 +309,7 @@ function merge_integrate(Integrator,Integrator2; domain=Boundary(), calculate=1:
     position_0 = length(intro)+5
     vp_print(position_0-5," \u1b[0K")
     Integral=Integrator.Integral
-    data = merge_integrate_data(Integral,domain,I_data) 
+    data = merge_integrate_data(Integral,domain,I_data,Integrator) 
 
     if length(TODO)==0 
         return Integrator, data

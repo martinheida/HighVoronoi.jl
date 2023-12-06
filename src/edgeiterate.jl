@@ -295,6 +295,13 @@ function reset(NF_::FastEdgeIterator,sig::Sigma,r,xs,_Cell,searcher,fstore::FEIS
     my_minimal = NF.active_nodes
     my_data = NF.index
 
+    #identify fraud indices far away from actual cloud
+    if dim==cdim && fraud_vertex(dim,sig,r,lsig,searcher,xs)
+        NF.index[EI_valid_rays] = 0
+        return false
+    end
+
+
     # local coordinates for potential active nodes
     if length(nu)>1
         for i in 1:dim
@@ -511,6 +518,7 @@ function update_edge(NF_::FastEdgeIterator)
             rotate(nu,i,dim)
         end
         for i in start_index:(dim-1)
+            my_minimal[i+1]==0 && (return false,NF.proto,0)
             nu[i] .= my_cone[my_minimal[i+1]]
             if abs(dot(nu[i],nu[dim]))<1.0E-12
                 #print("|")

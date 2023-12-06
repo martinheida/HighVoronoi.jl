@@ -50,6 +50,16 @@ function Integrator(mesh::Voronoi_MESH,type::Call_POLYGON;mc_accurate=(1000,100,
     return Polygon_Integrator(mesh,f,true) 
 end
 
+
+struct Call_FAST_POLYGON end
+const VI_FAST_POLYGON=Call_FAST_POLYGON()
+
+function Integrator(mesh::Voronoi_MESH,type::Call_FAST_POLYGON;mc_accurate=(1000,100,20),integral=nothing,integrand=nothing)
+    fb, fi, f = _integrator_function(integrand)
+    return Fast_Polygon_Integrator(mesh,f,true)
+end
+
+
 struct Call_MC end
 const VI_MONTECARLO=Call_MC()
 
@@ -65,6 +75,7 @@ function _integrator_function(integrand)
 end
 
 Integrator_Type(I::Polygon_Integrator) = VI_POLYGON
+Integrator_Type(I::Fast_Polygon_Integrator) = VI_FAST_POLYGON
 Integrator_Type(I::Montecarlo_Integrator) = VI_MONTECARLO
 Integrator_Type(I::Geometry_Integrator) = VI_GEOMETRY
 Integrator_Type(I::Heuristic_Integrator) = VI_HEURISTIC
@@ -83,7 +94,8 @@ const _VI__HEURISTIC=5
 const _VI__HEURISTIC_INTERNAL=6
 const _VI__HEURISTIC_CUBE=7
 const _VI__HEURISTIC_MC=8
-const _VI__MAX=_VI__HEURISTIC_MC
+const _VI__FAST_POLYGON=9
+const _VI__MAX=_VI__FAST_POLYGON
 
 function backup_Integrator(I,b)
     return I
@@ -93,7 +105,9 @@ function Integrator_Name(I)
     if typeof(I)<:Int
         if I==_VI__POLYGON
             return "POLYGON"
-        elseif I==_VI__MONTECARLO
+        elseif I==_VI__FAST_POLYGON
+                return "FAST_POLYGON"
+            elseif I==_VI__MONTECARLO
             return "MONTECARLO"
         elseif I==_VI__GEOMETRY
             return "GEOMETRY"
@@ -111,7 +125,9 @@ function Integrator_Name(I)
     end
     if (typeof(I)<:Polygon_Integrator)
         return "POLYGON"
-    elseif (typeof(I)<:Montecarlo_Integrator)
+    elseif (typeof(I)<:Fast_Polygon_Integrator)
+            return "FAST_POLYGON"
+        elseif (typeof(I)<:Montecarlo_Integrator)
         return "MONTECARLO"
     elseif (typeof(I)<:Geometry_Integrator)
         return "GEOMETRY"
@@ -131,6 +147,8 @@ end
 function Integrator_Number(I)
     if (typeof(I)<:Polygon_Integrator)
         return _VI__POLYGON
+    elseif (typeof(I)<:Fast_Polygon_Integrator)
+            return _VI__FAST_POLYGON
     elseif (typeof(I)<:Montecarlo_Integrator)
         return _VI__MONTECARLO
     elseif (typeof(I)<:Geometry_Integrator)
@@ -179,6 +197,8 @@ function Integrator(mesh::Voronoi_MESH,type=_VI__GEOMETRY;integrand=nothing,bulk
     end
     if type==_VI__POLYGON
         return Polygon_Integrator(mesh,f,true) 
+    elseif type==_VI__FAST_POLYGON
+            return Fast_Polygon_Integrator(mesh,f,true) 
     elseif type==_VI__HEURISTIC
         return Heuristic_Integrator(mesh,f,true) 
     elseif type==_VI__MONTECARLO

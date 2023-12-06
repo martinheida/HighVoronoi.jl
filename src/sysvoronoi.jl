@@ -218,19 +218,17 @@ end
 
 function systematic_explore_vertex(xs::Points,sig,r,_Cell,edgecount,mesh,queue,boundary,searcher,edgeIterator)
     k=0
+    dim = length(xs[1])
     for (edge,skip) in edgeIterator
         edge[1]!=_Cell && continue
-        if !haskey(edgecount,edge)
-            full_edge, u = get_full_edge(sig,r,edge,edgeIterator,xs)
-            println(verify_edge(full_edge,r,u,edge,searcher,sig,xs))
-            error("")
-        end
         info = edgecount[edge]
         k+=1
 #        print(info)
         info[2]!=0 && continue
         full_edge, u = get_full_edge(sig,r,edge,edgeIterator,xs)
         #@descend walkray(full_edge, r, xs, searcher, sig, u, edge )
+        #error("")
+        #@descend walkray(full_edge, r, xs, searcher, sig, u, edge ) # provide missing node "j" of new vertex and its coordinate "r" 
         #error("")
         sig2, r2, success = walkray(full_edge, r, xs, searcher, sig, u, edge ) # provide missing node "j" of new vertex and its coordinate "r" 
         
@@ -243,12 +241,10 @@ function systematic_explore_vertex(xs::Points,sig,r,_Cell,edgecount,mesh,queue,b
             continue
         end
         ##  TODO   TODO    TODO  
-
-        length(sig2)<=length(r) && continue
+        lsig2 = length(sig2)
+        lsig2<=length(r) && continue
         if !haskey(mesh, sig2)
-            #=if !verify_vertex(sig2,r2,xs,searcher)
-                error("Fehler 3")
-            end=#
+            fraud_vertex(dim,sig2,r2,lsig2,searcher,xs) && continue
             push!(queue, sig2 => r2)
             push!(mesh, sig2 => r2)
             queue_edges_OnFind(sig2,r2,searcher,_Cell,xs,edgecount)
@@ -258,6 +254,31 @@ function systematic_explore_vertex(xs::Points,sig,r,_Cell,edgecount,mesh,queue,b
     return k
 end
 
+function fraud_vertex(dim,sig,r,lsig2,searcher,xs)
+    if lsig2>2^dim 
+        if !verify_vertex(sig,r,xs,searcher)
+            return true
+        end
+        max_dist = 0.0
+        for k in 1:lsig
+            max_dist = max(max_dist,norm(r-xs[sig[k]]))
+        end
+        distance = 0.0
+        max_distance = 0.0
+        for k in 1:(lsig-1)
+            for i in (k+1):lsig
+                dd = norm(xs[sig[i]]-xs[sig[k]])
+                distance += dd
+                max_distance = max(max_distance,dd)
+            end
+        end
+        distance /= lsig*(lsig-1)/2
+        if max_distance/max_dist<0.001*lsig/2^dim || distance/max_dist<1000*searcher.plane_tolerance
+            return true
+        end
+    end
+    return false
+end
 
 function increase_edgeview( edgeview, lsig, dim)
     taboo=nothing

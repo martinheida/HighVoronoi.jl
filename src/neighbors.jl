@@ -194,7 +194,7 @@ function IterativeDimensionChecker(dim)
             FastEdgeIterator(dim),zeros(Int64,dim))
 end
 
-function reset(idc::IterativeDimensionChecker, neighbors,xs,_Cell,verteces)
+function reset(idc::IterativeDimensionChecker, neighbors,xs,_Cell,verteces,anyway=true)
     idc.trivial[1] = true
     length(xs[1])==2 && return 3
     dim = idc.dimension
@@ -206,6 +206,7 @@ function reset(idc::IterativeDimensionChecker, neighbors,xs,_Cell,verteces)
             idc.trivial[1] = false
         end
     end
+    idc.trivial[1] &= anyway
     if idc.trivial[1]
         return dim+1
     end
@@ -354,7 +355,7 @@ function get_sup_edge(dc::IterativeDimensionChecker,edges,xs)
     return r,r2,val
 end
 
-#=function getedge(idc::IterativeDimensionChecker,verteces,space_dim,xs,_Cell)
+function getedge(idc::IterativeDimensionChecker,verteces,space_dim,xs,_Cell)
     lv = length(verteces)
     if lv<=1
         return false, 0, 0
@@ -376,7 +377,6 @@ end
     end
     return false, 0, 0
 end
-=#
 
 
 

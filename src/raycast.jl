@@ -77,7 +77,10 @@ function descent(xs::Points, searcher::RaycastIncircleSkip, start)
     minimal_edge = zeros(Int64,dim+1)
     
     keep_searching = true
+    count = 0
     while keep_searching
+        count += 1
+        count == 10 && error("descent failed at node $start")
         sig = [start]
         r = xs[start]
         minimal_edge .= 0
@@ -86,7 +89,7 @@ function descent(xs::Points, searcher::RaycastIncircleSkip, start)
         try
             for k in 1:dim  # find an additional generator for each dimension
                 #println("$k ---------------------------------------------------- ")
-                u = randray(xs[minimal_edge[1:k]],map(i->view(searcher.vectors,:,i),1:(dim-1)))
+                u = randray(xs[minimal_edge[1:k]],map(i->view(searcher.vectors,:,i),1:(dim-1)),count,xs,start)
                 generator, t, r2 = raycast_des(sig, r, u, xs, searcher,0,sig,sig,Raycast_By_Descend())
                 b = false
                 if t == Inf
@@ -104,7 +107,6 @@ function descent(xs::Points, searcher::RaycastIncircleSkip, start)
                 identify_multivertex(searcher, sig, r, vertex_variance(view(minimal_edge,1:(k+1)),r,xs,k,view(searcher.ddd,1:(k+1))))
             end
         catch
-            rethrow()
             my_vv=1.0
         end
         my_vv>searcher.variance_tol && continue
@@ -139,6 +141,8 @@ function walkray(full_edge::Sigma, r::Point, xs::Points, searcher, sig, u, edge)
         !(sig[k] in full_edge) && break
     end
     Rest = sig[k]
+    #@descend raycast_des(full_edge, r, u, xs, searcher, Rest,edge,sig,Raycast_By_Walkray())
+    #error("")
     generator, t, r2 = raycast_des(full_edge, r, u, xs, searcher, Rest,edge,sig,Raycast_By_Walkray())
     exception_raycast(t,r,sig,edge,u,searcher)
     if t==0.0 
@@ -186,7 +190,20 @@ function randray(xs::Points)
     return u
 end=#
 
-function randray(xs::Points,v)
+function rand_oriented(dim,base,start)
+    ret = zeros(Float64,dim)
+    elements = min(50,length(base))
+    for i in 1:elements
+        ret .+= base[i]
+    end 
+    ret ./= elements
+    ret .-= base[start]
+    normalize!(ret)
+    ret .+= 0.1 .* normalize!(randn(dim))
+    return ret
+end
+
+function randray(xs::Points,v,count::Int64=0,base=xs,start=1)
     k = length(xs)
     d = length(xs[1])
 
@@ -203,7 +220,7 @@ function randray(xs::Points,v)
         normalize!(v[i])
     end
 
-    u = randn(d)
+    u = count<8 ? randn(d) : rand_oriented(dim,base,start)
     for i in 1:k-1
         u .-= dot(u, v[i]) .* v[i]
     end
@@ -238,7 +255,7 @@ function walkray_correct_vertex(_r, _sig, searcher, minimal_edge, new_generator)
         end
 
         exception_walray_correct_vertex(b,vv,searcher,sig,r)
-        
+        #r2 = _correct_vertex(sig,searcher.tree.extended_xs,searcher,_r)
         if vv>searcher.variance_tol && vv<searcher.break_tol && searcher.correcting
             r = _correct_vertex(sig,searcher.tree.extended_xs,searcher,r)
             vv = vertex_variance(sig,r,searcher.tree.extended_xs,dim,searcher.ddd)
@@ -286,7 +303,10 @@ function _correct_vertex(sig,xs,searcher,x)
             searcher.symmetric[i,j]=searcher.symmetric[j,i]
         end
     end
-    return SVector{dim}(cg!(searcher.rhs,searcher.symmetric,searcher.rhs_cg))
+    solution1 = 0*x
+    cg!(searcher.rhs,searcher.symmetric,searcher.rhs_cg,log=false)
+    solution2 = solution1 + searcher.rhs
+    return solution2
 end
 
 function vertex_variance(sig,r,xs::Points,dimension=length(xs[1]),distances=zeros(Float64,dimension+1))
@@ -371,9 +391,9 @@ function correct_cast(r,r2,u,edge,generator,origin,searcher,cast_type::Raycast_B
 end
 
 function correct_cast(r,r2,u,edge,generator,origin,searcher,cast_type::Raycast_By_Walkray)
-    r2,success,vv = walkray_correct_vertex(r2, origin, searcher, edge, generator)
+    r3,success,vv = walkray_correct_vertex(r2, origin, searcher, edge, generator)
     !success && (r2=r)
-    return r2
+    return r3
 end
 
 function verify_edge(sig,r,u,edge,searcher,origin,xs)
@@ -404,9 +424,9 @@ function verify_vertex(sig,r,xs,searcher)
     for i in eachindex(idx)
         b &= idx[i] in sig
     end
-    !b && println("  $sig and $idx not identical!")
+    #!b && println("  $sig and $idx not identical!")
     b &= vertex_variance(sig,r,xs,length(sig)-1)<1E-20
-    !b && println("  var_sig = $(vertex_variance(sig,r,xs,length(sig)-1)),  var_idx = $(vertex_variance(idx,r,xs,length(idx)-1))")    
+    #!b && println("  var_sig = $(vertex_variance(sig,r,xs,length(sig)-1)),  var_idx = $(vertex_variance(idx,r,xs,length(idx)-1))")    
     dim = length(xs[1])
     
     AA = zeros(Float64,length(sig),dim)
@@ -415,10 +435,10 @@ function verify_vertex(sig,r,xs,searcher)
         end
         Q,R = qr(AA)
         b&=abs(R[end,end])>1E-8
-    if !b
+    #=if !b
             println(my_dim,base)
-    end    
-    !b && println("orthogonality & dimensionality: $u")
+    end=#    
+#    !b && println("orthogonality & dimensionality: $u")
     return b
 end
 
@@ -435,6 +455,10 @@ function raycast_des(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,e
 
     x = xs[i]
     t = get_t(r,u,x0,x) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
+    vvv = r+t*u
+    i, t = _nn(searcher.tree, vvv, skip)
+    x = xs[i]
+    t = get_t(r,u,x0,x) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
     _r = r+t*u
     measure = maximum(norm(xs[s]-_r) for s in sig)
     old_measure = measure
@@ -444,7 +468,8 @@ function raycast_des(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,e
     lidss = length(idss)
 #    println("1: ",map(k->k<max_int ? k : 0,idss))
     lidss==0 && (return 0, Inf64, r)
-    ts = map(i-> i∈origin ? 0.0 : get_t(r,u,x0,xs[i]) ,idss)
+    ts = view(searcher.ts,1:lidss)
+    map!(i-> i∈origin ? 0.0 : get_t(r,u,x0,xs[i]) ,ts, idss)
     k=0
     while k<lidss
         k += 1

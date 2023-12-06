@@ -218,7 +218,7 @@ function cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,domain,my_int
     Integrator.Integral.neighbors[1] = neighbors_of_cell(1,Integrator.Integral.MESH)
     get_volumes = fast && length(Integrator.Integral.volumes)>0
     #data = (fast && integrand!=nothing) || !fast ? IntegrateData(Integrator.Integral.MESH.nodes,domain) : nothing
-    data = IntegrateData(Integrator.Integral.MESH.nodes,domain) 
+    data = IntegrateData(Integrator.Integral.MESH.nodes,domain,Integrator) 
     
     # data for first cell:
     dim = length(xs[1])

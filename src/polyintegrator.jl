@@ -39,6 +39,7 @@ function prototype_interface(Integrator::Polygon_Integrator)
     return 0.0*(typeof(Integrator._function)!=Nothing ? Integrator._function(Integrator.Integral.MESH.nodes[1]) : Float64[])
 end
 
+
 struct PolyEdge{T}
     r1::T
     r2::T
@@ -103,6 +104,7 @@ function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Polyg
     # do the integration
     I=Integrator
     taboo = zeros(Int64,dim)
+    #typeof(data.buffer_data)==Int64 && error("fehler")
     iterative_volume(I._function, I.bulk, _Cell, V, bulk_inte, ar, inter_inte, dim, neigh, 
                 _length,verteces,verteces2,emptydict,xs[_Cell],empty_vector,all_dd,all_determinants,calculate,Integral,xs,taboo,I.iterative_checker)
 

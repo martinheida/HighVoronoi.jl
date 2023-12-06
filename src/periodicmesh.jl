@@ -346,7 +346,7 @@ function PeriodicVoronoiGeometry(matrix_data::Matrix,dispatch_resolve; silence=f
         Integrator2 = integrand!=nothing && my_integrator!=VI_GEOMETRY ? HighVoronoi.Integrator(Integrator.Integral.MESH,VI_HEURISTIC_INTERNAL,integrand=integrand,mc_accurate=mc_accurate,integral=Integrator.Integral) : nothing
         search = RaycastParameter(search_settings,(domain=extended_cube,))
         searcher = Raycast(xs; search...)
-        I_data = IntegrateData(xs, extended_cube)
+        I_data = IntegrateData(xs, extended_cube,Integrator)
         affected = BitVector(zeros(Int8,length(xs)+length(cube)))
         #affected[1:number_of_nodes] .= 1
         affected[(length(xs)+1):((length(xs)+length(cube)))] .= true
