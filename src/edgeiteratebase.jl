@@ -50,8 +50,11 @@ function General_EdgeIterator(_sig,r,_Cell,EI::General_EdgeIterator{S}) where {S
     end
 end
 
-function General_EdgeIterator(dim)
+function General_EdgeIterator(dim::Int)
     return General_EdgeIterator(MVector{dim+1,Int64}(zeros(Int64,dim+1)),dim+1,0,SVector{dim+1,Int64}(zeros(Int64,dim+1)))
+end
+function General_EdgeIterator(x::Point)
+    return General_EdgeIterator(MVector{length(x)+1,Int64}(zeros(Int64,length(x)+1)),length(x)+1,0,SVector{length(x)+1,Int64}(zeros(Int64,length(x)+1)))
 end
 
 
@@ -86,6 +89,18 @@ function get_EdgeIterator(sig,r,searcher,_Cell,xs,O::OnQueueEdges)
         my_iterator = searcher.edgeiterator2
         fei = reset(get!(searcher.FEIStorage_global,sig,FEIStorage(sig,r)))
         HighVoronoi.reset(my_iterator,sig,r,searcher.tree.extended_xs,_Cell,searcher,fei)
+        return my_iterator
+    end
+end
+
+function get_EdgeIterator(sig,r,searcher,_Cell,xs,neighbors) # special version for fast_polygon
+    if (length(sig)==length(r)+1)
+        return General_EdgeIterator(sig,r,_Cell,searcher.general_edgeiterator)
+    else
+        my_iterator = searcher.fast_edgeiterator
+        fei = reset(searcher.fei,sig,_Cell,neighbors,searcher.sig_neigh_iterator)
+        println("    $(fei.valid_nodes), $(fei.active_nodes)")
+        HighVoronoi.reset(my_iterator,sig,r,xs,_Cell,nothing,fei) # `nothing` makes sure that `fraud_vertex` will not error 
         return my_iterator
     end
 end

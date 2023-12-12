@@ -352,7 +352,7 @@ function neighbors_of_cell_new(_Cells,mesh,condition = r->true; adjacents=true, 
     return neighbors
 end
 
-
+#=
 """
     adjacents_of_cell(_Cell, mesh, condition = r->true)
 
@@ -388,6 +388,7 @@ function adjacents_of_cell(_Cell, mesh, condition = r->true)
     sort!(neighbors)
     return resize!(neighbors, findfirst(x->(x>typemax(Int64)-1),neighbors)-1)
 end
+=#
 
 ###############################################################################################################
 

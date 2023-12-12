@@ -26,12 +26,28 @@ end
 function integrate(xs,c,a,b,s,I::Geometry_Integrator)
 end
 
+decreases_neigh = 0
+
 function integrate_cell(vol::Bool,ar::Bool,bulk::Bool,inter::Bool,  _Cell::Int, iterate, calculate, data, Integrator::Geometry_Integrator)
     I = Integrator.Integral
     #print("$_Cell : $(length(I.MESH.All_Verteces[_Cell])+length(I.MESH.Buffer_Verteces[_Cell])), ")
     adj = neighbors_of_cell(_Cell,I.MESH,adjacents=true)
     activate_data_cell(data,_Cell,adj)
+#    lneigh1 = length(adj)
+    #=xs = data.extended_xs
+    extended_xs=xs
+    NFnew = NewNeighborFinder(length(xs[1]),xs[1])
+    mesh = I.MESH
+    reset(NFnew,adj,Iterators.flatten((mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell])),length(mesh.All_Verteces[_Cell])+length(mesh.Buffer_Verteces[_Cell]),data.extended_xs[_Cell])
+    neigh2 =     correct_neighbors(NFnew,copy(adj),xs=extended_xs,_Cell=_Cell)
+    reset(NFnew,adj,Iterators.flatten((mesh.All_Verteces[_Cell],mesh.Buffer_Verteces[_Cell])),length(mesh.All_Verteces[_Cell])+length(mesh.Buffer_Verteces[_Cell]),data.extended_xs[_Cell],false)
+    neigh3 =     correct_neighbors(NFnew,copy(adj),xs=extended_xs,_Cell=_Cell)
+    =#
     I.neighbors[_Cell] = neighbors_of_cell(_Cell,I.MESH,extended_xs=data.extended_xs,edgeiterator=data.NFfind, neighbors=adj)
+    #println("$(length(neigh2)), $(length(neigh3)), $(length(adj))")
+    #_Cell == 10 && error("")
+#    lneigh2 = length(I.neighbors[_Cell])
+#    HighVoronoi.decreases_neigh += lneigh2<lneigh1 ? 1 : 0 
 end
 
 

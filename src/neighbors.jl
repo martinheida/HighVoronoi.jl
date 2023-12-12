@@ -1,3 +1,140 @@
+#=struct NewNeighborFinderIterator
+    positions::MVector{2,Int64}
+    lengths::MVector{2,Int64}
+    lists::Vector{Vector{Int64}}
+end
+
+NewNeighborFinderIterator() = NewNeighborFinderIterator(MVector{2,Int64}([0,0]),MVector{2,Int64}([0,0]),[Int64[],Int64[]])
+NewNeighborFinderIterator(sig,neigh) = NewNeighborFinderIterator(MVector{2,Int64}([0,0]),MVector{2,Int64}([length(sig),length(neigh)]),[sig,neigh])
+function reset(iterator::NewNeighborFinderIterator,sig,neigh)
+    iterator.lists[1] = sig
+    iterator.lists[2] = neigh
+    iterator.positions[1] = 0
+    iterator.positions[2] = 0
+    iterator.lengths[1] = length(sig)
+    iterator.lengths[2] = length(neigh)
+    return iterator
+end
+
+
+struct NewNeighborFinder{T,TT}
+    adjacents::Vector{Int64}
+    broken::BitVector
+    local_basis::Vector{T}
+    origins::Vector{TT}
+    number_of_vertices::Vector{Int64}
+    iterator::NewNeighborFinderIterator
+end
+
+function NewNeighborFinderIterator(NF::NewNeighborFinder,sig,neigh)
+    return reset(NF.iterator,sig,neigh)
+end
+
+function Base.iterate(NF::NewNeighborFinderIterator, state=1)
+    b = false
+    pos = NF.positions
+    le = NF.lengths
+    sig = NF.lists[1]
+    neigh = NF.lists[2]
+    pos[2] +=1
+    while pos[1]<le[1] # iterate over sig
+        pos[1] += 1
+        while pos[2]<=le[2] && neigh[pos[2]]<sig[pos[1]]
+            pos[2] += 1
+        end
+        if pos[2]>le[2] 
+            b=false
+            break
+        elseif neigh[pos[2]]==sig[pos[1]]
+            b=true
+            break
+        else
+        end
+    end
+    return b ? ( (pos[1],pos[2]), state+1 ) : nothing
+end
+
+function NewNeighborFinder(dim,proto)
+    adj = Vector{Int64}(undef,2^length(proto))
+    broken = falses(2^length(proto))
+    local_basis = Vector{Vector{MVector{length(proto),Float64}}}(undef,2^length(proto))
+    for i in 1:2^length(proto)
+        local_basis[i] = empty_local_Base(proto)
+    end
+    origins = Vector{MVector{length(proto),Float64}}([MVector{length(proto)}(zeros(Float64,length(proto))) for _ in 1:2^length(proto)])
+    nov = Vector{Int64}(undef,2^length(proto))
+    NNFI = NewNeighborFinderIterator(MVector{2,Int64}([0,0]),MVector{2,Int64}([0,0]),Vector{Vector{Int64}}(undef,2))
+    return NewNeighborFinder(adj,broken,local_basis,origins,nov,NNFI)
+end
+
+
+function reset(NF::NewNeighborFinder,neighbors,iterator,li,center,modus=true)
+    mylength = length(NF.number_of_vertices)
+    newlength = length(neighbors)
+    if newlength>mylength
+        resize!(NF.adjacents,newlength)
+        resize!(NF.broken,newlength) 
+        resize!(NF.local_basis,newlength)
+        resize!(NF.origins,newlength) 
+        for i in (mylength+1):newlength 
+            NF.local_basis[i] = empty_local_Base(NF.origins[1])
+            NF.origins[i] = MVector{length(center)}(zeros(Float64,length(center)))
+        end
+        resize!(NF.number_of_vertices,newlength)
+        end
+    view(NF.broken,1:newlength) .= true
+    view(NF.number_of_vertices,1:newlength) .= 0
+    view(NF.adjacents,1:newlength) .= 1 #neighbors
+    #view(NF.adjacents,(1+newlength):mylength) .= 0
+    for i in 1:newlength
+        NF.origins[i] .= 0.0
+    end
+
+    for (sig,r) in iterator
+        if length(sig)==(length(center)+1) && modus
+            for (_,b) in NewNeighborFinderIterator(NF,sig,neighbors)
+                NF.broken[b] = false
+            end
+        else
+            for (_,b) in NewNeighborFinderIterator(NF,sig,neighbors)
+                !NF.broken[b] && continue
+                NF.origins[b] .+= r
+                NF.number_of_vertices[b] += 1
+            end
+        end
+    end
+    for i in 1:newlength
+        NF.origins[i] ./= NF.number_of_vertices[i]
+    end
+
+    for (sig,r) in iterator
+        for (_,b) in NewNeighborFinderIterator(NF,sig,neighbors)
+            !NF.broken[b] && continue
+            base = NF.local_basis[b]
+            c_dim = NF.adjacents[b]
+            base[c_dim] .= r .- NF.origins[b]
+            normalize!(base[c_dim])
+            for kk in 1:(c_dim-1)
+                base[c_dim] .-= base[kk] .* dot(base[kk],base[c_dim])
+                base[c_dim] .-= base[kk] .* dot(base[kk],base[c_dim])
+            end
+            _norm = norm(base[c_dim])
+            if _norm>1.0E-4
+                normalize!(base[c_dim])
+                NF.adjacents[b] += 1
+                NF.broken[b] = c_dim<length(r)-1
+            end
+        end
+    end
+
+end
+
+function correct_neighbors(nf::NewNeighborFinder,neigh;xs=nothing,_Cell=0)
+
+    return deleteat!(neigh,view(nf.broken,1:length(neigh)))
+end
+=#
+
 struct NeighborFinder{M,VM,T}
     dimension::Int64
     candidates::Vector{Int64}
@@ -14,10 +151,15 @@ end
 
 DimNeighborFinder{S} = NeighborFinder{S,SVector{S,Float64}}
 
-function empty_local_Base(dim)
+function empty_local_Base(dim::Int)
     base = Vector{MVector{dim,Float64}}([MVector{dim}(zeros(Float64,dim)) for _ in 1:dim])
     #base[1][1] = 1.0
     #println(base)
+    return base
+end
+
+function empty_local_Base(vec::AbstractVector{Float64})
+    base = Vector{MVector{length(vec),Float64}}([MVector{length(vec)}(zeros(Float64,length(vec))) for _ in 1:length(vec)])
     return base
 end
 
@@ -195,6 +337,7 @@ function IterativeDimensionChecker(dim)
 end
 
 function reset(idc::IterativeDimensionChecker, neighbors,xs,_Cell,verteces,anyway=true)
+    
     idc.trivial[1] = true
     length(xs[1])==2 && return 3
     dim = idc.dimension
@@ -224,8 +367,8 @@ function reset(idc::IterativeDimensionChecker, neighbors,xs,_Cell,verteces,anywa
         end
         lidc = ln
     end
-    idc.neighbors[1:ln] .= neighbors
-    idc.neighbors[(ln+1):lidc] .= 0
+    view(idc.neighbors,1:ln) .= neighbors
+    view(idc.neighbors,(ln+1):lidc) .= 0
     for i in 1:ln
         idc.local_cone[i] .=  xs[neighbors[i]] .- xs[_Cell]
         normalize!(idc.local_cone[i])
@@ -327,6 +470,13 @@ function get_sup_edge(dc::IterativeDimensionChecker,edges,xs)
         println()
         append!(sig,ir)
         append!(sig,sig2)=#
+        #=if pe.r1!=pe.r2
+        differ = pe.r1-pe.r2
+        ndiffer = norm(differ)
+        if abs(abs(dot(differ,nu))-ndiffer)>ndiffer*1.0E-4
+            print("+")
+        end
+        end=#
         rr = pe.r1
         if dot(rr-r,nu)<0
             r=rr
@@ -339,6 +489,13 @@ function get_sup_edge(dc::IterativeDimensionChecker,edges,xs)
         elseif dot(rr-r2,nu)>0
             r2 = rr
         end
+        #=differ = r-r2
+        differ = differ - nu * dot(nu,differ)
+        ndiffer = norm(differ)
+        if ndiffer>1.0E-4
+            print("+")
+        end=#
+ 
         #=print("    ")
         for k in sig2
             print("$(round(dot((xs[k]-xs[sig2[1]]),nu)))  ")
@@ -364,16 +521,6 @@ function getedge(idc::IterativeDimensionChecker,verteces,space_dim,xs,_Cell)
         b=false
     else
         (sig2,r2)=pop!(verteces) # isempty(verteces) ? ([0],r) : pop!(verteces)
-        nu = r2-r
-        while length(verteces)>0
-            println("|")
-            s,rr = pop!(verteces)
-            if dot(rr-r,nu)<0
-                r=rr
-            elseif (rr-r2,nu)>0
-                r2 = rr
-            end
-        end
     end
     return b, r, r2
 end

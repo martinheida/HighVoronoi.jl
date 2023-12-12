@@ -231,7 +231,6 @@ function systematic_explore_vertex(xs::Points,sig,r,_Cell,edgecount,mesh,queue,b
         #@descend walkray(full_edge, r, xs, searcher, sig, u, edge ) # provide missing node "j" of new vertex and its coordinate "r" 
         #error("")
         sig2, r2, success = walkray(full_edge, r, xs, searcher, sig, u, edge ) # provide missing node "j" of new vertex and its coordinate "r" 
-        
         #TODO: Bitte ändern!!
         edgecount[edge] = (info[1],_Cell)
 

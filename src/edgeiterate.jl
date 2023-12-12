@@ -56,6 +56,24 @@ function reset(f::FEIStorage)
     return f
 end
 
+function reset(fei::FEIStorage,sig,_Cell,neighbors,sig_neigh_iterator)
+    reset(sig_neigh_iterator,sig,neighbors)
+    lsig = length(sig)
+    resize!(fei.free_nodes,lsig)
+    resize!(fei.valid_nodes,lsig)
+    fei.free_nodes .= false
+    fei.valid_nodes .= false
+    for (a,b) in sig_neigh_iterator
+        fei.valid_nodes[a] = true
+    end
+    first_index = findfirstassured(_Cell,sig)
+    fei.index[5] = _Cell
+    view(fei.index,1:4) .= 0
+    _swap(1,first_index,fei.valid_nodes)
+    fei.active_nodes[1] = 1
+    return fei
+end
+
 struct FastEdgeIterator{T}
     iterators::T
     ray_tol::Float64
@@ -66,7 +84,6 @@ struct FastEdgeIterator{T}
         for i in 1:(dim-1)
             its[i] = FEIData(dim,dim-i+1)
         end
-#        println(typeof(its))
         return new{typeof(its)}(its,tol)
     end
 end
@@ -226,17 +243,14 @@ function reset(NF_::FastEdgeIterator,_first,sig,searcher,r)
     reset(NF_,sig,r,searcher.tree.extended_xs,sig[_first],searcher)
 end
 
+fraud_vertex(dim,sig,r,lsig,searcher::Nothing,xs) = false
 
 function reset(NF_::FastEdgeIterator,sig::Sigma,r,xs,_Cell,searcher,fstore::FEIStorage=FEIStorage(sig,r),nu=0,old_cone=0,step=1;allrays = false, _Cell_first=false)
     dim = NF_.iterators[1].dim
     NF = NF_.iterators[step]
     cdim = NF.current_dim
 
-    _Cell_entry=1
-    while sig[_Cell_entry]!=_Cell #avoids dispatch problems arising from findfirst()
-        _Cell_entry += 1
-    end
-#    _Cell_entry = findfirst(x->x==_Cell,sig)
+    _Cell_entry = findfirstassured(_Cell,sig)
 
     lsig = length(sig)
 
@@ -296,7 +310,7 @@ function reset(NF_::FastEdgeIterator,sig::Sigma,r,xs,_Cell,searcher,fstore::FEIS
     my_data = NF.index
 
     #identify fraud indices far away from actual cloud
-    if dim==cdim && fraud_vertex(dim,sig,r,lsig,searcher,xs)
+    if dim==cdim && fraud_vertex(dim,sig,r,lsig,searcher,xs) # see particular fraud_vertex definition above
         NF.index[EI_valid_rays] = 0
         return false
     end
@@ -402,11 +416,11 @@ function reset(NF_::FastEdgeIterator,sig::Sigma,r,xs,_Cell,searcher,fstore::FEIS
             NF.valid_nodes[first_entry] = false
         end
         if dim==cdim
-            fstore.index[5]=_Cell
-            transfer_values!(fstore.index,NF.index,4)
-            transfer_values!(fstore.free_nodes,NF.free_nodes,lsig)
+            fstore.index[5]=_Cell # important!
+            transfer_values!(fstore.index,NF.index,4) # actually not necessary to store any more
+            transfer_values!(fstore.free_nodes,NF.free_nodes,lsig) # actually not necessary to store any more
             transfer_values!(fstore.valid_nodes,NF.valid_nodes,lsig)
-            transfer_values!(fstore.active_nodes,NF.active_nodes,dim)        
+            transfer_values!(fstore.active_nodes,NF.active_nodes,dim)  # ...[1]=first_entry, rest will be nullified later      
         end
     else
         transfer_values!(NF.index,fstore.index,4)
