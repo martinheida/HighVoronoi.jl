@@ -215,7 +215,7 @@ function RaycastIncircleSkip(xs::Points,recursive,variance_tol,break_tol,node_to
     lxs=length(xs)
     dim=length(xs[1])
     periodic_searcher = dim==2 ? 0 : periodic_searcher
-    z1d_1=zeros(Float64,lxs)
+    z1d_1=zeros(Float64,lxs+length(dom))
     z1d_2=zeros(Float64,dim)
     z1d_3=zeros(Float64,dim)
     z1d_4=zeros(Float64,dim+1)
