@@ -458,8 +458,10 @@ function raycast_des(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,e
     t = get_t(r,u,x0,x) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
     vvv = r+t*u
     i, t = _nn(searcher.tree, vvv, skip)
-    x = xs[i]
-    t = get_t(r,u,x0,x) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
+    if i!=0
+        x = xs[i]
+        t = get_t(r,u,x0,x) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
+    end
     _r = r+t*u
     measure = maximum(norm(xs[s]-_r) for s in sig)
     old_measure = measure
