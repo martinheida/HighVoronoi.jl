@@ -44,10 +44,6 @@ function VoronoiKDTree(VG::VoronoiGeometry;restrict_to_periodic=true)
 end
 
 function nn_id(vt::VoronoiKDTree,x)
-    println(NearestNeighbors.nn(vt.tree,x)[1])
-    println()
-    println(vt.offset)
-    println(vt.references)
     return VoronoiDataShift(NearestNeighbors.nn(vt.tree,x)[1],vt.offset,vt.references)
 end
 
@@ -59,11 +55,7 @@ function __StepFunction(u,tree,domain,BC,project)
     if BC!=nothing
         return x->x in domain ? u[nn_id(tree,x)] : BC(project ? project(x,domain) : x)
     else
-            return x->begin 
-                    println(nn_id(tree,x))
-                    println(u)
-                    u[nn_id(tree,x)]
-                    end            
+            return x->u[nn_id(tree,x)]            
     end    
 end
 
