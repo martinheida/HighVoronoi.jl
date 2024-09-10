@@ -6,7 +6,7 @@
 
 ## Refinement using `refine!`
 
-The intention of `refine!` is to refine a given mesh in a region where the users wants a more detailed view at a later stage of either the same code or built upon calculated and stored data.
+The intention of `refine!` is to refine a given mesh in a region where the users wants a more detailed view at a later stage of either the same code or built upon calculated and stored data. It can use its own `search_settings` that are knwon from `VoronoiGeometry(...)`. In particular, the Voronoi computation can be parallelized. 
 
 ```julia
     VG = VoronoiGeometry(VoronoiNodes(rand(5,1000),cuboid(5)))
@@ -15,7 +15,7 @@ The intention of `refine!` is to refine a given mesh in a region where the users
     ## ...
     ## Now we want to refine the geometry with additional VoronoiNodes xs
 
-    refine!(VG,xs,update=true)
+    refine!(VG,xs,update=true, search_settings=(method=RCNonGeneral,)) # original 'search_settings' of VG like `method`or `threading` can be temporarily overwritten 
 ```
 
 !!! hint "On `update`..."

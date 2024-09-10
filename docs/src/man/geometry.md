@@ -107,7 +107,14 @@ As discussed above there is a variety of integrators available to the user, plus
 
 It is important to have in mind that the polygon-integrator will be faster in low dimensions, whereas the Montecarlo integrator will outperform from 5 dimensions and higher. However, when volumes and integrals are to be calculated in high dimensions, the `VI_HEURISTIC_MC` is highly recommended, as it works with much less function evaluations than the `VI_MONTECARLO`. 
 
-## Storage
+## Storage: JLD2
+
+you may use JLD2 to directly write a `VoronoiGeometry` or `VoronoiData` object to a file. It will be made sure that storing and reading data will be downward compatible in future. 
+
+
+## Storage: deprecated solution
+
+The following solution is still available for grids that have been created with `ClassicVertexStorage()`. However, it is not advised to use them.
 
 ```@docs
 write_jld()
