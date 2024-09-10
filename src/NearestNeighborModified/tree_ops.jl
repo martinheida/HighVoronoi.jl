@@ -102,7 +102,7 @@ bb = true
 i=0
 for z in get_leaf_range(tree.tree_data, index)
 idx = tree.reordered ? z : tree.indices[z]
-dist_d = evaluate(tree.metric, tree.data[idx], point, do_end)
+dist_d = myevaluate(tree.metric, tree.data[idx], point, do_end)
 #        dot(tree.data[idx]-offset,leftright)>0.0 && error("")
 bb &= dot(u,tree.data[idx])<=c
 i+=1
@@ -124,7 +124,7 @@ end
         @inbounds tiz = tree.indices[z]
         idx = tree.reordered ? z : tiz
         x_new = tree.data[idx]
-        dist_d = evaluate(tree.metric, x_new, data.new_r, do_end)
+        dist_d = myevaluate(tree.metric, x_new, data.new_r, do_end)
         correction = data.dist_new_r_x0_2 * 1000 * data.plane_tolerance
         if dist_d <= data.dist_new_r_x0_2 + correction
             HighVoronoi.skip_nodes_on_search(data,x_new,tiz,dist_d,HighVoronoi.staticfalse)
@@ -141,7 +141,7 @@ end
     do_end::Bool, skip::F) where {F}
 for z in get_leaf_range(tree.tree_data, index)
 idx = tree.reordered ? z : tree.indices[z]
-dist_d = evaluate(tree.metric, tree.data[idx], point, do_end)
+dist_d = myevaluate(tree.metric, tree.data[idx], point, do_end)
 if dist_d <= best_dists[1]
 if skip(tree.indices[z])
 continue
@@ -167,7 +167,7 @@ end
     count = 0
     for z in get_leaf_range(tree.tree_data, index)
         idx = tree.reordered ? z : tree.indices[z]
-        dist_d = evaluate(tree.metric, tree.data[idx], point, do_end)
+        dist_d = myevaluate(tree.metric, tree.data[idx], point, do_end)
         if dist_d <= r
             count += 1
             idx_in_ball !== nothing && push!(idx_in_ball, idx)

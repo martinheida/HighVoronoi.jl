@@ -33,5 +33,5 @@ end
 
 function myevaluate(d::Distances.PreMetric, a::AbstractVector,
                             b::AbstractVector, ::Bool)
-    myevaluate(d, a, b)
+    evaluate(d, a, b)
 end
