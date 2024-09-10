@@ -37,33 +37,41 @@ struct Montecarlo_Integrator{II,A,T,TT}
     directions::A
     gamma::Float64
     cycle::Vector{Int64}
+    heuristic::Bool
     # If i!=nothing, then area has to be true. Otherwise values are taken as given
 end
-function Montecarlo_Integrator(I::Voronoi_Integral, b, i; nmc_bulk=100, nmc_interface=1000, cal_area=true, recycle=20) 
-    return Montecarlo_Integrator(I, b, i, nmc_bulk, nmc_interface, recycle, typeof(i)!=Nothing ? true : cal_area, new_directions!(Vector{typeof(I.MESH.nodes[1])}(undef,nmc_interface),length(I.MESH.nodes[1])),gamma(1+length(I.MESH.nodes[1])/2),[1])
+function Montecarlo_Integrator(I::HVI, b, i; nmc_bulk=100, nmc_interface=1000, cal_area=true, recycle=20,heuristic=false) where HVI<:HVIntegral
+    enable(I,volume=true,integral=typeof(b)!=Nothing)
+    _nodes = nodes(mesh(I))
+    return Montecarlo_Integrator(I, b, i, nmc_bulk, nmc_interface, recycle, typeof(i)!=Nothing ? true : cal_area, new_directions!(Vector{typeof(_nodes[1])}(undef,nmc_interface),length(_nodes[1])),gamma(1+length(_nodes[1])/2),[1],heuristic)
 end
 function Montecarlo_Integrator(mesh::Voronoi_MESH; b=nothing, i=nothing, nmc_bulk=100, nmc_interface=1000, cal_area=true, recycle=20) 
     Inte=Voronoi_Integral(mesh,integrate_bulk=(typeof(b)!=Nothing),integrate_interface=(typeof(i)!=Nothing))
     return Montecarlo_Integrator(Inte, b, i, nmc_bulk=nmc_bulk, nmc_interface=nmc_interface, recycle=recycle, cal_area=cal_area)
 end
 
+function Montecarlo_Integrator(Inte::HVIntegral; b=nothing, i=nothing, nmc_bulk=100, nmc_interface=1000, cal_area=true, recycle=20,heuristic=false) 
+    enable(Inte,volume=true,integral=typeof(b)!=Nothing)
+    return Montecarlo_Integrator(Inte, b, i, nmc_bulk=nmc_bulk, nmc_interface=nmc_interface, recycle=recycle, cal_area=cal_area,heuristic=heuristic)
+end
+
 function copy(I::Montecarlo_Integrator)
     return Montecarlo_Integrator(copy(I.Integral),I.bulk,I.interface,nmc_bulk=I.NMC_bulk,nmc_interface=I.NMC_interface,recycle=I._recycle,cal_area=I.area)
 end
 
-function integrate(Integrator::Montecarlo_Integrator; domain=FullSpace(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
-    _integrate(Integrator; domain=domain, calculate=relevant, iterate=Base.intersect(relevant,1:(length(Integrator.Integral)))) 
+function integrate(Integrator::Montecarlo_Integrator; progress=ThreadsafeProgressMeter(0,true,""), domain=Boundary(), relevant=1:(length(mesh(Integrator.Integral))+length(domain)), modified=1:(length(mesh(Integrator.Integral)))) 
+    _integrate(Integrator; domain=domain, calculate=relevant, progress=progress, iterate=Base.intersect(relevant,1:(length(mesh(Integrator.Integral))))) 
 end
 
 
 function prototype_interface(Integrator::Montecarlo_Integrator)
-    y = (typeof(Integrator.interface)!=Nothing) ? Integrator.interface(Integrator.Integral.MESH.nodes[1]) : Float64[]
+    y = (typeof(Integrator.interface)!=Nothing) ? Integrator.interface(nodes(mesh(Integrator.Integral))[1]) : Float64[]
     y.*=0
     return y 
 end
 
 function prototype_bulk(Integrator::Montecarlo_Integrator)
-    y = (typeof(Integrator.bulk)!=Nothing) ? Integrator.bulk(Integrator.Integral.MESH.nodes[1]) : Float64[]
+    y = (typeof(Integrator.bulk)!=Nothing) ? Integrator.bulk(nodes(mesh(Integrator.Integral))[1]) : Float64[]
     y.*=0
     return y 
 end
@@ -85,8 +93,9 @@ function new_directions!(dirvec,dim)
 end
 
 #function integrate(domain,_Cell,iter, calcul,searcher,integrator::Montecarlo_Integrator)
-function integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Montecarlo_Integrator,ar,bulk_inte,inter_inte)    
-
+function integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Montecarlo_Integrator,ar,bulk_inte,inter_inte,_)    
+    vec = Float64[]
+    vecvec = [vec]
     I=Integrator
     xs=data.extended_xs
     if mod(I.cycle[1], I._recycle)==0 
@@ -117,7 +126,7 @@ function integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Montecar
         (j, t) = mc_raycast(_Cell, neighbors, x, u, xs) 
 
         V += t^d
-        if typeof(I.bulk)!=Nothing
+        if typeof(I.bulk)!=Nothing && !I.heuristic
             for _ in 1:(I.NMC_bulk)
                 r = t * rand()
                 x′ = x + u * r
@@ -129,7 +138,7 @@ function integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Montecar
             normal = normals[j]
             dA = t ^ (d-1) / abs(dot(normal, u))
             ar[j] += dA        # be aware that j=1 refers to xs[1], i.e. the CENTER of the cell 'i'
-            if typeof(I.interface)!=Nothing
+            if typeof(I.interface)!=Nothing && !I.heuristic
                 inter_inte[j] .+= dA * I.interface(x + t*u)
             end
         end
@@ -153,28 +162,32 @@ function integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Montecar
     end=#
     #println(abs(V_0-V))
     if I.area
-        lmesh = length(I.Integral.MESH)
+        lmesh = length(mesh(I.Integral))
         for k in 1:lneigh
             n = neighbors[k]
             n>lmesh && continue
-            if n in iterate ? n<_Cell : true
-                neigh_area = get_area(Integrator.Integral,n,_Cell)
+            if n in calculate && n<_Cell #: true
+                neigh_data = cell_data_writable(Integrator.Integral,n,vec,vecvec)
+                _Cell_index = findfirstassured(_Cell,neigh_data.neighbors)
+                neigh_area = 0.0
+                    neigh_area = neigh_data.area[_Cell_index]
                 #println("$neigh_area, $n, $_Cell")
                 old_area = ar[k]
                 new_area = abs(neigh_area)<old_area*1.0E-10 ? old_area : 0.5*(old_area+neigh_area) 
                 dist = 0.5*norm(xs[n] - xs[_Cell])
                 factor = dist/d 
-                V1 = Integrator.Integral.volumes[n] +V 
-                Integrator.Integral.volumes[n] += (new_area-neigh_area)*factor
+                #V1 = Integrator.Integral.volumes[n] +V 
+                neigh_data.volumes[1] += (new_area-neigh_area)*factor
                 V += (new_area-old_area)*factor
                 #println((Integrator.Integral.volumes[n] + V-V1)/V1)
                 ar[k] = new_area
-                set_area(Integrator.Integral,n,_Cell,new_area)
-                typeof(I.interface)==Nothing && continue
+                neigh_data.area[_Cell_index] = new_area
+                #set_area(Integrator.Integral,n,_Cell,new_area)
+                (typeof(I.interface)==Nothing || length(neigh_data.interface_integral)<length(neigh_data.neighbors) || I.heuristic) && continue
                 old_int = inter_inte[k]
-                new_int = !isassigned_integral(Integrator.Integral,n,_Cell) ? old_int : 0.5*(old_int+get_integral(Integrator.Integral,n,_Cell)) 
+                new_int = !isassigned(neigh_data.interface_integral,_Cell_index) ? old_int : 0.5*(old_int+neigh_data.interface_integral[_Cell_index]) 
                 inter_inte[k] = new_int
-                set_integral(Integrator.Integral,n,_Cell,copy(new_int))
+                neigh_data.interface_integral[_Cell_index] = copy(new_int)
             end
         end
     end

@@ -43,11 +43,11 @@ end
 
 function VoronoiFVProblem(Geo::VoronoiGeometry; discretefunctions=NamedTuple(), integralfunctions=NamedTuple(), fluxes=NamedTuple(), rhs_functions=NamedTuple(), parent=nothing, integrator=Integrator_Type(Geo.Integrator), flux_integrals=NamedTuple(), bulk_integrals=NamedTuple(), kwargs...)
     VoronoiFVProblem_validate(discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions)
-    if !(Integrator_Type(Geo.Integrator) in [VI_HEURISTIC,VI_MONTECARLO,VI_POLYGON])
+    if !(Geo.Integrator in [VI_HEURISTIC,VI_MONTECARLO,VI_POLYGON,VI_FAST_POLYGON,VI_HEURISTIC_MC])
         error("The Geometry comes up with an integrator of type $(Integrator_Name(Geo.Integrator)). This type does not provide relyable volume or area data.")
     end
 
-    points=Geo.Integrator.Integral.MESH.nodes
+    points=nodes(mesh(integral(Geo.domain)))#integral.MESH.nodes
 
 #=    i_functions = nothing
     i_composer = undef
@@ -60,7 +60,7 @@ function VoronoiFVProblem(Geo::VoronoiGeometry; discretefunctions=NamedTuple(), 
   #  end
 
 
-    data=VoronoiData(Geo, getorientations=true, getboundarynodes=true, onboundary=true)
+    data=VoronoiData(Geo,copyall=true)
 
     # adjust data from mean to "pointwise":
     if length(data.bulk_integral)>0
@@ -107,8 +107,8 @@ function VoronoiFVProblem(Geo::VoronoiGeometry; discretefunctions=NamedTuple(), 
     _bb = length(data.bulk_integral)>0
     _bbb = length(data.interface_integral)>0 && length(data.interface_integral[1])>0
 
-    b_funcs = i->merge(d_func[:bulk](i),   map(__simplify_discrete,decompose(i_composer,_bb ? data.bulk_integral[i] : i_composer.reference_value)))
-    i_funcs = (i,j)->merge(d_func[:interface](i,j),map(__simplify_discrete,decompose(i_composer,_bbb ? data.interface_integral[i][j] : i_composer.reference_value)) )
+    b_funcs = i->Base.merge(d_func[:bulk](i),   map(__simplify_discrete,decompose(i_composer,_bb ? data.bulk_integral[i] : i_composer.reference_value)))
+    i_funcs = (i,j)->Base.merge(d_func[:interface](i,j),map(__simplify_discrete,decompose(i_composer,_bbb ? data.interface_integral[i][j] : i_composer.reference_value)) )
 ##=#
 #    b_funcs = i->merge(i_func[:bulk](i),d_func[:bulk](i)) 
 #    i_funcs = (i,j)->merge(i_func[:interface](i,j),d_func[:interface](i,j))

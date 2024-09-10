@@ -1,3 +1,30 @@
+
+struct ThreadsafeProgressMeter{RWL<:Union{BusyFIFOLock,Nothing}}
+    p::Progress
+    silence::Bool
+    lock::RWL
+end
+function ThreadsafeProgressMeter(tpm::TPM) where {TPM<:ThreadsafeProgressMeter}
+    return tpm
+end
+
+function ThreadsafeProgressMeter(n::Int,silence::Bool,intro) 
+    return ThreadsafeProgressMeter(Progress(n,intro),silence,nothing)
+end
+
+function ThreadsafeProgressMeter(n::Int,silence::Bool,intro,::MultiThread) 
+    return ThreadsafeProgressMeter(Progress(n,intro),silence,BusyFIFOLock())
+end
+ 
+#import Progress
+@inline function next!(tpm::TPM) where {TPM<:ThreadsafeProgressMeter}
+    lock(tpm.lock)
+    (!tpm.silence) && (ProgressMeter.next!(tpm.p))
+    unlock(tpm.lock)
+end
+#ProgressMeter.lock_if_threading(f::Function, p::ProgressMeter.Progress) = f()
+
+
 ###################################################################################################
 
 ## provides a bunch of tools to display progress of voronoi algorithms properly

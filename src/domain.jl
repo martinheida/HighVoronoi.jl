@@ -1,48 +1,79 @@
-#####################################################################################################################################
+############################################################################################################################
 
-## create a Discrete Domain that stores a mesh adjusted to boundary conditions
+## The following are service for other parts....
 
-#####################################################################################################################################
+############################################################################################################################
 
-"""
-    Discrete_Domain
-
-Philosophy: nodes[i] = nodes[references[i]] + periodic_shift( reference_shifts[i], shifts )
-"""
-struct Discrete_Domain
-#    MESH::Voronoi_MESH
-    boundary::Boundary
-    shifts::Vector{Vector{Float64}}
-    references::Vector{Int64}
-    reference_shifts::Vector{BitVector}
-    internal_boundary::Boundary
-end
-function Discrete_Domain(_boundary::Boundary, _shifts::Vector{Vector{Float64}}, _reference_shifts::Vector{BitVector}, _references::Vector{Int64},internal=boundary)
-    return Discrete_Domain(_boundary,_shifts,_references,_reference_shifts,internal)
+function periodic_shifts(boundary::Boundary,dim)
+    numberOfPlanes = length(boundary)
+    shifts=Vector{Vector{Float64}}(undef,numberOfPlanes)
+    for i in 1:numberOfPlanes
+        other=boundary.planes[i].BC # other>0 iff periodic BC and points to the other part of periodic plane
+        if other>0
+            normal=boundary.planes[i].normal
+            base=boundary.planes[i].base
+            shifts[i]=round.(dot(normal,boundary.planes[other].base .- base).*normal,digits=10) 
+        else shifts[i]=zeros(Float64,dim)
+        end
+    end    
+    return shifts
 end
 
-"""
-    copy(domain::Discrete_Domain)
+## return boundary nodes for a given discrete domain
+#=function get_boundary_nodes!(_bn,nodes,domain,neighbors,onboundary)
+    lnodes=length(nodes)
+    for i in 1:(length(nodes))
+        if neighbors[i][end]>lnodes
+            k=length(neighbors[i])
+            em=EmptyDictOfType(1=>nodes[1])
+            while k>0 && neighbors[i][k]>lnodes
+                plane=neighbors[i][k]-lnodes
+                if onboundary
+                    push!(em,neighbors[i][k]=>0.5*(nodes[i]+reflect(nodes[i],boundary(domain),plane)))
+                else
+                    push!(em,neighbors[i][k]=>reflect(nodes[i],boundary(domain),plane))
+                end
+                k=k-1
+            end
+            push!(_bn,i=>em)
+        end
+    end
+end=#
 
-provides a (deep)copy of the discrete domain. However, the boundary object is taken as it is, i.e. this particular object is NOT a copy but identical to the original
-"""
-function copy(domain::Discrete_Domain)
-    return Discrete_Domain(domain.boundary,deepcopy(domain.shifts),deepcopy(domain.reference_shifts),copy(domain.references),domain.internal_boundary)
+############################################################################################################################
+
+##
+
+############################################################################################################################
+
+
+function add_virtual_points(domain::AD,new_xs::ReflectedNodes;search_settings::RP=RaycastParameter(Float64),do_refine=statictrue,kwargs...) where {AD<:AbstractDomain,RP<:RaycastParameter}
+    length(new_xs)==0 && return Int64[]
+    expand_internal_boundary(domain,new_xs)
+    prepend!(domain,new_xs)
+    #println(references(domain))
+    #println(reference_shifts(domain))
+    retrieve_reflections(domain,new_xs)
+    if do_refine==true 
+        return systematic_refine!(mesh(domain),new_xs.data,internal_boundary(domain);settings=search_settings,kwargs...)
+    else
+        return Int64[]
+    end
 end
 
 
 
 
-function periodize_mirrors(domain::Discrete_Domain, Integral::Voronoi_Integral, known_reflections)
-    planes = domain.boundary.planes
-    mesh = Integral.MESH
-    reference_shifts = domain.reference_shifts
-    references = domain.references
+function periodize_mirrors(domain::VD) where VD <: AbstractDomain
+    known_reflections = reflections(domain)
+    planes = boundary(domain).planes
+    mesh = HighVoronoi.mesh(domain)
+    reference_shifts = HighVoronoi.reference_shifts(domain)
     lp = length(planes)
-    lrs = length(domain.reference_shifts)
-    mirrors=EmptyDictOfType(0=>[1])
+    lrs = length(reference_shifts)
+    mirrors=Dict{Int64,Vector{Int64}}()
     myshifts=BitVector(zeros(Int8,lp))
-    for k in (lrs+1):length(Integral)
+    for k in (lrs+1):length(mesh)
         myshifts .= false
         neigh=neighbors_of_cell(k,mesh,adjacents=true)
         for n in neigh
@@ -75,58 +106,63 @@ function periodize_mirrors(domain::Discrete_Domain, Integral::Voronoi_Integral, 
     return mirrors
 end
 
-function _good_vertex(sig,modified_planes)
+function _good_vertex(sig,r,modified_planes,modified,lref,max)
+    track = false
+    #=if sig==[5, 192, 193, 196, 197, 199] || sig == [ 29, 31, 75, 191, 194, 198]
+        println("hier!! $modified_planes, $r")
+        track = true
+    end=#
     for s in sig
         if s in modified_planes
+            for s2 in sig
+                s2>lref && s2<=max && (modified[s2-lref] = true)
+            end
             return false
         end
     end
     return true
 end
 
-function periodize!(domain::Discrete_Domain,Integral::Voronoi_Integral,known_reflections,sr_offset=0)
-    lref = length(domain.references)
-    new_xs,reference,reference_shifts=reflect_nodes(domain.shifts,domain.boundary.planes,Integral.MESH.nodes,periodize_mirrors(domain::Discrete_Domain, Integral::Voronoi_Integral, known_reflections),domain)
-#=    keeps = BitVector(ones(Int8,length(reference)))
-    oldrefs = domain.references
-    l_oldrefs = length(oldrefs)
-    oldshifts = domain.reference_shifts
-    for i in 1:length(reference)
-        pos=1
-        while pos<=l_oldrefs
-            while pos<=l_oldrefs && oldrefs[pos]!=reference[i]
-                pos += 1
-            end
-            if pos<=l_oldrefs && oldrefs[pos]==reference[i] && oldshifts[pos]==reference_shifts[i]
-                    pos=0
-                    break
-            end
-            pos += 1
+function retrieve_reflections(  domain::AD,new_xs::ReflectedNodes) where {AD<:AbstractDomain} 
+    references = HighVoronoi.references(domain)
+    lref = length(references)
+    bv = reflections(domain)
+    reference_shifts = HighVoronoi.reference_shifts(domain)
+    iterate=1:(length(new_xs))
+    for k in iterate
+        bv[references[k]-lref] .|= reference_shifts[k]
+    end
+    return bv
+end 
+
+
+function periodize!(domain::VD,sr_offset=0;returnitems=staticfalse,iter=Int64[],search_settings=RaycastParameter(Float64)) where VD<:AbstractDomain
+    #known_reflections = retrieve_reflections(domain)
+    for _ in 1:2
+        lref = internaly_precise(domain) ? 0 : length(references(domain))
+        mesh = HighVoronoi.mesh(domain)
+        lint = length(mesh)
+        new_xs = reflect_nodes(domain,periodize_mirrors(domain))
+        modified_planes = expand_internal_boundary(domain,new_xs) # shifts the periodic part of the boundary such that new_xs lies completely inside the 
+        modified_planes .+= lint
+        modified = falses(lint-lref)
+        filter!((sig,r)->_good_vertex(sig,r,modified_planes,modified,lref,lint),mesh)#,affected=1:length(domain.references))
+        obligatories2 = findall(modified)
+        #append!(iter,add_virtual_points(domain,new_xs,intro="",subroutine_offset=sr_offset, obligatories = obligatories2 ))
+        #println("periodize:")
+        new_iter = add_virtual_points(domain,new_xs,intro="Include $(length(new_xs)) new nodes",subroutine_offset=sr_offset, obligatories = obligatories2, search_settings=search_settings )
+        if returnitems==true
+            append!(iter,new_iter)
         end
-        keeps[i] = pos>0
+         
+        vp_print(sr_offset,"$(length(new_xs)) new nodes included in grid                                                                                                ")
+        println("")
     end
-    difference = length(reference)-sum(keeps)
-    keepat!(new_xs,keeps)
-    keepat!(reference,keeps)
-    keepat!(reference_shifts,keeps)
-    reference .-= difference    =#
-    modified_planes = extend_periodic_part(domain.internal_boundary,new_xs,true) # shifts the periodic part of the boundary such that new_xs lies completely inside the 
-    modified_planes .+= length(Integral)
-    filter!((sig,r)->_good_vertex(sig,modified_planes),Integral.MESH)#,affected=1:length(domain.references))
-    lnxs = length(new_xs)
-    for k in 1:length(reference)
-        known_reflections[reference[k]-lref-lnxs] .|= reference_shifts[k]
+    if returnitems==true
+        return sort!(unique!(iter))
+    else 
+        return nothing
     end
-    domain.references .+= length(new_xs)
-    prepend!(domain.references,reference)
-    prepend!(domain.reference_shifts,reference_shifts)
-    #=for i in 1:length(reference)
-        println("$i, $(reference[i]):  $(Integral.MESH.nodes[reference[i]-length(reference)]) ->  $(new_xs[i]) ;  $(neighbors_of_cell(reference[i]-length(reference),Integral.MESH,adjacents=true))")
-    end=#
-    iter = systematic_refine!(Integral,new_xs,intro="",subroutine_offset=sr_offset,domain=domain.internal_boundary)
-    vp_print(sr_offset,"$(length(reference)) new nodes included in grid                                             ")
-    println("")
-    return iter
 end
 
 
@@ -136,101 +172,44 @@ end
 
 
 ## main routine to set up the discrete domain
-function Create_Discrete_Domain(Integral::Voronoi_Integral,_boundary::Boundary; offset=0,intro="Adjusting mesh to boundary conditions...",search_settings=[])
+function Create_Discrete_Domain(mesh,_boundary::Boundary; offset=0,intro="Adjusting mesh to boundary conditions...",search_settings=RaycastParameter(Float64))
     c_offset=offset+BC_offset
     vp_print(offset,intro)
     vp_line()
-    #vp_print(_boundary,offset=c_offset)
     boundary=_boundary
-    b_verts = Integral.MESH.boundary_Verteces
-    nodes = Integral.MESH.nodes
-    mesh = Integral.MESH
-    planes = boundary.planes
-    meshsize = length(nodes)
-    dim=length(nodes[1])
-    search = search_settings
-    numberOfPlanes = length(boundary.planes)
-
-    # calculate the shifts for periodic boundaries
-    shifts = periodic_shifts(boundary,dim)
-
+#    mesh = HighVoronoi.mesh(Integral)
+    #println("first here: ",verify_mesh(mesh,_boundary))
+    #println(typeof(mesh))
+    domain = Domain(mesh,boundary)
     periodic_bc=false
-    other_bc=false
-    for i in 1:length(planes)
-        if planes[i].BC>0 
+    for i in 1:length(boundary.planes)
+        if boundary.planes[i].BC>0 
             periodic_bc=true
-        else
-            other_bc=true
         end
     end
-    reference=Int64[]
-    reference_shifts=BitVector[]
-    boundary_cells = VectorOfDict(1=>'a',numberOfPlanes)
 
     if periodic_bc
         vp_print(c_offset,"Calculating nodes on periodic boundary part: ",c_offset+45,"...")
         
         # reflect the boundary nodes according to boundary_cells 
         PN = periodic_nodes(mesh,boundary)
-        new_xs,reference,reference_shifts=reflect_nodes(shifts,planes,nodes,PN)
-#        println(length(new_xs),"   ",reference)
-
+        #println(PN)
+        new_xs = reflect_nodes(domain,PN)
         vp_print(c_offset+45,"   $(length(new_xs)) new nodes to be included...                                 ")
         vp_line()
 
-        iter_BC = remove_periodic_BC_verteces!(mesh::Voronoi_MESH,boundary::Boundary)
-        #println("iter BC: ",iter_BC)
-        boundary = extend_periodic_part(_boundary,new_xs) # shifts the periodic part of the boundary such that new_xs lies completely inside the 
-                                                        # the newly constructed domain
-        search = RaycastParameter(search,(domain=boundary,))
+        iter_BC = remove_periodic_BC_verteces!(mesh,boundary)
         
-        iter = systematic_refine!(Integral,new_xs,search_settings=search, subroutine_offset=c_offset, obligatories=iter_BC)
-        println("")
-        domain = Discrete_Domain(_boundary,shifts,reference_shifts, reference,boundary)
-        known_reflections = retrieve_reflections(domain,Integral)
-        periodize!(domain,Integral,known_reflections,c_offset)
-        periodize!(domain,Integral,known_reflections,c_offset)
+        #println(iter_BC)
+        add_virtual_points(domain,new_xs,search_settings=search_settings, subroutine_offset=c_offset,obligatories=iter_BC)
+        #return
+        #systematic_refine!(Integral,new_xs,internal_boundary(domain),settings=search_settings, subroutine_offset=c_offset,obligatories=iter_BC)
+        periodize!(domain,c_offset,search_settings=search_settings)
     else
         println("No periodic boundaries....")
     end
 
-    return Discrete_Domain(_boundary,shifts,reference_shifts, reference,boundary), Integral, search 
-end
-
-function periodic_shifts(boundary::Boundary,dim)
-    numberOfPlanes = length(boundary)
-    shifts=Vector{Vector{Float64}}(undef,numberOfPlanes)
-    for i in 1:numberOfPlanes
-        other=boundary.planes[i].BC # other>0 iff periodic BC and points to the other part of periodic plane
-        if other>0
-            normal=boundary.planes[i].normal
-            base=boundary.planes[i].base
-            shifts[i]=round.(dot(normal,boundary.planes[other].base .- base).*normal,digits=10) 
-        else shifts[i]=zeros(Float64,dim)
-        end
-    end    
-    return shifts
-end
-
-## return boundary nodes for a given discrete domain
-function get_boundary_nodes!(_bn,nodes,domain,neighbors,onboundary)
-    lnodes=length(nodes)
-    for i in 1:(length(nodes))
-        if neighbors[i][end]>lnodes
-            k=length(neighbors[i])
-            em=EmptyDictOfType(1=>nodes[1])
-            while k>0 && neighbors[i][k]>lnodes
-                plane=neighbors[i][k]-lnodes
-                if onboundary
-                    push!(em,neighbors[i][k]=>0.5*(nodes[i]+reflect(nodes[i],domain.boundary,plane)))
-                else
-                    push!(em,neighbors[i][k]=>reflect(nodes[i],domain.boundary,plane))
-                end
-                k=k-1
-            end
-            push!(_bn,i=>em)
-        end
-    end
+    return domain
 end
 
 #####################################################################################################################################
@@ -240,13 +219,9 @@ end
 #####################################################################################################################################
 
 # removes all verteces that lie on one of the periodic boundaries
-function remove_periodic_BC_verteces!(mesh::Voronoi_MESH,boundary::Boundary)
-    AV=mesh.All_Verteces
-    BV=mesh.Buffer_Verteces
+function remove_periodic_BC_verteces!(mesh::AM,boundary::Boundary) where {AM<:AbstractMesh}
     lm=length(mesh)
     lb=length(boundary)
-    dimension=length(mesh.nodes[1])
-    periodic_boundary=BitVector(zeros(Int8,lb))
     count=0
     modified = BitVector(zeros(Int8,length(mesh)))
     for i in 1:lb
@@ -260,34 +235,28 @@ function remove_periodic_BC_verteces!(mesh::Voronoi_MESH,boundary::Boundary)
             global_list[count]=i+lm
         end
     end
-
-    for i in 1:lm
-        for (sig,r) in AV[i]
-            for k in (length(sig)):-1:1
-                if (sig[k] in global_list) 
-                    for i in 1:k                
-                        sig[i]<=lm && (modified[sig[i]] = true)
-                    end
-                    sig[1]=0
-                    break
-                elseif sig[k]<=lm
-                    break
+    function condition(sig,r) 
+        for k in (length(sig)):-1:1
+            if (sig[k] in global_list) 
+                for i in 1:k                
+                    sig[i]<=lm && (modified[sig[i]] = true)
                 end
+                sig[1]=0
+                break
+            elseif sig[k]<=lm
+                break
             end
         end
-        filter!( x->( x.first[1]!=0 ), AV[i] )
-        filter!( x->( x.first[1]!=0 ), BV[i] )
+        return sig[1]!=0
     end
+    filter!(condition,mesh)
     return keepat!(collect(1:lm),modified)
 end
 
 # returns a Dict(0=>[1]) that contains for every node all adjacent periodic boundaries  
-function periodic_nodes(mesh::Voronoi_MESH,boundary::Boundary)
-    AV=mesh.All_Verteces
-    BV=mesh.Buffer_Verteces
+function periodic_nodes(mesh::AM,boundary::Boundary) where {AM<:AbstractMesh}
     lm=length(mesh)
     lb=length(boundary)
-    dimension=length(mesh.nodes[1])
     mirrors=EmptyDictOfType(0=>[1])
     periodic_boundary=BitVector(zeros(Int8,lb))
     for i in 1:lb
@@ -296,7 +265,7 @@ function periodic_nodes(mesh::Voronoi_MESH,boundary::Boundary)
     this_boundary=BitVector(zeros(Int8,lb))
     for i in 1:lm
         this_boundary .= false
-        for (sig,r) in Iterators.flatten((AV[i],BV[i]))
+        for (sig,r) in vertices_iterator(mesh,i)
             for k in (length(sig)):-1:1
                 if sig[k]>lm
                     this_boundary[sig[k]-lm]=true
@@ -330,20 +299,6 @@ function periodic_shift(reference_shifts,shifts)
     return result
 end
 
-function retrieve_reflections(domain::Discrete_Domain,Integral::Voronoi_Integral)
-    lref = length(domain.references)
-    lb = length(domain.boundary)
-    lbulk = length(Integral)-lref
-    bv = Vector{BitVector}(undef,lbulk)
-    proto = BitVector(zeros(Int8,lb))
-    for i in 1:lbulk    bv[i] = copy(proto)   end
-    for k in 1:lref
-        #print("$k->$(domain.references[k]) ; ")
-        bv[domain.references[k]-lref] .|= domain.reference_shifts[k]
-    end
-    return bv
-end 
-
 
 #####################################################################################################################################
 
@@ -360,55 +315,59 @@ function iteratively_reflected_points!(new_xs,reference,reference_shifts,current
             (taboo[current_plane] || !(current_plane in list)) && continue
             other=planes[current_plane].BC
             if other>0
-                taboo[other]=true
-                current_shift[current_plane]=true
-                count=iteratively_reflected_points!(new_xs,reference,reference_shifts,current_shift,count,shifts,planes,original_node,list,current_plane+1,taboo,node_index)
-                current_shift[current_plane]=false
-                taboo[other]=false
+                taboo[other] = true
+                current_shift[current_plane] = true
+                count = iteratively_reflected_points!(new_xs,reference,reference_shifts,current_shift,count,shifts,planes,original_node,list,current_plane+1,taboo,node_index)
+                current_shift[current_plane] = false
+                taboo[other] = false
             end
         end
     end
     if start_plane>1
-        reference_shifts[count]=copy(current_shift)
-        reference[count]=node_index
-        shift=periodic_shift(reference_shifts[count],shifts)
-        new_xs[count]=original_node+shift
-        count+=1
+        reference_shifts[count] = copy(current_shift)
+        reference[count] = node_index
+        shift = periodic_shift(reference_shifts[count],shifts)
+        new_xs[count] = original_node+shift
+        count += 1
     end
     return count
 end
-
-function reflect_nodes(shifts,planes,nodes,mirrors,domain=nothing)
-    numberOfNewNodes=0
-    numberOfPlanes=length(planes)
+"""
+returns a ReflectedNodes(new_xs,reference,reference_shifts), where `reference` is list of reference nodes in external representation.
+"""
+function reflect_nodes(domain::AD,mirrors) where AD<:AbstractDomain
+    numberOfNewNodes    = 0
+    nodes               = HighVoronoi.nodes(mesh(domain))
+    numberOfPlanes      = length(boundary(domain))
+    shifts              = HighVoronoi.shifts(domain)
     for (_,sig) in mirrors
         numberOfNewNodes+=(2^length(sig))-1 # this is the number of new nodes that the point _ generates
     end
     # println("Maximally $numberOfNewNodes new nodes will be created")
 
     # collect in new_xs all new points
-    new_xs=Vector{typeof(nodes[1])}(undef,numberOfNewNodes)
-    reference=Vector{Int64}(undef,numberOfNewNodes)
-    reference_shifts=Vector{BitVector}(undef,numberOfNewNodes)
+    new_xs           = Vector{eltype(nodes)}(undef,numberOfNewNodes)
+    reference        = Vector{Int64}(undef,numberOfNewNodes)
+    reference_shifts = Vector{BitVector}(undef,numberOfNewNodes)
     count=1
     # Take care!: In boundary_cells[...] and in mirrors, k=1....length(xs) refer to "old points", 
     #             while k=length(xs+1),..... refer to newly created points
-    taboo=BitVector(falses(numberOfPlanes))
-    current_shift=BitVector(falses(numberOfPlanes))
+    taboo         = BitVector(falses(numberOfPlanes))
+    current_shift = BitVector(falses(numberOfPlanes))
     for (k,list) in mirrors
         taboo .= false
         current_shift .= false
-        c_old=count
-        count=iteratively_reflected_points!(new_xs,reference,reference_shifts,current_shift,count,shifts,planes, nodes[k],list,1,taboo,k)
+        #c_old=count
+        count = iteratively_reflected_points!(new_xs,reference,reference_shifts,current_shift,count,shifts,boundary(domain).planes, nodes[k],list,1,taboo,k)
     end
     resize!(new_xs,count-1)
     resize!(reference,count-1)
     resize!(reference_shifts,count-1)
-    if domain!=nothing
+    if length(references(domain))>0
         keeps = BitVector(ones(Int8,length(reference)))
-        oldrefs = domain.references
+        oldrefs = references(domain)
         l_oldrefs = length(oldrefs)
-        oldshifts = domain.reference_shifts
+        oldshifts = HighVoronoi.reference_shifts(domain)
         for i in 1:length(reference)
             pos=1
             while pos<=l_oldrefs
@@ -427,8 +386,6 @@ function reflect_nodes(shifts,planes,nodes,mirrors,domain=nothing)
         keepat!(reference,keeps)
         keepat!(reference_shifts,keeps)
     end
-    reference.+=length(new_xs)  # note that reference hereafter will refer to the original node in the new full list. 
-                                # Makes it compatible with refinements
-    return new_xs, reference, reference_shifts    
+    return ReflectedNodes(new_xs,reference,reference_shifts)
 end
 

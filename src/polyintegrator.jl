@@ -1,22 +1,28 @@
 # We provide the Polygon_Integrator. It is defined and initialized similar to 
 # the MC 
 
-struct Polygon_Integrator{T,TT} 
+struct Polygon_Integrator{T<:Union{Nothing,Function},TT,IDC<:IterativeDimensionChecker} 
     _function::T
     bulk::Bool
     # If i!=nothing, then area has to be true. Otherwise values are taken as given
     Integral::TT
-    iterative_checker::IterativeDimensionChecker
+    iterative_checker::IDC
 end
 function Polygon_Integrator(f,b,I)
-    return Polygon_Integrator(f,b,I,IterativeDimensionChecker(length(I.MESH.nodes[1])))
+    return Polygon_Integrator(f,b,I,IterativeDimensionChecker(mesh(I)))
 end
-function Polygon_Integrator(mesh::Voronoi_MESH,integrand, bulk_integral=false)
+function Polygon_Integrator(mesh::VM,integrand, bulk_integral=false) where VM<:Voronoi_MESH
     b_int=(typeof(integrand)!=Nothing) ? bulk_integral : false
     i_int=(typeof(integrand)!=Nothing) ? true : false
     Integ=Voronoi_Integral(mesh,integrate_bulk=b_int, integrate_interface=i_int)
-    PI=Polygon_Integrator( integrand, b_int, Integ, IterativeDimensionChecker(length(mesh.nodes[1])) )
+    PI=Polygon_Integrator( integrand, b_int, Integ, IterativeDimensionChecker(mesh) )
     return PI
+end
+
+function Polygon_Integrator(Integ::HVIntegral,integrand, bulk_integral=false)
+    b_int=(typeof(integrand)!=Nothing) ? bulk_integral : false
+    enable(Integ,volume=true,integral=b_int)
+    return Polygon_Integrator( integrand, b_int, Integ, IterativeDimensionChecker(mesh(Integ)) )
 end
 
 function copy(I::Polygon_Integrator)
@@ -24,19 +30,19 @@ function copy(I::Polygon_Integrator)
     return Polygon_Integrator{typeof(I._function),typeof(I.Integral)}(I._function,I.bulk,Inte, IterativeDimensionChecker(length(Inte.MESH.nodes[1])))
 end
 
-function integrate(Integrator::Polygon_Integrator; domain=FullSpace(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
-    _integrate(Integrator; domain=domain, calculate=relevant, iterate=Base.intersect(union(modified,relevant),1:(length(Integrator.Integral)))) 
+@inline function integrate(Integrator::Polygon_Integrator; progress=ThreadsafeProgressMeter(0,true,""),domain=Boundary(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
+    _integrate(Integrator; domain=domain, calculate=modified, iterate=relevant,progress=progress) 
 end
 
 
 function prototype_bulk(Integrator::Polygon_Integrator)
-    y = (typeof(Integrator._function)!=Nothing && Integrator.bulk) ? Integrator._function(Integrator.Integral.MESH.nodes[1]) : Float64[]
+    y = (typeof(Integrator._function)!=Nothing && Integrator.bulk) ? Integrator._function(nodes(mesh(Integrator.Integral))[1]) : Float64[]
     y.*= 0.0
     return y
 end
 
 function prototype_interface(Integrator::Polygon_Integrator)
-    return 0.0*(typeof(Integrator._function)!=Nothing ? Integrator._function(Integrator.Integral.MESH.nodes[1]) : Float64[])
+    return 0.0*(typeof(Integrator._function)!=Nothing ? Integrator._function(nodes(mesh(Integrator.Integral))[1]) : Float64[])
 end
 
 
@@ -71,11 +77,10 @@ end
             corresponds to the d-1 dimensional area of the Voronoi interface 
 """
 #function integrate(domain,_Cell,iter,calcul,searcher,Integrator::Polygon_Integrator)
-function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Polygon_Integrator,ar,bulk_inte,inter_inte)    
-#    return integrate_general(neighbors,_Cell,iterate, calculate, data,Integrator,ar,bulk_inte,inter_inte)    
+function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Polygon_Integrator,ar,bulk_inte,inter_inte,_)    
     Integral  = Integrator.Integral
-    verteces2 = Integral.MESH.Buffer_Verteces[_Cell]
-    verteces  = Integral.MESH.All_Verteces[_Cell]
+    #verteces2 = Integral.MESH.Buffer_Verteces[_Cell]
+    verteces  = vertices_iterator(mesh(Integral),_Cell)
     xs=data.extended_xs
 
     dim = data.dimension    # (full) Spatial dimension
@@ -105,9 +110,9 @@ function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Polyg
     I=Integrator
     taboo = zeros(Int64,dim)
     #typeof(data.buffer_data)==Int64 && error("fehler")
+    #inter_inte .*= 0
     iterative_volume(I._function, I.bulk, _Cell, V, bulk_inte, ar, inter_inte, dim, neigh, 
-                _length,verteces,verteces2,emptydict,xs[_Cell],empty_vector,all_dd,all_determinants,calculate,Integral,xs,taboo,I.iterative_checker)
-
+                _length,verteces,emptydict,emptydict,xs[_Cell],empty_vector,all_dd,all_determinants,calculate,Integral,xs,taboo,I.iterative_checker)
     #println()
     try
         return V[1]
@@ -126,7 +131,6 @@ function _neigh_index(_my_neigh,n)
     return 0
 end
 
-global global_fei = FastEdgeIterator(5)
 
 function first_relevant_edge_index(edge,_Cell,neigh)
     le = length(edge)
@@ -180,6 +184,9 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
             #println(_Cell," vol ",vol)
             A[1]+=vol
             #if (typeof(_function)!=Nothing)
+            #if abs(val[1]-1.0)>0.00000001
+            #    error("$val")
+            #end
                 Ay .+= vol .* val
                 #println("a :$(Ay) ")
             #end
@@ -193,7 +200,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
         # dd will store to each remaining neighbor N a sublist of verteces which are shared with N
         dd=Vector{typeof(emptylist)}(undef,_length)
         for i in 1:_length dd[i]=copy(emptylist) end
-        mlsig = reset(dc, neigh, xs, _Cell, Iterators.flatten((verteces,verteces2)))
+        mlsig = reset(dc, neigh, xs, _Cell, verteces)
         NF = dc.edge_iterator
         #println(neigh,"*************************************************************************")
         resize!(dc.edge_buffer,mlsig)
@@ -201,7 +208,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
         lproto = typeof(_function)!=Nothing ? length(_function(xs[1])) : 0
         searcher = (ray_tol = 1.0E-12,)
 
-        for (sig,r) in Iterators.flatten((verteces,verteces2)) # repeat in case verteces2 is not empty
+        for (sig,r) in verteces # repeat in case verteces2 is not empty
             lsig=length(sig)
             if lsig>space_dim+1
                 b = reset(NF,sig,r,xs,_Cell,searcher,allrays=true,_Cell_first=true)
@@ -265,12 +272,16 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
         taboo[dim]=_Cell
         AREA=zeros(Float64,1)
         _Center = MVector{dim}(zeros(Float64,dim))
+#        println(y)
         for k in 1:_length
             buffer=neigh[k] # this is the (further) common node of all verteces of the next iteration
                             # in case dim==space_dim the dictionary "bufferlist" below will contain all 
                             # verteces that define the interface between "_Cell" and "buffer"
                             # However, when it comes to A and Ay, the entry "buffer" is stored in place "k". 
-            if !(buffer in calculate) && !(_Cell in calculate) continue end
+            if !(buffer in calculate) 
+                empty!(dd[k])
+                continue 
+            end
             bufferlist=dd[k] 
             buffer>_Cell && isempty(bufferlist) && continue
             taboo[dim-1] = buffer
@@ -278,7 +289,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
             AREA[1]=0.0
             AREA_Int=(typeof(_function)!=Nothing) ? Ay[k] : Float64[]
             # now get area and area integral either from calculation or from stack
-                if buffer>_Cell && (buffer in calculate) # in this case the interface (_Cell,buffer) has not yet been investigated
+                if buffer>_Cell && (buffer in calculate)# && (buffer in calculate) # in this case the interface (_Cell,buffer) has not yet been investigated
                     set_dimension(dc,1,_Cell,buffer)
                     #test_idc(dc,_Cell,buffer,1)
 
@@ -288,7 +299,9 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
                     _Center .= _Center2
                     iterative_volume(_function, _bulk, _Cell, V, y, AREA, AREA_Int, dim-1, neigh, _length, bufferlist, emptylist, emptylist,vector,empty_vector,all_dd,all_determinants,calculate,Full_Matrix,xs,taboo,dc)
                     neigh[k]=buffer
- 
+                    #if abs(AREA_Int[1]/AREA[1]-1.0)>0.00000001
+                    #    error("")
+                    #end
                     # Account for dimension (i.e. (d-1)! to get the true surface volume and also consider the distance="height of cone")
                     empty!(bufferlist) # the bufferlist is empty
                     distance= 0.5*norm(vector-xs[buffer]) #abs(dot(normalize(vector-xs[buffer]),vert))
@@ -312,19 +325,24 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
                             _y.+=(AREA_Int*(distance/(dim+1))) # there is hidden a factor dim/dim  which cancels out
                             y.+=_y
                         end
+#                        println("$(V[1]) vs. $(y[1])")
+                        #if abs(y[1]/V[1]-1.0)>0.00000001
+                        #    error("hier: $(y[1]/V[1])")
+                        #end
                     end            
                 else # the interface (buffer,_Cell) has been calculated in the systematic_voronoi - cycle for the cell "buffer"
                     #greife auf Full_Matrix zurück
                     empty!(bufferlist)
+                    #error("sollte nicht sein...")
                     distance=0.5*norm(vector-xs[buffer])#abs(dot(normalize(vector-xs[buffer]),vert))
-                    AREA[1]=get_area(Full_Matrix,buffer,_Cell) 
+                    AREA[1]= buffer>_Cell ? AREA[1] : get_area(Full_Matrix,buffer,_Cell) 
                         # !!!!! if you get an error at this place, it means you probably forgot to include the boundary planes into "calculate"
                     thisvolume = AREA[1]*distance/dim
                     V[1] += thisvolume
                     A[k]=AREA[1]
                     if typeof(_function)!=Nothing 
-                        AREA_Int.*=0
-                        AREA_Int.+=get_integral(Full_Matrix,buffer,_Cell)
+#                        AREA_Int.*=0
+                        AREA_Int .= buffer>_Cell ? AREA_Int : get_integral(Full_Matrix,buffer,_Cell)
                     end
                     if _bulk # and finally the bulk integral, if whished
                         _y=_function(vector)
@@ -457,6 +475,17 @@ function midpoint_points(vertslist,vertslist2,empty_vector,cell_center=Float64[]
         empty_vector.+=r
     end
     empty_vector.*= 1/(length(vertslist)+length(vertslist2))
+    if length(cell_center)>0 empty_vector.-= cell_center end
+    return empty_vector
+end
+
+function midpoint_points_fast(vertslist,data,empty_vector,cell_center=Float64[])
+    empty_vector.*=0.0
+    for v in vertslist
+        r = data[v][2]
+        empty_vector.+=r
+    end
+    empty_vector.*= 1/(length(vertslist))
     if length(cell_center)>0 empty_vector.-= cell_center end
     return empty_vector
 end

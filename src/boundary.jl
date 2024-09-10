@@ -22,7 +22,7 @@ import Base.in
 struct Plane
     base::Vector{Float64}
     normal::Vector{Float64}
-    BC::Int16
+    BC::Int16 
     function Plane(b,n,bc) 
         return new(b,n,bc)
     end
@@ -84,6 +84,13 @@ struct Boundary
     end
 end
 
+function copy(b::Boundary)
+    planes = Vector{Plane}(undef,length(b))
+    for i in 1:length(b)
+        planes[i] = Plane(copy(b.planes[i].base),copy(b.planes[i].normal),b.planes[i].BC)
+    end
+    return Boundary(planes,b.convex)
+end
 """
     Boundary(planes...)
 
@@ -146,7 +153,7 @@ function Base.show(B::Boundary)
 end
 
 function vp_print(B::Boundary;offset=0)
-    vp_print(offset,"BOUNDARY:")
+    vp_print(offset,"BOUNDARY:") 
     vp_line()
     for i in 1:(length(B.planes))
         plane=B.planes[i]
@@ -195,8 +202,9 @@ end
 
 ####################### GEOMETRIC OPERATIONS ######################################################################
 
-function reflect(node,boundary::Boundary,plane;indeces=nothing)
-    _plane=typeof(indeces)==Nothing ? boundary.planes[plane] : boundary.planes[indeces[plane]]
+@inline reflect(node,boundary::Boundary,plane,indeces) = reflect(node,boundary::Boundary,boundary.planes[indeces[plane]])
+function reflect(node,boundary::Boundary,plane)
+    _plane=boundary.planes[plane] 
     normal=_plane.normal
     base=_plane.base
     return node+normal .*(2*dot(normal,base.-node))    
@@ -235,6 +243,16 @@ function intersect(B::Boundary,x_0,v,condition=(x->true))
         end
     end
     return index,t
+end
+
+function intersection_exists(B::Boundary,x_0,v) 
+    p = intersect_point(B,x_0,v)
+    for i in 1:length(B.planes)
+        if dot(p-B.planes[i].base,B.planes[i].normal)>1.0E-5
+            return false
+        end
+    end
+    return true
 end
 
 function intersect_point(B::Boundary,x_0,v)
@@ -294,6 +312,32 @@ function compare(B1::Boundary,B2::Boundary,bc=false)
         end
     end
     return true
+end
+
+function same(boundary1::Boundary, boundary2::Boundary, i::Int)
+    plane1 = boundary1.planes[i]
+    plane2 = boundary2.planes[i]
+
+    normal_match = norm(plane1.normal_vector - plane2.normal_vector) < 1e-5
+    
+    b1, b2 = plane1.base_point, plane2.base_point
+    if norm(b1 + b2) > 1e-5
+        base_match = norm(b1 - b2) / norm(b1 + b2) < 1e-5
+    else
+        base_match = norm(b1 - b2) < 1e-5
+    end
+
+    return normal_match && base_match
+end
+
+function same(boundary1::Boundary, boundary2::Boundary)
+    length(boundary1)!=length(boundary2) && return false
+    ret = true
+    for i in 1:length(boundary1)
+        ret &= same(boundary1,boundary2,i)
+        !ret && break
+    end
+    return ret    
 end
 
 function split_boundary_indeces(B::Boundary)
@@ -357,7 +401,6 @@ function remove_periodicity(B::Boundary)
 end
 
 function extend_periodic_part(B::Boundary,xs::Points,indeces = false)
-    if indeces
         lxs = length(xs)
         _indeces = collect(1:length(B)) 
         for i in 1:length(B.planes)
@@ -378,18 +421,6 @@ function extend_periodic_part(B::Boundary,xs::Points,indeces = false)
             end
         end
         return keepat!(_indeces,map(x->(x!=0),_indeces))        
-    else
-        new_planes = Vector{Plane}(undef,length(B.planes))
-        for i in 1:length(B.planes)
-            if B.planes[i].BC>0
-                new_base = B.planes[i].base+B.planes[i].normal*dot(B.planes[i].normal,B.planes[i].base-B.planes[B.planes[i].BC].base)
-                new_planes[i]=Plane(new_base ,B.planes[i].normal,B.planes[i].BC) 
-            else
-                new_planes[i]=B.planes[i]
-            end
-        end
-        return Boundary(new_planes,B.convex)   
-    end 
 end
 
 
@@ -411,6 +442,7 @@ end
 
 
 function adjust_boundary_vertex(x,B::Boundary,sig,lmesh,lsig=length(sig),tolerance=1.0E-10)
+    return x
     x2 = x
     for i in lsig:-1:1
         sig[i]<=lmesh && break

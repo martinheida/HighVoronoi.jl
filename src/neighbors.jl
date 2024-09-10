@@ -1,139 +1,3 @@
-#=struct NewNeighborFinderIterator
-    positions::MVector{2,Int64}
-    lengths::MVector{2,Int64}
-    lists::Vector{Vector{Int64}}
-end
-
-NewNeighborFinderIterator() = NewNeighborFinderIterator(MVector{2,Int64}([0,0]),MVector{2,Int64}([0,0]),[Int64[],Int64[]])
-NewNeighborFinderIterator(sig,neigh) = NewNeighborFinderIterator(MVector{2,Int64}([0,0]),MVector{2,Int64}([length(sig),length(neigh)]),[sig,neigh])
-function reset(iterator::NewNeighborFinderIterator,sig,neigh)
-    iterator.lists[1] = sig
-    iterator.lists[2] = neigh
-    iterator.positions[1] = 0
-    iterator.positions[2] = 0
-    iterator.lengths[1] = length(sig)
-    iterator.lengths[2] = length(neigh)
-    return iterator
-end
-
-
-struct NewNeighborFinder{T,TT}
-    adjacents::Vector{Int64}
-    broken::BitVector
-    local_basis::Vector{T}
-    origins::Vector{TT}
-    number_of_vertices::Vector{Int64}
-    iterator::NewNeighborFinderIterator
-end
-
-function NewNeighborFinderIterator(NF::NewNeighborFinder,sig,neigh)
-    return reset(NF.iterator,sig,neigh)
-end
-
-function Base.iterate(NF::NewNeighborFinderIterator, state=1)
-    b = false
-    pos = NF.positions
-    le = NF.lengths
-    sig = NF.lists[1]
-    neigh = NF.lists[2]
-    pos[2] +=1
-    while pos[1]<le[1] # iterate over sig
-        pos[1] += 1
-        while pos[2]<=le[2] && neigh[pos[2]]<sig[pos[1]]
-            pos[2] += 1
-        end
-        if pos[2]>le[2] 
-            b=false
-            break
-        elseif neigh[pos[2]]==sig[pos[1]]
-            b=true
-            break
-        else
-        end
-    end
-    return b ? ( (pos[1],pos[2]), state+1 ) : nothing
-end
-
-function NewNeighborFinder(dim,proto)
-    adj = Vector{Int64}(undef,2^length(proto))
-    broken = falses(2^length(proto))
-    local_basis = Vector{Vector{MVector{length(proto),Float64}}}(undef,2^length(proto))
-    for i in 1:2^length(proto)
-        local_basis[i] = empty_local_Base(proto)
-    end
-    origins = Vector{MVector{length(proto),Float64}}([MVector{length(proto)}(zeros(Float64,length(proto))) for _ in 1:2^length(proto)])
-    nov = Vector{Int64}(undef,2^length(proto))
-    NNFI = NewNeighborFinderIterator(MVector{2,Int64}([0,0]),MVector{2,Int64}([0,0]),Vector{Vector{Int64}}(undef,2))
-    return NewNeighborFinder(adj,broken,local_basis,origins,nov,NNFI)
-end
-
-
-function reset(NF::NewNeighborFinder,neighbors,iterator,li,center,modus=true)
-    mylength = length(NF.number_of_vertices)
-    newlength = length(neighbors)
-    if newlength>mylength
-        resize!(NF.adjacents,newlength)
-        resize!(NF.broken,newlength) 
-        resize!(NF.local_basis,newlength)
-        resize!(NF.origins,newlength) 
-        for i in (mylength+1):newlength 
-            NF.local_basis[i] = empty_local_Base(NF.origins[1])
-            NF.origins[i] = MVector{length(center)}(zeros(Float64,length(center)))
-        end
-        resize!(NF.number_of_vertices,newlength)
-        end
-    view(NF.broken,1:newlength) .= true
-    view(NF.number_of_vertices,1:newlength) .= 0
-    view(NF.adjacents,1:newlength) .= 1 #neighbors
-    #view(NF.adjacents,(1+newlength):mylength) .= 0
-    for i in 1:newlength
-        NF.origins[i] .= 0.0
-    end
-
-    for (sig,r) in iterator
-        if length(sig)==(length(center)+1) && modus
-            for (_,b) in NewNeighborFinderIterator(NF,sig,neighbors)
-                NF.broken[b] = false
-            end
-        else
-            for (_,b) in NewNeighborFinderIterator(NF,sig,neighbors)
-                !NF.broken[b] && continue
-                NF.origins[b] .+= r
-                NF.number_of_vertices[b] += 1
-            end
-        end
-    end
-    for i in 1:newlength
-        NF.origins[i] ./= NF.number_of_vertices[i]
-    end
-
-    for (sig,r) in iterator
-        for (_,b) in NewNeighborFinderIterator(NF,sig,neighbors)
-            !NF.broken[b] && continue
-            base = NF.local_basis[b]
-            c_dim = NF.adjacents[b]
-            base[c_dim] .= r .- NF.origins[b]
-            normalize!(base[c_dim])
-            for kk in 1:(c_dim-1)
-                base[c_dim] .-= base[kk] .* dot(base[kk],base[c_dim])
-                base[c_dim] .-= base[kk] .* dot(base[kk],base[c_dim])
-            end
-            _norm = norm(base[c_dim])
-            if _norm>1.0E-4
-                normalize!(base[c_dim])
-                NF.adjacents[b] += 1
-                NF.broken[b] = c_dim<length(r)-1
-            end
-        end
-    end
-
-end
-
-function correct_neighbors(nf::NewNeighborFinder,neigh;xs=nothing,_Cell=0)
-
-    return deleteat!(neigh,view(nf.broken,1:length(neigh)))
-end
-=#
 
 struct NeighborFinder{M,VM,T}
     dimension::Int64
@@ -149,25 +13,23 @@ struct NeighborFinder{M,VM,T}
     sure_neighbors::Vector{Bool}
 end
 
-DimNeighborFinder{S} = NeighborFinder{S,SVector{S,Float64}}
+empty_local_Base(dim::Int) = Vector{MVector{dim,Float64}}([MVector{dim}(zeros(Float64,dim)) for _ in 1:dim])
+empty_local_Base(x::StaticVector) = [MVector(0*x) for _ in 1:length(x)]
+empty_local_Base(vec::AbstractVector{Float64}) = Vector{MVector{length(vec),Float64}}([MVector{length(vec)}(zeros(Float64,length(vec))) for _ in 1:length(vec)])
 
-function empty_local_Base(dim::Int)
-    base = Vector{MVector{dim,Float64}}([MVector{dim}(zeros(Float64,dim)) for _ in 1:dim])
-    #base[1][1] = 1.0
-    #println(base)
-    return base
+function NeighborFinder(dim,x::P) where P<:Point
+    mv = MVector(x)
+    return NeighborFinder{typeof(mv),Vector{typeof(mv)},Vector{P}}(
+        dim,[1],[false],
+        Vector{P}(undef,1),
+        MVector(0*x),
+        empty_local_Base(x),
+        MVector(0*x),
+        MVector(0*x),
+        Int64[1],[[true]],[false])
 end
 
-function empty_local_Base(vec::AbstractVector{Float64})
-    base = Vector{MVector{length(vec),Float64}}([MVector{length(vec)}(zeros(Float64,length(vec))) for _ in 1:length(vec)])
-    return base
-end
-
-function NeighborFinder(dim,x)
-    return NeighborFinder{MVector{length(x),Float64},Vector{MVector{length(x),Float64}},Vector{typeof(x)}}(dim,[1],[false],Vector{typeof(x)}(undef,1),MVector{dim}(zeros(Float64,dim)),empty_local_Base(dim),MVector{dim}(zeros(Float64,dim)),MVector{dim}(zeros(Float64,dim)),Int64[1],[[true]],[false])
-end
-
-function reset(NF::NeighborFinder,neighbors,iterator,li,center)
+@Base.propagate_inbounds function reset(NF::NeighborFinder,neighbors,iterator,li,center)
     dim = NF.dimension
     ln = length(neighbors)+1
     lc = length(NF.candidates)
@@ -200,26 +62,26 @@ function reset(NF::NeighborFinder,neighbors,iterator,li,center)
         NF.each_neighbor_verts[i] .= 0
     end
 
-    count = 1
+    count = 0
     for (sig,r) in iterator
+        count += 1
         NF.verteces[count] = r
         b = length(sig)<=dim+1
         for s in sig
-            pos = findfirst(x->x==s,NF.candidates)
-            if typeof(pos)!=Nothing
+            pos = searchsortedlast(neighbors,s)#findfirst(x->x==s,NF.candidates)
+            if pos!=0 && neighbors[pos]==s #typeof(pos)!=Nothing
                 #println("$s, $pos")
                 NF.each_neighbor_verts[pos][count] = true
                 b && (NF.broken[pos] = false)
             end
         end
-        count += 1
     end
+    NF.length_verts[1] = count
 end
 
-function push_vertex!(NF::NeighborFinder,sig,r)
-end
 
-function correct_neighbors(nf::NeighborFinder,neigh;xs=nothing,_Cell=0)
+
+@Base.propagate_inbounds function correct_neighbors(nf::NeighborFinder,neigh;xs=nothing,_Cell=0)
     number_of_neighbors = findfirst(x->x==0, nf.candidates)-1
     base = nf.local_basis
     origin = nf.local_origin
@@ -303,6 +165,101 @@ function correct_neighbors(nf::NeighborFinder,neigh;xs=nothing,_Cell=0)
 end
 
 
+
+
+
+
+
+
+####################################################################################################################
+####################################################################################################################
+####################################################################################################################
+
+
+## Neighbor Search....
+
+
+####################################################################################################################
+####################################################################################################################
+####################################################################################################################
+
+
+
+
+
+
+
+global NeighborFinders = Vector{Any}(undef,5)
+
+function _NeighborFinder(dim) 
+    lnf=length(HighVoronoi.NeighborFinders)
+    dim>lnf && resize!(HighVoronoi.NeighborFinders,dim)
+    if !isassigned(HighVoronoi.NeighborFinders,dim)
+        HighVoronoi.NeighborFinders[dim] = NeighborFinder(dim,VoronoiNode(zeros(Float64,dim)))
+    end
+    #return reinterpret(DimNeighborFinder{S},HighVoronoi.NeighborFinders[dim])
+    return HighVoronoi.NeighborFinders[dim]
+end
+
+""" 
+    neighbors_of_cell(_Cell,mesh,condition = r->true)  
+
+    This function takes the verteces of a cell (calculated e.g. by systematic_voronoi) and returns 
+    an array containing the index numbers of all neighbors. A `neighbor` here is a cell that shares a full interface.
+    any lower dimensional edge/vertex is not sufficient as a criterion. This is equivalent with `_Cell` and
+    `neighbor` sharing at least `dimension` different verteces.
+
+    'condition' can be any condition on the coordinates of a vertex
+"""
+@inline function neighbors_of_cell(_Cells,mesh::AbstractMesh,condition = r->true; adjacents=false, extended_xs::Points = nodes(mesh), edgeiterator =  nothing, neighbors = zeros(Int64,10))
+    return neighbors_of_cell_new(_Cells,mesh,condition,adjacents=adjacents,extended_xs=extended_xs,edgeiterator=edgeiterator,neighbors=neighbors)
+end
+
+
+function neighbors_of_cell_new(_Cells,mesh,condition = r->true; adjacents=true, extended_xs = nodes(mesh), edgeiterator = nothing, neighbors = zeros(Int64,10))
+    if neighbors[1]==0
+        position = 1
+        __max = 10
+        dim = dimension(mesh)
+        adjacents = adjacents || length(_Cells)>1
+        for _Cell in _Cells
+            for (sigma,r) in vertices_iterator(mesh,_Cell)
+                #ls_dim = length(sigma)<=dim+1
+                for i in sigma
+                    if i!=_Cell && (condition(r))
+                        #f = searchsortedlast(neighbors,i)#findfirstassured(i,neighbors)
+                        f = findfirstassured(i,neighbors)
+                        if f==0
+                            f = position
+                            neighbors[position] = i
+                            position += 1
+                            if position>__max
+                                __max += 10
+                                append!(neighbors,zeros(Int64,10))
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        for i in position:__max
+                neighbors[i] = typemax(Int64)
+        end
+        sort!(neighbors)
+        resize!(neighbors, findfirst(x->(x>typemax(Int64)-1),neighbors)-1)
+    end
+    adjacents && (return neighbors)
+    _Cell = _Cells
+
+    nf = typeof(edgeiterator)!=Nothing ? edgeiterator : _NeighborFinder(dim)
+    reset(nf,neighbors,vertices_iterator(mesh,_Cell),number_of_vertices(mesh,_Cell),extended_xs[_Cell])
+    correct_neighbors(nf,neighbors,xs=extended_xs,_Cell=_Cell)
+    return neighbors
+end
+
+
+
+
 ####################################################################################################################
 ####################################################################################################################
 ####################################################################################################################
@@ -326,17 +283,24 @@ struct IterativeDimensionChecker{S}
     trivial::Vector{Bool}
     random::MVector{S,Float64}
     buffer::MVector{S,Float64}
-    edge_iterator::FastEdgeIterator{Vector{DimFEIData{S}}}
+    edge_iterator::FastEdgeIterator{Vector{DimFEIData{S,Float64}},Float64}
     edge_buffer::Vector{Int64}
 end
 
-function IterativeDimensionChecker(dim)
+function IterativeDimensionChecker(dim::Int)
     return IterativeDimensionChecker{dim}(dim,empty_local_Base(dim),zeros(Int64,dim),empty_local_Base(dim),map!(k->zeros(Bool,dim),Vector{Vector{Bool}}(undef,dim),1:dim),
             Vector{Int64}(zeros(Int64,dim)),Vector{Int64}(zeros(Int64,dim)),[true],MVector{dim}(rand(dim)),MVector{dim}(zeros(Float64,dim)),
-            FastEdgeIterator(dim),zeros(Int64,dim))
+            FastEdgeIterator(zeros(SVector{dim,Float64})),zeros(Int64,dim))
 end
 
-function reset(idc::IterativeDimensionChecker, neighbors,xs,_Cell,verteces,anyway=true)
+function IterativeDimensionChecker(m::AM) where {P,AM<:AbstractMesh{P}}
+    dim = size(P)[1]
+    return IterativeDimensionChecker{size(P)[1]}(dim,empty_local_Base(dim),zeros(Int64,dim),empty_local_Base(dim),map!(k->zeros(Bool,dim),Vector{Vector{Bool}}(undef,dim),1:dim),
+            Vector{Int64}(zeros(Int64,dim)),Vector{Int64}(zeros(Int64,dim)),[true],MVector{dim}(rand(dim)),MVector{dim}(zeros(Float64,dim)),
+            FastEdgeIterator(zeros(P)),zeros(Int64,dim))
+end
+
+@Base.propagate_inbounds function reset(idc::IterativeDimensionChecker, neighbors,xs,_Cell,verteces,anyway=true)
     
     idc.trivial[1] = true
     length(xs[1])==2 && return 3

@@ -1,29 +1,23 @@
 
 
-function    integrate_cube(_Cell, data,Integrator,proto,_function)    
-    Integral  = Integrator.Integral
-    neigh = Integral.neighbors[_Cell]
-
+function    integrate_cube(_Cell, data,Integrator,Integral,proto,_function)    
     if (length(proto)==0) 
         return
     end 
+    cdw = cell_data_writable(Integral,_Cell,proto,[proto])
+    neigh = cdw.neighbors
 
-    Integral.bulk_integral[_Cell] = copy(proto)
-    Integral.interface_integral[_Cell] = Vector{Vector{Float64}}(undef,length(neigh))
-    map!(x->copy(proto), Integral.interface_integral[_Cell], 1:length(neigh))
-
-    verteces2 = Integral.MESH.Buffer_Verteces[_Cell]
-    verteces  = Integral.MESH.All_Verteces[_Cell]
+    verteces  = vertices_iterator(mesh(Integral),_Cell) #
     xs=data.extended_xs
 
     dim = data.dimension    # (full) Spatial dimension
     activate_data_cell(data,_Cell,neigh)
 
-    inter_inte = Integral.interface_integral[_Cell]
-    bulk_inte = Integral.bulk_integral[_Cell]
-    ar = Integral.area[_Cell]
+    inter_inte = cdw.interface_integral
+    bulk_inte = cdw.bulk_integral
+    ar = cdw.area
 
-
+ 
     # get all neighbors of this current cell
     _length=length(neigh)
 
@@ -38,22 +32,22 @@ function    integrate_cube(_Cell, data,Integrator,proto,_function)
     # do the integration
     I=Integrator
     heuristic_Cube_integral(_function, true, _Cell,  bulk_inte, ar, inter_inte, dim, neigh, 
-                _length,verteces,verteces2,emptydict,xs[_Cell],empty_vector,1:length(xs),Integral,xs)
+                _length,verteces,emptydict,xs[_Cell],empty_vector,xs)
 
 
-    return Integral.volumes[_Cell]
+    return cdw.volumes[1]
 end
 
 
 
 
-function heuristic_Cube_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,neigh,_length,verteces,verteces2,
-                            emptylist,vector,empty_vector,calculate,Full_Matrix,xs)
+function heuristic_Cube_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,neigh,_length,verteces,
+                            emptylist,vector,empty_vector,xs)
     # dd will store to each remaining neighbor N a sublist of verteces which are shared with N
     dd=Vector{typeof(emptylist)}(undef,_length)
     for i in 1:_length dd[i]=copy(emptylist) end
 
-    for (sig,r) in Iterators.flatten((verteces,verteces2))  # iterate over all verteces
+    for (sig,r) in verteces  # iterate over all verteces
         for _neigh in sig # iterate over neighbors in vertex
             _neigh==_Cell && continue
             index=_neigh_index(neigh,_neigh)
@@ -79,7 +73,7 @@ function heuristic_Cube_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,n
         end
         AREA_Int .*= (dim-1)/(dim*count)
         AREA_Int .+= (1/dim).*_function(_Center) 
-        thisarea = Full_Matrix.area[_Cell][k]
+        thisarea = A[k]
         AREA_Int .*= thisarea
             distance= 0.5*norm(vector-xs[buffer]) #abs(dot(normalize(vector-xs[buffer]),vert))
             _y=_function(vector)
@@ -98,12 +92,12 @@ end
 ########################################################################################################################################
 ########################################################################################################################################
 
-function cubic_voronoi_copy_verteces(Integral,deviation,counter,domain,get_volumes,vol1,vol2,indeces)
-    mesh = Integral.MESH
-    dim = length(mesh.nodes[1])
+function cubic_voronoi_copy_verteces(Integral,deviation,counter,extended_cube,get_volumes,vol1,vol2,indeces,proto)
+    mesh = HighVoronoi.mesh(Integral)
+    dim = dimension(mesh)
     _NON = counter.data.number_of_nodes
     lmesh = length(mesh)
-    lboundary = length(domain)
+#    lboundary = length(extended_cube)
 
     new_index = counter.cell_index
     current_dim = 0 
@@ -137,7 +131,8 @@ function cubic_voronoi_copy_verteces(Integral,deviation,counter,domain,get_volum
     c2 = lmesh+(2*current_dim) # LEFT
 
     # now transfer non-affected nodes
-    for (sig,r) in mesh.All_Verteces[old_index]
+    for (sig,r) in vertices_iterator(mesh,old_index)# mesh.All_Verteces[old_index]
+        sig[1]!=old_index && continue
         sig2 = copy(sig)
         stopp = false
         for ikk in 1:length(sig)
@@ -156,15 +151,17 @@ function cubic_voronoi_copy_verteces(Integral,deviation,counter,domain,get_volum
             append!(sig2,c1)
             sort!(filter!(x->x!=0,sig2))
         end
-        r2 = adjust_boundary_vertex(r + coordinateshift,domain,sig2,lmesh,length(sig2))
+        r2 = adjust_boundary_vertex(r + coordinateshift,extended_cube,sig2,lmesh,length(sig2))
         
         push!(mesh, sig2=>r2)
     end
-
-    neigh = Integral.neighbors[new_index] = copy(Integral.neighbors[old_index])
-    area = get_volumes ? (Integral.area[new_index] = copy(Integral.area[old_index])) : nothing
+#    error("")
+    cdw = cell_data_writable(Integral,old_index,nothing,nothing;get_integrals=staticfalse)
+    neigh = copy(cdw.neighbors)
+    area = get_volumes ? copy(cdw.area) : Float64[]
     stretchright =  counter.cell_array[current_dim]==counter.data.repeat[current_dim]
     stretchleft = counter.cell_array[current_dim]==2
+    volume = 0.0
     for ii in 1:length(neigh)
         if neigh[ii]==c2
             neigh[ii]=old_index
@@ -178,79 +175,85 @@ function cubic_voronoi_copy_verteces(Integral,deviation,counter,domain,get_volum
             stretchright && get_volumes && neigh[ii]!=old_index && (area[ii]*=vol2[current_dim])
         end
     end
-    if get_volumes
-        Integral.volumes[new_index] = Integral.volumes[old_index]
-        stretchleft && (Integral.volumes[new_index]/=vol1[current_dim])
-        stretchright && (Integral.volumes[new_index]*=vol2[current_dim])
-    end
     quicksort!(neigh,neigh,get_volumes ? area : neigh)
+    set_neighbors(Integral,new_index,neigh,proto,proto)
+    cdw2 = cell_data_writable(Integral,new_index,nothing,nothing,get_integrals=staticfalse)
+    if get_volumes
+        volume = cdw.volumes[1]
+        stretchleft && (volume/=vol1[current_dim])
+        stretchright && (volume*=vol2[current_dim])
+        cdw2.volumes[1] = volume
+        cdw2.area .= area
+    end
 end
 
-function first_cube(xs,deviation,cell_size,searcher,dispatch_resolve)
-    mesh = Voronoi_MESH(xs)
+function first_cube(mesh,deviation,cell_size,searcher)
+    xs = nodes(mesh)
     dim = length(xs[1])
     x0 = xs[1]-deviation-0.5*cell_size
     periodicity = PeriodicData(2*ones(Int64,dim),cell_size+deviation,1,zeros(Float64,dim))
 
-    MM = Matrix{Float64}(undef,dim,1)
-    MM[:,1] = x0
-    verteces = periodicgeodata(MM,periodicity,dispatch_resolve)
+    MM = x0
+    verteces = periodicgeodata([MM],periodicity)
     left_boundary = 2*collect(1:dim)
     left_boundary .+= length(xs)
     activate_cell( searcher, 1, left_boundary)
 
-#    radius = 0.5*sqrt( sum(abs2,cell_size) )*(1+1.0E-10)
     for r in verteces
         sig = _inrange(searcher.tree,r,norm(r-xs[1])*(1+1.0E-10))
         sort!(sig)
         push!(mesh,sig=>r)
     end
-    return mesh
 end
 
-function cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,domain,my_integrator,integrand,fast,dispatch_resolve)
+function cubic_voronoi(domain,periodicity,deviation,cell_size,search,my_integrator,integrand,periodicview)
+    extended_cube = internal_boundary(domain)
+    Integral = IntegralView(HighVoronoi.integral(domain),periodicview)
+    mesh = HighVoronoi.mesh(Integral)
+    xs = copy(nodes(mesh))
+    dim = length(xs[1])
+    searcher = Raycast(xs; domain = extended_cube, options=search)
+    lmesh = length(xs)
+    area = zeros(MVector{2*size(eltype(xs))[1],Float64})
     #=_I,_ = voronoi( xs, Iter=[1], searcher=searcher, intro="Calculate unit cell:   ",compact=true)
     Integrator = my_integrator(_I.Integral.MESH)=#
     vp_print(0,"Calculate first cell...")
-    mesh = first_cube(xs,deviation,cell_size,searcher,dispatch_resolve)
-    Integrator = my_integrator(mesh)
+    first_cube(mesh,deviation,cell_size,searcher)
+    Integrator = my_integrator(Integral)
+    proto = prototype_bulk(Integrator)
     _function = integrand
-    Integrator.Integral.neighbors[1] = neighbors_of_cell(1,Integrator.Integral.MESH)
-    get_volumes = fast && length(Integrator.Integral.volumes)>0
-    #data = (fast && integrand!=nothing) || !fast ? IntegrateData(Integrator.Integral.MESH.nodes,domain) : nothing
-    data = IntegrateData(Integrator.Integral.MESH.nodes,domain,Integrator) 
+    
+    get_volumes = enabled_volumes(Integral)
+    data = IntegrateData(xs,extended_cube,Integrator) 
     
     # data for first cell:
-    dim = length(xs[1])
-    lmesh = length(xs)
     vol_vector = deviation + cell_size 
     vol_vector2 = cell_size - deviation
-    Integrator.Integral.neighbors[1] = Vector{Int64}(undef,2*dim)
-    get_volumes && (Integrator.Integral.area[1] = Vector{Float64}(undef,2*dim))
-    proto = prototype_bulk(Integrator)# 0.0*(typeof(Integrator._function)!=Nothing ? Integrator._function(Integrator.Integral.MESH.nodes[1]) : Float64[])
-
+    neighbors = Vector{Int64}(undef,2*dim)
+    
     index = ones(Int64,dim)
     bit = BitVector(ones(Int8,dim))
     for i in 1:dim
         if get_volumes
             bit[i] = 0
-            Integrator.Integral.area[1][2*i-1] = Integrator.Integral.area[1][2*i] = prod(view(vol_vector,bit))
+            area[2*i-1] = area[2*i] = prod(view(vol_vector,bit))
             bit[i]=1
         end
-        Integrator.Integral.neighbors[1][2*i] = lmesh + 2*i
+        neighbors[2*i] = lmesh + 2*i
         index[i]=2
-        Integrator.Integral.neighbors[1][2*i-1] = index_from_array(index,periodicity)
+        neighbors[2*i-1] = index_from_array(index,periodicity)
         index[i]=1
     end
+    set_neighbors(Integral,1,copy(neighbors),proto,proto)
+    quicksort!(neighbors,neighbors,area)
+    cdw = cell_data_writable(Integral,1,proto,[proto])
+    cdw.area .= area
     if get_volumes
-        quicksort!(Integrator.Integral.neighbors[1],Integrator.Integral.neighbors[1],Integrator.Integral.area[1])
-        Integrator.Integral.volumes[1] = prod(vol_vector)
-    else
-        sort!(Integrator.Integral.neighbors[1])
+        cdw.volumes[1] = prod(vol_vector)
     end
 
-    integrate_cube(1, data,Integrator,proto,_function)    
-
+    integrate_cube(1, data,Integrator,Integral,proto,_function)    
+    println(cell_data_writable(Integral,1,proto,[proto]))
     pc = Periodic_Counter(periodicity)
     increase(pc)
     indeces = zeros(Int64,3^(dim-1))
@@ -263,68 +266,11 @@ function cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,domain,my_int
             vp_print(20,"$(pc.cell_index)")
             count=0
         end
-        cubic_voronoi_copy_verteces(Integrator.Integral,deviation,pc,domain,get_volumes,vol_vector./cell_size,vol_vector2./cell_size,indeces)
-        integrate_cube(pc.cell_index, data, Integrator,proto,_function)    
+        cubic_voronoi_copy_verteces(Integral,deviation,pc,extended_cube,get_volumes,vol_vector./cell_size,vol_vector2./cell_size,indeces,proto)
+        integrate_cube(pc.cell_index, data, Integrator,Integral,proto,_function)    
         increase(pc)
     end
     return Integrator
-end
-
-
-function CubicVoronoiGeometry(matrix_data::Matrix,dispatch_resolve; search_settings=[], fast=true, periodic=[], scale=ones(Float64,size(matrix_data,1)), repeat = 2*ones(Int64,size(matrix_data,1)), dimensions=ones(Float64,size(matrix_data,1)), integrator=VI_POLYGON, integrand=nothing, mc_accurate=(1000,100,20))
-    dim = size(matrix_data,1)
-    fast = true
-    fast = fast || integrand==nothing
-    _scale = diagm(scale)
-    data = _scale*matrix_data
-    deviation = _scale*(matrix_data[:,1]-0.5*dimensions)
-    println(Crayon(foreground=:red,underline=true), "Create cubic mesh in $dim-D from  1 point",Crayon(reset=true))
-    offsetvector = zeros(Float64,dim)
-    my_repeat = copy(repeat)
-    for i in 1:dim
-        if i in periodic
-            my_repeat[i]+=2
-            offsetvector[i] = (-1.0)* dimensions[i]
-        end
-    end
-    offsetvector = _scale*offsetvector
-    # upper right corner of the whole thing ... 
-    #upperright = _scale*copy(dimensions)
-    #upperright .*= my_repeat
-    #upperright .+= offsetvector
-
-    println(Crayon(foreground=:red,underline=true), "Periodicity: $periodic, Unit cell size: $(_scale*dimensions), repeat=$repeat, i.e. $(prod(repeat)) unit cells",Crayon(reset=true))
-    # dimensions of the actual cube
-    cell_size = _scale*copy(dimensions)
-    cubedimensions = copy(cell_size)
-    cubedimensions .*= repeat
-    cube = cuboid( dim, periodic = periodic, dimensions = cubedimensions )
-    # dimensions of the extended cube
-    extended_cubedimensions = copy(cell_size)
-    extended_cubedimensions .*= my_repeat
-    extended_cube = cuboid( dim, periodic = periodic, dimensions = extended_cubedimensions, offset = offsetvector )
-
-    periodicity = PeriodicData(my_repeat,cell_size,1,offsetvector)
-
-    xs = periodicgeodata(data,periodicity,dispatch_resolve)
-    lmesh = length(xs)
-
-    search = RaycastParameter(search_settings,(domain=extended_cube,))
-    searcher = Raycast(xs; domain=extended_cube,)
-    Integrator = cubic_voronoi(xs,periodicity,deviation,cell_size,searcher,extended_cube,m->HighVoronoi.Integrator(m,integrator,integrand=integrand,mc_accurate=mc_accurate),integrand,fast,dispatch_resolve)
-
-#    if fast
-        return PeriodicVoronoiGeometry(Integrator,cube,extended_cube,periodic,periodicity,integrator=integrator,integrand=integrand,mc_accurate=mc_accurate,search=search)
-#=    else
-        my_integrator = integrator
-        if integrator!=VI_GEOMETRY && integrator!=VI_POLYGON && integrator!=VI_MONTECARLO
-            println(Integrator_Name(integrator),"-method makes no sense. I use ",Integrator_Name(VI_POLYGON)," instead...")
-            my_integrator = VI_POLYGON
-        end
-        I2=HighVoronoi.Integrator(Integrator.Integral.MESH,type=integrator,integrand=integrand,mc_accurate=mc_accurate)
-        integrate(backup_Integrator(I2,true),domain=extended_cube,relevant=1:(lmesh+2*dim))
-        PeriodicVoronoiGeometry(I2,cube,extended_cube,periodic,periodicity,integrator=integrator,integrand=integrand,mc_accurate=mc_accurate,search=search)
-    end=#
 end
 
 

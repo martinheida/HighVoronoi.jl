@@ -1,20 +1,21 @@
 
 VoronoiNodesM(x::Matrix) = map(MVector{size(x,1)}, eachcol(x))
-VoronoiNodesM(x::Vector{<:Vector}) = map(MVector{length(x[1])}, x)
+VoronoiNodesM(x::Vector{<:Vector}) = map(MVector{size(eltype(x))[1]}, x)
 VoronoiNodesM(x::Vector{<:MVector}) = x
 VoronoiNodesM(p::AbstractVector{Float64}) = VoronoiNodesM([p])
+VoronoiNodesM(p::AbstractVector{Float32}) = VoronoiNodesM([p])
 
 const EI_valid_rays = 1
 const EI_currentprimary = 2
 const EI_currentsecondary = 3
 const EI_currentplane = 4
 
-struct FEIData{T,TT,TTT,TTTT}
+struct FEIData{T,TT,TTT,TTTT,FT}
     dim::Int64
     current_dim::Int64
     sig::Vector{Int64}
     r::T
-    vals::Vector{Float64} # seems not used, was a buffer
+    vals::Vector{FT} # seems not used, was a buffer
     local_xs::TTTT #Vector{T} 
     local_cone::TTTT #Vector{T}
     rays::TTTT #Vector{T}
@@ -27,11 +28,14 @@ struct FEIData{T,TT,TTT,TTTT}
     current_edge::T # seems not used
     proto::TTT
 end
-function FEIData(dim,cdim)
-    return FEIData(dim,cdim,Int64[],MVector{dim,Float64}(zeros(Float64,dim)),Float64[],VoronoiNodesM(rand(dim,dim)),VoronoiNodesM(rand(dim,dim)),VoronoiNodesM(rand(dim,dim)),[0],[1,0,0,0],[true],[true],MVector{dim,Int64}(zeros(Int64,dim)),[BitVector([1])],MVector{dim,Float64}(zeros(Float64,dim)),SVector{dim,Int64}(zeros(Int64,dim)))
+function FEIData(pp,cdim) 
+    get_dim(i::Int) = i 
+    get_dim(p::Point) = size(p)[1]
+    dim = get_dim(pp)
+    return FEIData{MVector{get_dim(pp),eltype(pp)},MVector{get_dim(pp),Int64},SVector{get_dim(pp),Int64},Vector{MVector{get_dim(pp),eltype(pp)}},eltype(pp)}(dim,cdim,Int64[],zeros(MVector{get_dim(pp),eltype(pp)}),eltype(pp)[],VoronoiNodesM(rand(eltype(pp),dim,dim)),VoronoiNodesM(rand(eltype(pp),dim,dim)),VoronoiNodesM(rand(eltype(pp),dim,dim)),[0],[1,0,0,0],[true],[true],zeros(MVector{dim,Int64}),[BitVector([1])],MVector{dim,eltype(pp)}(zeros(eltype(pp),dim)),zeros(SVector{dim,Int64}))
 end
 
-DimFEIData{S} = FEIData{MVector{S, Float64}, MVector{S, Int64}, SVector{S, Int64}, Vector{MVector{S, Float64}}}
+DimFEIData{S,FLOAT} = FEIData{MVector{S, FLOAT}, MVector{S, Int64}, SVector{S, Int64}, Vector{MVector{S, FLOAT}},FLOAT}
 #FEIData{MVector{S,Float64},MVector{S,Int64}}
 
 struct FEIStorage{TT}
@@ -74,17 +78,19 @@ function reset(fei::FEIStorage,sig,_Cell,neighbors,sig_neigh_iterator)
     return fei
 end
 
-struct FastEdgeIterator{T}
+struct FastEdgeIterator{T,FLOAT}
     iterators::T
-    ray_tol::Float64
-    function FastEdgeIterator(dim::Int,tol=1.0E-12)
-        S=dim
-        proto = FEIData(dim,dim)
+    ray_tol::FLOAT
+    function FastEdgeIterator(p_data,tol=1.0E-12)
+        get_dim(i::Int) = i
+        get_dim(p) = size(p)[1]
+        dim = get_dim(p_data)
+        proto = FEIData(p_data,dim)
         its = Vector{typeof(proto)}(undef,dim-1)
         for i in 1:(dim-1)
-            its[i] = FEIData(dim,dim-i+1)
+            its[i] = FEIData(p_data,dim-i+1)
         end
-        return new{typeof(its)}(its,tol)
+        return new{typeof(its),typeof(tol)}(its,tol)
     end
 end
 
@@ -99,10 +105,16 @@ function Base.iterate(itr::FastEdgeIterator, state=1)
 end
 function get_full_edge(sig,r,edge,NF_::FastEdgeIterator,xs)
     NF=NF_.iterators[1]
-#    error("need to modify `edge` argumet: has to be disposable vector")
     fullview,count = get_full_edge(NF.rays,NF.local_cone,NF.new_node,NF.active_nodes[1],length(NF.sig),NF.dim,NF_.ray_tol)
     return Vector{Int64}(view(NF.sig, fullview[1:count])), convert_SVector( -1 .* ray(NF_) )
 end
+
+function get_full_edge_indexing(sig,r,edge,NF_::FastEdgeIterator,xs)
+    NF=NF_.iterators[1]
+    fullview, count  = get_full_edge_indexing(NF.rays,NF.local_cone,NF.new_node,NF.active_nodes[1],length(NF.sig),NF.dim,NF_.ray_tol)
+    return view(NF.sig, fullview[1:count])
+end
+
 
 
 
@@ -197,36 +209,54 @@ function update_edge(NF_::FastEdgeIterator,searcher,edge,all_edges=false)
 
 
 
-function swap(i,j,args...)
+@inline function swap(i,j,args...)
     for k in 1:length(args)
-        args[k][i], args[k][j] = args[k][j], args[k][i]
+        @inbounds args[k][i], args[k][j] = args[k][j], args[k][i]
     end
 end
 
-function _swap(i,j,args)
-        args[i], args[j] = args[j], args[i]
+@inline function _swap(i,j,args)
+        @inbounds args[i], args[j] = args[j], args[i]
 end
 
-function ortho_project!(nu,i,range)
+@inline function ortho_project!(nu,i,range)
     for j in range
         if i!=j
-            nu[i] .-=  dot(nu[i], nu[j]) .* nu[j]
-            normalize!(nu[i])
+            @inbounds nu[i] .-=  dot(nu[i], nu[j]) .* nu[j]
+            @inbounds normalize!(nu[i])
         end
     end
 end
 
-function update_normal!(nu,i,dim)
-    nor_i = dot(nu[dim],nu[i])
-    nu[dim] .-= nor_i .*nu[i]
-    normalize!(nu[dim])    
+@inline function update_normal!(nu,i,dim)
+    @inbounds nor_i = dot(nu[dim],nu[i])
+    @inbounds nu[dim] .-= nor_i .*nu[i]
+    @inbounds normalize!(nu[dim])    
+end
+
+@inline function ortho_project2!(nu,i,range)
+    for j in range
+        if i!=j
+            @inbounds nu[i] .-=  dot(nu[i], nu[j]) .* nu[j]
+            @inbounds nu[i] .-=  dot(nu[i], nu[j]) .* nu[j]
+            @inbounds normalize!(nu[i])
+        end
+    end
+end
+
+@inline function update_normal2!(nu,i,dim)
+    @inbounds nor_i = dot(nu[dim],nu[i])
+    @inbounds nu[dim] .-= nor_i .*nu[i]
+    @inbounds nor_i = dot(nu[dim],nu[i])
+    @inbounds nu[dim] .-= nor_i .*nu[i]
+    @inbounds normalize!(nu[dim])    
 end
 
 function max_angle(nu,dim)
     m = 0.0
     for i in 1:(dim-1)
         for j in (i+1):dim
-            m = max(m,abs(dot(nu[i],nu[j])))
+            @inbounds m = max(m,abs(dot(nu[i],nu[j])))
         end
     end
     return 10*m
@@ -236,6 +266,12 @@ end
 function rotate(nu,i,dim)
         ortho_project!(nu,i,1:(i-1))        
         update_normal!(nu,i,dim)
+end
+
+
+function rotate2(nu,i,dim)
+    ortho_project2!(nu,i,1:(i-1))        
+    update_normal2!(nu,i,dim)
 end
 
 
@@ -441,32 +477,6 @@ function reset(NF_::FastEdgeIterator,sig::Sigma,r,xs,_Cell,searcher,fstore::FEIS
     end
     my_data[EI_valid_rays] =  sum(ii->NF.valid_nodes[ii],_Cell_entry:lsig)
     (!allrays) && (NF.valid_nodes[1:_Cell_entry] .= false)
-    #if dim==cdim && lsig==dim+1
-    #    print("$sig, $(NF.valid_nodes)")
-    #end
-
-#=    if dim==cdim &&  length(sig)>dim+1 #sum(NF.valid_nodes)>dim+1
-        println(round.(xs[1],digits=5))
-        println(round.(xs[2],digits=5))
-        println("$sig, $(NF.valid_nodes[1:length(sig)])")
-        for v in my_xs
-            print("$(round.(v,digits=5)) - ")
-        end
-        println()
-        b=true
-        while b
-            plausible, edge = update_edge(NF_,searcher,searcher.visited)
-            if !plausible
-                b=false
-                break
-            end
-            edge = view(sig,edge)
-            u = ray(NF_)
-            println(edge,"  ", u)
-        end
-        error("")
-    end
-    dim==cdim && println("-----------------------------------------------------------------------------------")=#
     return true 
 end
 
@@ -643,8 +653,8 @@ function scan_for_edge(NF::FEIData,edge::Vector{Int64},maxmaxangle::Float64,all_
         end
         nu[cdim] .= my_cone[first_entry]
         nu[1] .= my_cone[data[EI_currentprimary]]
-        rotate(nu,1,cdim)
-        rotate(nu,1,cdim)
+        rotate2(nu,1,cdim)
+        #rotate(nu,1,cdim)
         my_minimal[2] = data[EI_currentprimary]
         cdim>2 && (my_minimal[3:end] .= 0)
         active_condition(i) = !(i in my_minimal)
@@ -657,8 +667,8 @@ function scan_for_edge(NF::FEIData,edge::Vector{Int64},maxmaxangle::Float64,all_
    #             break
     #        end
             nu[i] .= my_cone[max_ind]
-            rotate(nu,i,cdim)
-            rotate(nu,i,cdim)
+            rotate2(nu,i,cdim)
+            #rotate(nu,i,cdim)
             my_minimal[i+1] = max_ind
             max_cos, max_ind = max_angle(nu,my_cone,lsig,my_vals,angle_condition,active_condition,cdim)
 #            positive |= max_cos>0 # if positive only once, keep this information alive
@@ -719,23 +729,30 @@ function get_full_edge(nu,my_cone,edge,first_entry,lsig,dim,_max_angle=1.0E-12)
     if _min<-_max_angle
         nu[dim] .*= -1
     end
-    #=count = 0
-    for k in 1:lsig
-        dnc = dot(nu[dim],my_cone[k])
-        inplane =  abs(dnc)<10*_max_angle 
-        (dnc<0 && !inplane) && (return Int64[])
-        if k==first_entry || inplane
-            count += 1
-            edge[count] = k
-        end
-    end =#
-#    print(", $(max(_max_angle,1.0E-12)) $_max_angle, $(view(edge,1:count)) ; ")
         
     return edge, count
 end
 
+function get_full_edge_indexing(nu,my_cone,edge,first_entry,lsig,dim,_max_angle=1.0E-12)
+    #println("hier")
+    count = 0
+    _max = 0.0
+    _min = 0.0
+    for k in 1:lsig
+        dnc = dot(nu[dim],my_cone[k])
+        inplane =  abs(dnc)<10*_max_angle 
+        _max = max(_max, k!=first_entry && !inplane ? dnc : 0.0)
+        _min = min(_min, k!=first_entry &&  !inplane ? dnc : 0.0)
+        if k==first_entry || inplane
+            count += 1
+            edge[count] = k
+        end
+    end         
+    return edge, count
+end
 
-function max_angle(nu,my_cone,lsig,my_vals,angle_condition,active_condition,dim)
+
+@Base.propagate_inbounds function max_angle(nu,my_cone,lsig,my_vals,angle_condition,active_condition,dim)
     #map!(k->dot(nu[dim],my_cone[k]),my_vals,1:lsig)
     max_cos = 2.0
     max_ind = 0

@@ -1,3 +1,11 @@
+ 
+struct Board2D{F1<:Function,F2<:Function,F3<:Function,F4<:Function}
+    _board::Boundary
+    draw_nodes::F1
+    draw_vertices::F2 
+    draw_edges::F3
+    d_line::F4
+end
 
 """
     draw2D(VG::VoronoiGeometry, filename=""; board=PlotBoard(), drawNodes=true, drawVerteces=true, drawEdges=true)
@@ -9,30 +17,24 @@ Generates MetaPost of VG output in the file with name filename for a two-dimensi
 - `drawEdges` : Set this value to "false" in order to not show the edges in the output  
 
 """
-function draw2D(VG::VoronoiGeometry, filename=""; board=PlotBoard(board = VG.domain.boundary), drawNodes=true, drawVerteces=true, drawEdges=true)
+function draw2D(VG::VoronoiGeometry, filename=""; public_only=true, board=PlotBoard(board = boundary(VG.domain)), drawNodes=true, drawVerteces=true, drawEdges=true)
     if filename=="" && typeof(board)!=PlotBoard
         println("MetaPost makes only sense when filename is provided...")
         return
     end
-    draw2D(VG.Integrator.Integral,filename,domain=VG.domain.boundary,draw_nodes=drawNodes,draw_verteces=drawVerteces,draw_edges=drawEdges, board=board)
-end
-
-"""
-    draw2D(Integral::Voronoi_Integral, filename::String; domain=nothing, board=PlotBoard(), drawNodes=true, drawVerteces=true, drawEdges=true)
-
-Almost the same as for a `VoronoiGeometry`. It has one additional parameter:
-- `domain`: A domain of type `Boundary` can be passed here. This will be shown in the color specified by `domain_color`.
-"""
-function draw2D(Integral::Voronoi_Integral, filename::String; domain=nothing, board=MetaPostBoard(), draw_nodes=true, draw_verteces=true, draw_edges=true)
-    if dimension(Integral)>2 error("dimension of Integral to large to be plottet in 2D") end
-    if typeof(board)==PlotBoard 
+    my_boundary = boundary(VG.domain)
+    board_boundary = public_only ? boundary(VG.domain) : internal_boundary(VG.domain)
+    kwargs = (domain=my_boundary,draw_nodes=drawNodes,draw_verteces=drawVerteces,draw_edges=drawEdges)
+    Integral = integrate_view(VG.domain).integral
+    if filename!="" && typeof(board)<:MetaPostBoard
+        open(filename,"w") do f 
+            draw2D(Integral,board=my_board(board,f,board_boundary);kwargs...)
+        end
+    elseif typeof(board)<:MetaPostBoard
+        draw2D(Integral,board=my_board(board,stdio,board_boundary);kwargs...)
+    else
         my_plot = plot(legend = false, aspect_ratio = 1)
-        f = 0
-        if typeof(domain)!=Nothing draw_Boundary_2D(domain,f,board,color=board.d_color) 
-        else println("seltsam") end
-        if draw_nodes draw_nodes_2D(Integral,f,board) end
-        if draw_edges draw_edges_2D(Integral,f,board) end
-        if draw_verteces draw_verteces_2D(Integral,f,board) end
+        draw2D(Integral,board=my_board(board,board_boundary);kwargs...)
         if filename!="" 
             try
                 savefig(filename)
@@ -41,15 +43,26 @@ function draw2D(Integral::Voronoi_Integral, filename::String; domain=nothing, bo
             end
         end
         display(my_plot)    
-    else
-        open(filename,"w") do f 
-            if typeof(domain)!=Nothing draw_Boundary_2D(domain,f,board,color=board.d_color) 
-            else println("seltsam") end
-            if draw_nodes draw_nodes_2D(Integral,f,board) end
-            if draw_edges draw_edges_2D(Integral,f,board) end
-            if draw_verteces draw_verteces_2D(Integral,f,board) end
-        end
     end
+
+end
+
+
+"""
+    draw2D(Integral::Voronoi_Integral, filename::String; domain=nothing, board=PlotBoard(), drawNodes=true, drawVerteces=true, drawEdges=true)
+
+Almost the same as for a `VoronoiGeometry`. It has one additional parameter:
+- `domain`: A domain of type `Boundary` can be passed here. This will be shown in the color specified by `domain_color`.
+"""
+function draw2D(Integral::HVI; domain=nothing, board, draw_nodes=true, draw_verteces=true, draw_edges=true) where HVI<:HVIntegral
+    if dimension(Integral)>2 
+        println("dimension of Integral to large to be plottet in 2D")
+        return 
+    end
+    if draw_nodes draw_nodes_2D(Integral,board) end
+    if draw_edges draw_edges_2D(Integral,board) end
+    if draw_verteces draw_verteces_2D(Integral,board) end
+    draw_Boundary_2D(domain,board)
 end
 
 
@@ -74,6 +87,14 @@ struct MetaPostBoard
     e_color::String
     d_color::String
     _board
+end
+
+function my_board(board::MetaPostBoard,f,boundary)
+    n = p->write(f,metapost_cross(p[1],p[2],color=board.n_color,scale=board.scale,size=board.n_size))
+    v = p->write(f,metapost_cross(p[1],p[2],color=board.v_color,scale=board.scale,size=board.v_size))
+    e = (r1,r2)->write(f,metapost_line(r1[1],r1[2],r2[1],r2[2],color=board.e_color,scale=board.scale))
+    d = (x1,x2)->write(f,metapost_line(x1[1],x1[2],x2[1],x2[2],scale=board.scale,color=board.d_color))
+    return Board2D(boundary,n,v,e,d)
 end
 
 """
@@ -124,59 +145,55 @@ function metapost_cross(x1,y1;color="",scale=100,size=0.02)
     return metapost_line(x1-size,y1,x1+size,y1,color=color,scale=scale)*metapost_line(x1,y1-size,x1,y1+size,color=color,scale=scale)
 end
 
-function draw_Boundary_2D(domain,f,board::MetaPostBoard;color="")
+function draw_Boundary_2D(domain,board)
     edges=edge_representation2D(domain)
     while !isempty(edges)
         (_,(x1,x2))=pop!(edges)
-        write(f,metapost_line(x1[1],x1[2],x2[1],x2[2],scale=board.scale,color=color))
+        board.d_line(x1,x2)
     end
 end
 
-function draw_nodes_2D(Integral::Voronoi_Integral,f,board::MetaPostBoard)
-    for p in Integral.MESH.nodes 
+function draw_nodes_2D(Integral::HVI,board,max_range=length(mesh(Integral))) where HVI<:HVIntegral
+    nod = nodes(mesh(Integral))
+    for i in 1:max_range #Integral.MESH.nodes
+        p = nod[i] 
         !(p in board._board) && continue # if p lies outside the domain _board it will not be shown
-        write(f,metapost_cross(p[1],p[2],color=board.n_color,scale=board.scale,size=board.n_size))
+        board.draw_nodes(p)
     end
 end
 
-function draw_nodes_2D(nodes::Points,f,board::MetaPostBoard,withcolor="green")
+#=function draw_nodes_2D(nodes::Points,f,board::MetaPostBoard,withcolor="green")
     for p in nodes 
         !(p in board._board) && continue # if p lies outside the domain _board it will not be shown
         write(f,metapost_cross(p[1],p[2],color=withcolor,scale=board.scale,size=board.n_size))
     end
-end
+end=#
 
 
-function draw_verteces_2D(Integral,f,board::MetaPostBoard)
-    for i in 1:length(Integral)
-        V=Integral.MESH.All_Verteces[i]
+function draw_verteces_2D(Integral,board,max_range=length(mesh(Integral)))
+    MESH = mesh(Integral)
+    for i in 1:max_range
+        V=vertices_iterator(MESH,i)
         for (sig,p) in V 
+            sig[1]!=i && continue
             !(p in board._board) && continue
-            write(f,metapost_cross(p[1],p[2],color=board.v_color,scale=board.scale,size=board.v_size))
-        end
-        V=Integral.MESH.Buffer_Verteces[i]
-        for (sig,p) in V 
-            !(p in board._board) && continue
-            write(f,metapost_cross(p[1],p[2],color=board.v_color,scale=board.scale,size=board.v_size))
+            board.draw_vertices(p)
         end
     end
 end
 
 
-function draw_edges_2D(Integral,f,board::MetaPostBoard)
-    emptylist=EmptyDictOfType([0]=>Integral.MESH.nodes[1])
+function draw_edges_2D(Integral::HVI,board) where {P,HVI<:HVIntegral{P}}
+    emptylist=Dict{Vector{Int64},P}()
+    MESH = mesh(Integral)
     dd=Vector{typeof(emptylist)}(undef,1)
     dd[1]=copy(emptylist)
-    All_Verteces=Integral.MESH.All_Verteces
-    Buffer_Verteces=Integral.MESH.Buffer_Verteces
-    for i in 1:(length(Integral))
+    for i in 1:(length(MESH))
         _Cell=i
-        neigh=neighbors_of_cell(i,Integral.MESH)
+        neigh=neighbors_of_cell(i,MESH)
         _length=length(neigh)
         while length(neigh)>length(dd) push!(dd,copy(emptylist)) end
-        verteces=All_Verteces[i]
-        verteces2=Buffer_Verteces[i]
-        for (sig,r) in Iterators.flatten((verteces,verteces2))  # iterate over all verteces
+        for (sig,r) in vertices_iterator(MESH,i)#Iterators.flatten((verteces,verteces2))  # iterate over all verteces
             for _neigh in sig # iterate over neighbors in vertex
                 _neigh<=_Cell && continue
                 index = _neigh_index(neigh,_neigh)
@@ -186,9 +203,24 @@ function draw_edges_2D(Integral,f,board::MetaPostBoard)
         for k in 1:_length
             neigh[k]<=_Cell && continue
             s1,r1=pop!(dd[k])
-            if !isempty(dd[k]) && r1 in board._board
+            if !isempty(dd[k]) 
                 s2,r2=pop!(dd[k])
-                r2 in board._board && write(f,metapost_line(r1[1],r1[2],r2[1],r2[2],color=board.e_color,scale=board.scale))
+                if !(r1 in board._board)
+                    r1,r2 = r2,r1
+                end
+                if !(r1 in board._board)
+                    direction = r2-r1
+                    if intersection_exists(board._board,r1,direction) && intersection_exists(board._board,r2,-direction)
+                        _r1 = intersect_point(board._board,r1,direction)
+                        _r2 = intersect_point(board._board,r2,-direction)
+                        board.draw_edges(_r1,_r2)
+                    end
+                elseif r2 in board._board 
+                    board.draw_edges(r1,r2)
+                else
+                    direction = r2-r1
+                    board.draw_edges(r1,intersect_point(board._board,r1,direction))
+                end
             end
             while !isempty(dd[k]) pop!(dd[k]) end
         end
@@ -218,6 +250,13 @@ struct PlotBoard
     e_color::Symbol
     d_color::Symbol
     _board
+end
+function my_board(board::PlotBoard,boundary)
+    n = p->plot_cross(p[1],p[2],color=board.n_color,scale=board.scale,size=board.n_size)
+    v = p->plot_cross(p[1],p[2],color=board.v_color,scale=board.scale,size=board.v_size)
+    e = (r1,r2)->plot_line(r1[1],r1[2],r2[1],r2[2],color=board.e_color,scale=board.scale)
+    d = (r1,r2)->plot_line(r1[1],r1[2],r2[1],r2[2],color=board.d_color,scale=board.scale)
+    return Board2D(boundary,n,v,e,d)
 end
 
 """
@@ -252,79 +291,6 @@ function plot_cross(x1,y1;color=:black,scale=1,size=0.02)
     plot_line(x1,y1-size,x1,y1+size,color=color,scale=scale)
 end
 
-function draw_Boundary_2D(domain,f,board::PlotBoard;color=:black)
-    edges=edge_representation2D(domain)
-    while !isempty(edges)
-        (_,(x1,x2))=pop!(edges)
-        plot_line(x1[1],x1[2],x2[1],x2[2],scale=board.scale,color=color)
-    end
-end
-
-function draw_nodes_2D(Integral::Voronoi_Integral,f,board::PlotBoard)
-    for p in Integral.MESH.nodes 
-        !(p in board._board) && continue # if p lies outside the domain _board it will not be shown
-        plot_cross(p[1],p[2],color=board.n_color,scale=board.scale,size=board.n_size)
-    end
-end
-
-
-
-function draw_verteces_2D(Integral,f,board::PlotBoard)
-    for i in 1:length(Integral)
-        V=Integral.MESH.All_Verteces[i]
-        for (sig,p) in V 
-            !(p in board._board) && continue
-            plot_cross(p[1],p[2],color=board.v_color,scale=board.scale,size=board.v_size)
-        end
-        V=Integral.MESH.Buffer_Verteces[i]
-        for (sig,p) in V 
-            !(p in board._board) && continue
-            plot_cross(p[1],p[2],color=board.v_color,scale=board.scale,size=board.v_size)
-        end
-    end
-end
-
-
-function draw_edges_2D(Integral,f,board::PlotBoard)
-    emptylist=EmptyDictOfType([0]=>Integral.MESH.nodes[1])
-    dd=Vector{typeof(emptylist)}(undef,1)
-    dd[1]=copy(emptylist)
-    All_Verteces=Integral.MESH.All_Verteces
-    Buffer_Verteces=Integral.MESH.Buffer_Verteces
-    for i in 1:(length(Integral))
-        _Cell=i
-        neigh=neighbors_of_cell(i,Integral.MESH)
-        _length=length(neigh)
-        while length(neigh)>length(dd) push!(dd,copy(emptylist)) end
-        verteces=All_Verteces[i]
-        verteces2=Buffer_Verteces[i]
-        for (sig,r) in Iterators.flatten((verteces,verteces2))  # iterate over all verteces
-            for _neigh in sig # iterate over neighbors in vertex
-                _neigh<=_Cell && continue
-                index = _neigh_index(neigh,_neigh)
-                index!=0 && (push!( dd[index] , sig =>r)) # push vertex to the corresponding list
-            end
-        end
-        for k in 1:_length
-            neigh[k]<=_Cell && continue
-            s1,r1=pop!(dd[k])
-            if !isempty(dd[k]) 
-                s2,r2=pop!(dd[k])
-                if  !(r1 in board._board)
-                    r1, r2 = r2, r1
-                end
-                if r1 in board._board
-                    if !(r2 in board._board)
-                        r2 = intersect_point(board._board,r1,r2-r1)
-                    end
-                    plot_line(r1[1],r1[2],r2[1],r2[2],color=board.e_color,scale=board.scale)
-                end
-            end
-            while !isempty(dd[k]) pop!(dd[k]) end
-        end
-    end
-    
-end
 
 
 #########################################################################################
@@ -333,8 +299,8 @@ end
 
 #########################################################################################
 
-function draw3D(VG::VoronoiGeometry, filename=""; board=PlotBoard(board=VG.domain.boundary), drawNodes=true, drawVerteces=true, drawEdges=true)
-    draw3D(VG.Integrator.Integral,filename,domain=VG.domain.boundary,draw_nodes=drawNodes,draw_verteces=drawVerteces,draw_edges=drawEdges, board=board)
+function draw3D(VG::VoronoiGeometry, filename=""; board=PlotBoard(board=boundary(VG.domain)), drawNodes=true, drawVerteces=true, drawEdges=true)
+    draw3D(integral(VG.domain),filename,domain=boundary(VG.domain),draw_nodes=drawNodes,draw_verteces=drawVerteces,draw_edges=drawEdges, board=board)
 end
 
 """
@@ -343,7 +309,7 @@ end
 Writes MetaPost code for the internal type Voronoi_Integral, which may be assessed via `VoronoiGeometry.Integrator.Integral`. It has one additional parameter:
 - `domain`: A domain of type `Boundary` can be passed here. This will be shown in the color specified by `domain_color`.
 """
-function draw3D(Integral::Voronoi_Integral, filename::String; domain=nothing, board=PlotBoard(), draw_nodes=true, draw_verteces=true, draw_edges=true)
+function draw3D(Integral::HVI, filename::String; domain=nothing, board=PlotBoard(), draw_nodes=true, draw_verteces=true, draw_edges=true) where HVI<:HVIntegral
     if dimension(Integral)!=3 error("dimension of Integral should be 3, is $(dimension(Integral))") end
     if typeof(board)==PlotBoard 
         my_plot = plot(legend = false, aspect_ratio = 1)
@@ -384,48 +350,47 @@ while !isempty(edges)
 end
 end=#
 
-function draw_nodes_3D(Integral::Voronoi_Integral,f,board::PlotBoard)
-for p in Integral.MESH.nodes 
-    !(p in board._board) && continue # if p lies outside the domain _board it will not be shown
-    plot_cross(p[1],p[2],p[3],color=board.n_color,scale=board.scale,size=board.n_size)
-end
+function draw_nodes_3D(Integral,f,board::PlotBoard)
+    for p in nodes(mesh(Integral)) 
+        !(p in board._board) && continue # if p lies outside the domain _board it will not be shown
+        plot_cross(p[1],p[2],p[3],color=board.n_color,scale=board.scale,size=board.n_size)
+    end
 end
 
 
 
 function draw_verteces_3D(Integral,f,board::PlotBoard)
-for i in 1:length(Integral)
-    V=Integral.MESH.All_Verteces[i]
-    for (sig,p) in V 
-        !(p in board._board) && continue
-        plot_cross(p[1],p[2],p[3],color=board.v_color,scale=board.scale,size=board.v_size)
+    MESH = mesh(Integral)
+    for i in 1:length(MESH)
+        V=vertices_iterator(MESH,i)
+        for (sig,p) in V 
+            sig[1]!=i && continue
+            !(p in board._board) && continue
+            plot_cross(p[1],p[2],p[3],color=board.v_color,scale=board.scale,size=board.v_size)
+        end
     end
-    V=Integral.MESH.Buffer_Verteces[i]
-    for (sig,p) in V 
-        !(p in board._board) && continue
-        plot_cross(p[1],p[2],p[3],color=board.v_color,scale=board.scale,size=board.v_size)
-    end
-end
 end
 
 
 function draw_edges_3D(Integral,f,board::PlotBoard)
-    nodes = Integral.MESH.nodes
+    MESH = mesh(Integral)
+    nodes = HighVoronoi.nodes(MESH)
     for _Cell in 1:length(nodes)
-        draw_edges_3D_cell(Integral,_Cell,neighbors_of_cell(_Cell,Integral.MESH),board.e_color)
+        draw_edges_3D_cell(Integral,_Cell,neighbors_of_cell(_Cell,MESH),board.e_color)
     end 
 end
 
-function draw_edges_3D_cell(Integral,_Cell,neighbors,color)
-    verteces2 = Integral.MESH.Buffer_Verteces[_Cell]
-    verteces  = Integral.MESH.All_Verteces[_Cell]
-    dim = length(Integral.MESH.nodes[1])
+function draw_edges_3D_cell(Integral::HVI,_Cell,neighbors,color) where {P,HVI<:HVIntegral{P}}
+    MESH = mesh(Integral)
+    nodes = HighVoronoi.nodes(MESH)
+    dim = dimension(Integral)
     # get all neighbors of this current cell
     neigh=neighbors
     _length=length(neigh)
+    verteces = vertices_iterator(MESH,_Cell)
 
     # flexible data structure to store the sublists of verteces at each iteration step 1...dim-1
-    emptydict=EmptyDictOfType([0]=>Integral.MESH.nodes[1])      # empty buffer-list to create copies from
+    emptydict=Dict{Vector{Int64},P}()      # empty buffer-list to create copies from
     listarray=(typeof(emptydict))[] # will store to each remaining neighbor N a sublist of verteces 
                                     # which are shared with N
     all_dd=(typeof(listarray))[]
@@ -434,7 +399,7 @@ function draw_edges_3D_cell(Integral,_Cell,neighbors,color)
     # do the integration
     taboo = zeros(Int64,dim)
     iterative_3D_edge( _Cell, dim, dim, neigh, 
-                _length,verteces,verteces2,emptydict,all_dd,taboo,color)
+                _length,verteces,emptydict,emptydict,all_dd,taboo,color)
 end
 
 function iterative_3D_edge(_Cell, dim, space_dim, neigh, _length,verteces,verteces2,emptylist,all_dd,taboo,color)

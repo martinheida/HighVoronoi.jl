@@ -8,10 +8,16 @@ struct Heuristic_Integrator{T,TT}
     function Heuristic_Integrator{T,TT}(f::T,b::Bool,I::TT) where {T,TT}
         return new(f,b,I)
     end
-    function Heuristic_Integrator(mesh,integrand=nothing, bulk_integral=false)
+    function Heuristic_Integrator(mesh::AbstractMesh,integrand=nothing, bulk_integral=false)
         b_int=(typeof(integrand)!=Nothing) ? bulk_integral : false
         i_int=(typeof(integrand)!=Nothing) ? true : false
         Integ=Voronoi_Integral(mesh,integrate_bulk=b_int, integrate_interface=i_int)
+        PI=Heuristic_Integrator{typeof(integrand),typeof(Integ)}( integrand, b_int, Integ )
+        return PI
+    end
+    function Heuristic_Integrator(Integ::HVIntegral,integrand=nothing, bulk_integral=false)
+        b_int = bulk_integral || (typeof(integrand) != Nothing)
+        enable(Integ,integral=b_int)
         PI=Heuristic_Integrator{typeof(integrand),typeof(Integ)}( integrand, b_int, Integ )
         return PI
     end
@@ -25,20 +31,23 @@ function copy(I::Heuristic_Integrator)
     return Heuristic_Integrator{typeof(I._function),typeof(I.Integral)}(I._function,I.bulk,copy(I.Integral))
 end
 
-function integrate(Integrator::Heuristic_Integrator; domain=Boundary(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
-    #println("PolyInt: ")#$(length(relevant)), $(length(modified))")
-    _integrate(Integrator; domain=domain, calculate=relevant, iterate=Base.intersect(union(modified,relevant),1:(length(Integrator.Integral)))) 
+@inline function integrate(Integrator::Heuristic_Integrator; progress=ThreadsafeProgressMeter(0,true,""), domain=Boundary(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
+    _integrate(Integrator; domain=domain, calculate=modified, iterate=relevant,progress=progress) 
 end
+#function integrate(Integrator::Heuristic_Integrator; domain=Boundary(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
+    #println("PolyInt: ")#$(length(relevant)), $(length(modified))")
+#    _integrate(Integrator; domain=domain, calculate=relevant, iterate=Base.intersect(union(modified,relevant),1:(length(Integrator.Integral)))) 
+#end
 
 
 function prototype_bulk(Integrator::Heuristic_Integrator)
-    y = (typeof(Integrator._function)!=Nothing && Integrator.bulk) ? Integrator._function(Integrator.Integral.MESH.nodes[1]) : Float64[]
+    y = (typeof(Integrator._function)!=Nothing && Integrator.bulk) ? Integrator._function(nodes(mesh(Integrator.Integral))[1]) : Float64[]
     y.*= 0.0
     return y
 end
 
 function prototype_interface(Integrator::Heuristic_Integrator)
-    return 0.0*(typeof(Integrator._function)!=Nothing ? Integrator._function(Integrator.Integral.MESH.nodes[1]) : Float64[])
+    return 0.0*(typeof(Integrator._function)!=Nothing ? Integrator._function(nodes(mesh(Integrator.Integral))[1]) : Float64[])
 end
 
 """ 
@@ -51,15 +60,15 @@ end
             corresponds to the d-1 dimensional area of the Voronoi interface 
 """
 #function integrate(domain,_Cell,iter,calcul,searcher,Integrator::Heuristic_Integrator)
-function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Heuristic_Integrator,ar,bulk_inte,inter_inte)    
+function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Heuristic_Integrator,ar,bulk_inte,inter_inte,_)    
     #println(bulk_inte)
     #println(inter_inte)
     #println(ar)
     Integral  = Integrator.Integral
     (typeof(Integrator._function) == Nothing) && (return Integral.volumes[_Cell])
 
-    verteces2 = Integral.MESH.Buffer_Verteces[_Cell]
-    verteces  = Integral.MESH.All_Verteces[_Cell]
+    verteces  = vertices_iterator(mesh(Integral),_Cell)
+    #println(verteces)
     xs=data.extended_xs
 
     dim = data.dimension    # (full) Spatial dimension
@@ -70,32 +79,30 @@ function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Heuri
 
     # flexible data structure to store the sublists of verteces at each iteration step 1...dim-1
     emptydict=EmptyDictOfType([0]=>xs[1])      # empty buffer-list to create copies from
-    listarray=(typeof(emptydict))[] # will store to each remaining neighbor N a sublist of verteces 
-                                    # which are shared with N
 
     # empty_vector will be used to locally store the center at each level of iteration. This saves
     # a lot of "memory allocation time"
     empty_vector=zeros(Float64,dim)
 
-
     # do the integration
     I=Integrator
-    heuristic_integral(I._function, I.bulk, _Cell,  bulk_inte, ar, inter_inte, dim, neigh, 
-                _length,verteces,verteces2,emptydict,xs[_Cell],empty_vector,calculate,Integral,xs)
-    #println(bulk_inte)
+    bulk_inte .= 0.0
+    _heuristic_integral(I._function, I.bulk, _Cell,  bulk_inte, ar, inter_inte, dim, neigh, 
+                _length,verteces,emptydict,xs[_Cell],empty_vector,calculate,Integral,xs)
+                #println(bulk_inte)
     #println(inter_inte)
     #println(ar)
     try
-        return Integral.volumes[_Cell]
-    catch 
+        cdw = cell_data_writable(Integral,_Cell,nothing,nothing,get_integrals=staticfalse)
+        return cdw.volumes[1]
+    catch
         return 0.0
     end
 end
 
 
 
-
-function heuristic_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,neigh,_length,verteces,verteces2,
+function _heuristic_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,neigh,_length,verteces,
                             emptylist,vector,empty_vector,calculate,Full_Matrix,xs)
     # dd will store to each remaining neighbor N a sublist of verteces which are shared with N
     dd=Vector{typeof(emptylist)}(undef,_length)
@@ -105,10 +112,13 @@ function heuristic_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,neigh,
         for _neigh in sig # iterate over neighbors in vertex
             _neigh==_Cell && continue
             index=_neigh_index(neigh,_neigh)
-            index!=0 && (push!( dd[index] , sig =>r)) # push vertex to the corresponding list
+            index==0 && continue #(push!( dd[index] , sig =>r)) # push vertex to the corresponding list
+            if (_neigh>_Cell || isempty(dd[index])) # make sure for every neighbor the dd-list is not empty
+                push!( dd[index] , sig =>r) # push vertex to the corresponding list
+            end
         end
     end
-    for (sig,r) in verteces2 # repeat in case verteces2 is not empty
+#=    for (sig,r) in verteces2 # repeat in case verteces2 is not empty
         for _neigh in sig
             _neigh==_Cell && continue
             index=_neigh_index(neigh,_neigh)
@@ -117,10 +127,13 @@ function heuristic_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,neigh,
                 push!( dd[index] , sig =>r) # push vertex to the corresponding list
             end
         end
-    end
+    end=#
     for k in 1:_length
         buffer=neigh[k]  
-        if !(buffer in calculate) && !(_Cell in calculate) continue end
+        if !(buffer in calculate) 
+            empty!(dd[k])
+            continue 
+        end
         bufferlist=dd[k] 
         isempty(bufferlist) && continue
         AREA_Int = Ay[k] # always: typeof(_function)!=Nothing
@@ -134,8 +147,10 @@ function heuristic_integral(_function, _bulk, _Cell::Int64, y, A, Ay, dim,neigh,
             count+=1
         end
         AREA_Int .*= (dim-1)/(dim*count)
-        AREA_Int .+= (1/dim).*_function(_Center) 
-        thisarea = Full_Matrix.area[_Cell][k]
+        AREA_Int .+= (1/dim).*_function(_Center)
+        #println(AREA_Int)
+        data = cell_data_writable(Full_Matrix,_Cell,nothing,nothing,get_integrals=staticfalse) 
+        thisarea = data.area[k]
         AREA_Int .*= thisarea
 #        print("*")
         if _bulk # and finally the bulk integral, if whished

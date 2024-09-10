@@ -1,40 +1,59 @@
 # We provide the Fast_Polygon_Integrator. It is defined and initialized similar to 
 # the MC 
 
-struct Fast_Polygon_Integrator{T,TT} 
+struct Fast_Polygon_Integrator{T,TT,IDC<:IterativeDimensionChecker,D} 
     _function::T
     bulk::Bool
     # If i!=nothing, then area has to be true. Otherwise values are taken as given
     Integral::TT
-    iterative_checker::IterativeDimensionChecker
-    function Fast_Polygon_Integrator{T,TT}(f::T,b::Bool,I::TT,Itc) where {T,TT}
-        return new(f,b,I,Itc)
+    iterative_checker::IDC
+    data::D
+    function Fast_Polygon_Integrator{T,TT,IDC}(f::T,b::Bool,I::TT,Itc::IDC) where {T,TT,IDC}
+        data = DictHierarchy(zeros(PointType(I)))
+        D = typeof(data)
+        return new{T,TT,IDC,D}(f,b,I,Itc,data)
     end
     function Fast_Polygon_Integrator(mesh,integrand=nothing, bulk_integral=false)
         b_int=(typeof(integrand)!=Nothing) ? bulk_integral : false
         i_int=(typeof(integrand)!=Nothing) ? true : false
         Integ=Voronoi_Integral(mesh,integrate_bulk=b_int, integrate_interface=i_int)
-        PI=Fast_Polygon_Integrator{typeof(integrand),typeof(Integ)}( integrand, b_int, Integ, IterativeDimensionChecker(length(mesh.nodes[1])) )
+        idc = IterativeDimensionChecker(dimension(mesh))
+        PI=Fast_Polygon_Integrator{typeof(integrand),typeof(Integ),typeof(idc)}( integrand, b_int, Integ, idc )
         return PI
     end
+    function Fast_Polygon_Integrator(Integ::HVIntegral,integrand=nothing, bulk_integral=false)
+        b_int=(typeof(integrand)!=Nothing) ? bulk_integral : false
+        enable(Integ,volume=true,integral=b_int)
+        idc = IterativeDimensionChecker(dimension(mesh(Integ)))
+        PI=Fast_Polygon_Integrator{typeof(integrand),typeof(Integ),typeof(idc)}( integrand, b_int, Integ, idc )
+        return PI
+    end
+    function Fast_Polygon_Integrator(fpi::FPI,d::D) where {T,TT,IDC,FPI<:Fast_Polygon_Integrator{T,TT,IDC},D}
+        return new{T,TT,IDC,D}(fpi._function,fpi.bulk,fpi.Integral,fpi.iterative_checker,d)
+    end
+end
+function parallelize_integrators(myintes2::Vector{I}) where {I<:Fast_Polygon_Integrator}
+    meshes = map(i->mesh(i.Integral),myintes2)
+    tmdh = ThreadsafeMeshDictHierarchy(meshes,zeros(PointType(myintes2[1].Integral)))
+    return map(i->Fast_Polygon_Integrator(myintes2[i],tmdh[i]),1:length(meshes))
 end
 
 function copy(I::Fast_Polygon_Integrator)
     return Fast_Polygon_Integrator{typeof(I._function),typeof(I.Integral)}(I._function,I.bulk,copy(I.Integral))
 end
 
-function integrate(Integrator::Fast_Polygon_Integrator; domain=FullSpace(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
-    _integrate(Integrator; domain=domain, calculate=relevant, iterate=Base.intersect(union(modified,relevant),1:(length(Integrator.Integral)))) 
+@inline function integrate(Integrator::Fast_Polygon_Integrator; domain,  relevant, modified,progress)
+    _integrate(Integrator, domain=domain, calculate=modified, iterate=relevant,progress=progress) 
+    
 end
 
-
 function prototype_bulk(Integrator::Fast_Polygon_Integrator)
-    y = (typeof(Integrator._function)!=Nothing && Integrator.bulk) ? Integrator._function(Integrator.Integral.MESH.nodes[1]) : Float64[]
+    y = (typeof(Integrator._function)!=Nothing && Integrator.bulk) ? Integrator._function(nodes(mesh(Integrator.Integral))[1]) : Float64[]
     return 0.0*y
 end
 
 function prototype_interface(Integrator::Fast_Polygon_Integrator)
-    return 0.0*(typeof(Integrator._function)!=Nothing ? Integrator._function(Integrator.Integral.MESH.nodes[1]) : Float64[])
+    return 0.0*(typeof(Integrator._function)!=Nothing ? Integrator._function(nodes(mesh(Integrator.Integral))[1]) : Float64[])
 end
 
 struct PolyBufferData
@@ -43,6 +62,85 @@ struct PolyBufferData
 end
 
 struct NoPolyBuffer
+end
+
+
+struct MeshDict{K, V, AM<:AbstractMesh, MV, D<:AbstractDict{K, V}} <: AbstractDict{K, V}
+    mesh::AM
+    buffer::MV
+    dict::D  
+    function MeshDict(mesh::AM, dict::D) where {K, V, AM<:AbstractMesh, D<:AbstractDict{K, V}}
+        buffer = MVector(zeros(K))
+        return new{K, V, AM, typeof(buffer), D}(mesh, buffer, dict)
+    end
+end
+
+function Base.push!(md::MeshDict{K, V, AM, MV, D}, pairs::Pair{K, V}) where {K, V, AM<:AbstractMesh, MV, D<:AbstractDict{K, V}}
+    md.buffer .= pairs[1]
+    push!(md.dict,K(sort!(_internal_indeces(md.mesh,md.buffer)))=>pairs[2])
+end
+function Base.haskey(md::MD, key) where {K,MD<:MeshDict{K}}
+    md.buffer .= key
+    sort!(_internal_indeces(md.mesh,md.buffer))
+    return haskey(md.dict,K(md.buffer))
+end
+function Base.getindex(md::MeshDict{K, V, AM, MV, D}, key::K) where {K, V, AM<:AbstractMesh, MV, D<:AbstractDict{K, V}}
+    md.buffer .= key
+    getindex(md.dict,K(sort!(_internal_indeces(md.mesh,md.buffer))))
+end
+
+
+
+
+struct DictHierarchy{D,S}
+    dict::D
+    sub::S
+    DictHierarchy(x::P) where {P<:Point} = DictHierarchy(x,StaticArrays.deleteat(x,1))
+    DictHierarchy(x::SV2) where {R<:Real,SV2<:SVector{2,R}} = DictHierarchy(x,x)
+    function DictHierarchy(x,dim_vec)
+        proto = SVector{length(x)-length(dim_vec)+2,Int64}(zeros(Int64,length(x)-length(dim_vec)+2))
+        facets = Dict{typeof(proto),PolyBufferData}() #Dict{typeof(proto),PolyBufferData}()
+        sub = DictHierarchy(x,StaticArrays.deleteat(dim_vec,1))
+        return new{typeof(facets),typeof(sub)}(facets,sub)
+    end
+    function DictHierarchy(x,dim_vec::SV2) where {R<:Real,SV2<:SVector{2,R}}
+        proto = SVector{length(x)-length(dim_vec)+2,Int64}(zeros(Int64,length(x)-length(dim_vec)+2))
+        facets = Dict{typeof(proto),PolyBufferData}() #Dict{typeof(proto),PolyBufferData}()
+        return new{typeof(facets),Nothing}(facets,nothing)
+    end
+end
+
+struct ThreadsafeDictHierarchy{D<:Union{AbstractDict,MultiKeyDict},S}
+    dict::D
+    sub::S
+end
+ThreadsafeDictHierarchy(x::P) where {P<:Point} = ThreadsafeDictHierarchy(x,StaticArrays.deleteat(x,1))
+ThreadsafeDictHierarchy(x::SV2) where {R<:Real,SV2<:SVector{2,R}} = ThreadsafeDictHierarchy(x,x)
+function ThreadsafeDictHierarchy(x::P,dim_vec) where {P<:Point}
+    proto = SVector{length(x)-length(dim_vec)+2,Int64}(zeros(Int64,length(x)-length(dim_vec)+2))
+    facets = ThreadsafeDict(Dict{typeof(proto),PolyBufferData}())
+    sub = ThreadsafeDictHierarchy(x,StaticArrays.deleteat(dim_vec,1))
+    return ThreadsafeDictHierarchy{typeof(facets),typeof(sub)}(facets,sub)
+end
+function ThreadsafeDictHierarchy(x,dim_vec::SV2) where {R<:Real,SV2<:SVector{2,R}}
+    proto = SVector{length(x)-length(dim_vec)+2,Int64}(zeros(Int64,length(x)-length(dim_vec)+2))
+    facets = ThreadsafeDict(Dict{typeof(proto),PolyBufferData}())
+    return ThreadsafeDictHierarchy{typeof(facets),Nothing}(facets,nothing)
+end
+
+ThreadsafeMeshDictHierarchy(meshes,x::P) where {P<:Point} = ThreadsafeMeshDictHierarchy(meshes,x,StaticArrays.deleteat(x,1))
+function ThreadsafeMeshDictHierarchy(meshes,x,dim_vec)
+    proto = SVector{length(x)-length(dim_vec)+2,Int64}(zeros(Int64,length(x)-length(dim_vec)+2))
+    tsd = MultiKeyDict{typeof(proto),PolyBufferData}()
+    facets = map(m->MeshDict(m,tsd),meshes)
+    subs = ThreadsafeMeshDictHierarchy(meshes,x,StaticArrays.deleteat(dim_vec,1))
+    return map(i->ThreadsafeDictHierarchy{typeof(facets[i]),typeof(subs[i])}(facets[i],subs[i]),1:length(meshes))
+end
+function ThreadsafeMeshDictHierarchy(meshes,x,dim_vec::SV2) where {R<:Real,SV2<:SVector{2,R}}
+    proto = SVector{length(x)-length(dim_vec)+2,Int64}(zeros(Int64,length(x)-length(dim_vec)+2))
+    tsd = MultiKeyDict{typeof(proto),PolyBufferData}()
+    facets = map(m->MeshDict(m,tsd),meshes)
+    return map(i->ThreadsafeDictHierarchy{typeof(facets[i]),Nothing}(facets[i],nothing),1:length(meshes))
 end
 
 struct PolyBuffer{SUB,DIC,P,T,TT}
@@ -55,21 +153,22 @@ struct PolyBuffer{SUB,DIC,P,T,TT}
     generators::BitVector
     buffer_generators::BitVector
 end
-PolyBuffer(xs::Points) = PolyBuffer(xs[1])
-PolyBuffer(x) = PolyBuffer(x,StaticArrays.deleteat(x,1))
-function PolyBuffer(x,dim_vec)
+PolyBuffer(xs::HVN) where {P,HVN<:HVNodes{P}} = PolyBuffer(xs[1])
+PolyBuffer(x::P) where {P<:Point} = PolyBuffer(x,StaticArrays.deleteat(x,1))
+PolyBuffer(x::P,data) where {P<:Point} = PolyBuffer(x,StaticArrays.deleteat(x,1),data)
+function PolyBuffer(x,dim_vec,data)
     proto = SVector{length(x)-length(dim_vec)+2,Int64}(zeros(Int64,length(x)-length(dim_vec)+2))
     current = MVector{length(x)-length(dim_vec)+2,Int64}(zeros(Int64,length(x)-length(dim_vec)+2))
-    facets = Dict{typeof(proto),PolyBufferData}()
-    return PolyBuffer(facets,PolyBuffer(x,StaticArrays.deleteat(dim_vec,1)),Float64[],proto,MVector{length(x)}(x),current,falses(2^length(x)),falses(2^length(x)))
+    facets = data.dict
+    return PolyBuffer(facets,PolyBuffer(x,StaticArrays.deleteat(dim_vec,1),data.sub),Float64[],proto,MVector{length(x)}(x),current,falses(2^length(x)),falses(2^length(x)))
 end
-function PolyBuffer(x,dim_vec::SVector{2,<:Real})
+function PolyBuffer(x,dim_vec::SV2,data) where {R<:Real,SV2<:SVector{2,R}}
     proto = SVector{length(x)-length(dim_vec)+2,Int64}(zeros(Int64,length(x)-length(dim_vec)+2))
     current = MVector{length(x)-length(dim_vec)+2,Int64}(zeros(Int64,length(x)-length(dim_vec)+2))
-    facets = Dict{typeof(proto),PolyBufferData}()
+    facets = data.dict
     return PolyBuffer(facets,NoPolyBuffer(),Float64[],proto,MVector{length(x)}(x),current,falses(2^length(x)),falses(2^length(x)))
 end
-PolyBuffer(xs,dim_vec::SVector{1,<:Real}) = NoPolyBuffer()
+PolyBuffer(_,::SV1,d) where {R<:Real,SV1<:SVector{1,R}} = NoPolyBuffer()
 get_Edge_Level(pb::PolyBuffer) = get_Edge_Level(pb,pb.sub)
 get_Edge_Level(pb::PolyBuffer,sub::PolyBuffer) = get_Edge_Level(sub,sub.sub)
 get_Edge_Level(pb::PolyBuffer,sub) = pb
@@ -84,36 +183,9 @@ function reset(pb::PolyBuffer,lneigh)
 end
 reset(pb::NoPolyBuffer,lneigh) = nothing
 
-#PolyBuffer(xs::Vector{SVector{2,Float64}},dim=length(xs[1])) = NoPolyBuffer()
-#PolyBuffer(xs::Vector{SVector{3,Float64}},dim=length(xs[1])) = NoPolyBuffer()
-#=struct Fast_Polygon_Integrator_Data{GE,FE,FEI,PB}
-    general_edgeiterator::GE
-    fast_edgeiterator::FE
-    fei::FEI
-    sig_neigh_iterator::NewNeighborFinderIterator
-    data::PB
-end
-function Fast_Polygon_Integrator_Data(x)
-    ge = General_EdgeIterator(x)
-    fe = FastEdgeIterator(length(x))
-    fei = FEIStorage([1],x)
-    sni = NewNeighborFinderIterator()
-    d = PolyBuffer(x)
-    return Fast_Polygon_Integrator_Data(ge,fe,fei,sni,d)
-end
-=#
 
-IntegrateData(xs,dom,tt::Fast_Polygon_Integrator) = _IntegrateData(xs,dom,PolyBuffer(xs[1]))
+IntegrateData(xs::HV,dom,tt::FPI) where {P,HV<:HVNodes{P},FPI<:Fast_Polygon_Integrator} = _IntegrateData(xs,dom,PolyBuffer(zeros(P),tt.data))
 
-#=function facett_identifier(dc,buffer::PolyBuffer,_Cell)
-    current = buffer.current_path
-    for k in 1:(length(current)-1)
-        current[k] = dc.current_path[k]
-    end
-    current[end] = _Cell
-    sort!(current)
-    return SVector{length(current),Int64}(current)
-end=#
 
 function facett_identifier(dc,buffer::PolyBuffer,_Cell,facett)
     current = buffer.current_path
@@ -155,10 +227,10 @@ end=#
             corresponds to the d-1 dimensional area of the Voronoi interface 
 """
 #function integrate(domain,_Cell,iter,calcul,searcher,Integrator::Fast_Polygon_Integrator)
-function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Fast_Polygon_Integrator,ar,bulk_inte,inter_inte)    
-    Integral  = Integrator.Integral
-    verteces2 = Integral.MESH.Buffer_Verteces[_Cell]
-    verteces  = Integral.MESH.All_Verteces[_Cell]
+function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Fast_Polygon_Integrator,ar,bulk_inte,inter_inte,vvvol)    
+    Integral  = Integrator.Integral 
+#    verteces2 = Integral.MESH.Buffer_Verteces[_Cell]
+    verteces  = vertices_iterator(mesh(Integral),_Cell)
     xs=data.extended_xs
 #    !(typeof(data.buffer_data)<:PolyBuffer) && !(typeof(data.buffer_data)<:NoPolyBuffer) && error("")
     dim = data.dimension    # (full) Spatial dimension
@@ -168,7 +240,7 @@ function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Fast_
     _length=length(neigh)
 
     # flexible data structure to store the sublists of verteces at each iteration step 1...dim-1
-    emptydict=EmptyDictOfType([0]=>xs[1])      # empty buffer-list to create copies from
+    emptydict=Vector{Int64}()#EmptyDictOfType([0]=>xs[1])      # empty buffer-list to create copies from
     listarray=(typeof(emptydict))[] # will store to each remaining neighbor N a sublist of verteces 
                                     # which are shared with N
     all_dd=(typeof(listarray))[]
@@ -188,19 +260,27 @@ function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Fast_
     I=Integrator
     taboo = zeros(Int64,dim)
     iterative_volume_fast(I,I._function, I.bulk, _Cell, V, bulk_inte, ar, inter_inte, dim, neigh, 
-                _length,verteces,verteces2,emptydict,xs[_Cell],empty_vector,all_dd,buffer_data,calculate,Integral,xs,taboo,dc=I.iterative_checker)
-
+                _length,verteces,emptydict,emptydict,xs[_Cell],empty_vector,all_dd,buffer_data,calculate,Integral,xs,taboo,I.iterative_checker)
+    #error("")
 
     return V[1]
 end
 
 
 function iterative_volume_fast(I,_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh,_length,verteces,verteces2,
-                            emptylist,vector,empty_vector,all_dd,buffer_data,calculate,Full_Matrix=nothing,xs=nothing,taboo=nothing;dc = IterativeDimensionChecker(dim))
+                            emptylist,vector,empty_vector,all_dd,buffer_data,calculate,Full_Matrix,xs,taboo,dc,data = Vector{Pair{Vector{Int64},eltype(xs)}}())#::Tuple{Float64,Vector{Float64}}
     space_dim=length(vector)
     if (dim==1) # this is the case if and only if we arrived at an edge
-        b, r, r2 = getedge(dc,verteces,space_dim,xs,_Cell)
-        !b && return 0.0, Float64[]
+        #b, r, r2 = getedge(dc,verteces,space_dim,xs,_Cell)
+        #if !b
+        #    return 0.0, Float64[]
+        #end
+        if length(verteces)<2
+            empty!(verteces)
+            return 0.0, Float64[]
+        end
+        r = data[verteces[1]][2]
+        r2 = data[verteces[2]][2]
         vol = norm(r-r2)
         #println(_Cell," vol ",vol)
         A[1]+=vol
@@ -214,27 +294,21 @@ function iterative_volume_fast(I,_function, _bulk, _Cell::Int64, V, y, A, Ay, di
         #_Center=midpoint_points(verteces,verteces2,empty_vector,vector)
         
         # dd will store to each remaining neighbor N a sublist of verteces which are shared with N
-        dd=Vector{typeof(emptylist)}(undef,_length)
+        
+        dd=Vector{Vector{Int64}}(undef,_length)
         reset(buffer_data,length(neigh))
         #println("Berechne $_Cell, $neigh")
-        for i in 1:_length dd[i]=copy(emptylist) end
-        reset(dc,neigh,xs,_Cell,Iterators.flatten((verteces,verteces2)),false)
-        for (sig,r) in verteces  # iterate over all verteces
+        for i in 1:_length dd[i]=Int64[] end
+        reset(dc,neigh,xs,_Cell,verteces,false)
+        for (sig2,r) in verteces  # iterate over all verteces
+            sig = copy(sig2)
+            push!(data,sig=>r)
+            iii = length(data)
             for _neigh in sig # iterate over neighbors in vertex
                 _neigh==_Cell && continue
                 index=_neigh_index(neigh,_neigh)
                 index==0 && continue
-                push!( dd[index] , sig =>r) # push vertex to the corresponding list
-            end
-        end
-        for (sig,r) in verteces2 # repeat in case verteces2 is not empty
-            for _neigh in sig
-                _neigh==_Cell && continue
-                index=_neigh_index(neigh,_neigh)
-                index==0 && continue
-                if (_neigh>_Cell || isempty(dd[index])) # make sure for every neighbor the dd-list is not empty
-                    push!( dd[index] , sig =>r) # push vertex to the corresponding list
-                end
+                push!( dd[index] , iii) # push vertex to the corresponding list
             end
         end
         taboo[dim]=_Cell
@@ -247,7 +321,11 @@ function iterative_volume_fast(I,_function, _bulk, _Cell::Int64, V, y, A, Ay, di
                             # in case dim==space_dim the dictionary "bufferlist" below will contain all 
                             # verteces that define the interface between "_Cell" and "buffer"
                             # However, when it comes to A and Ay, the entry "buffer" is stored in place "k". 
-            if !(buffer in calculate) && !(_Cell in calculate) continue end
+            #if !(buffer in calculate) && !(_Cell in calculate) continue end
+            if !(buffer in calculate)
+                empty!(dd[k])
+                continue 
+            end
             bufferlist=dd[k] 
             isempty(bufferlist) && continue
             taboo[dim-1] = buffer
@@ -255,14 +333,14 @@ function iterative_volume_fast(I,_function, _bulk, _Cell::Int64, V, y, A, Ay, di
             AREA[1]=0.0
             AREA_Int=(typeof(_function)!=Nothing) ? Ay[k] : Float64[]
             # now get area and area integral either from calculation or from stack
-                if buffer>_Cell && (buffer in calculate) # in this case the interface (_Cell,buffer) has not yet been investigated
+                if (buffer>_Cell)    # in this case the interface (_Cell,buffer) has not yet been investigated
                     set_dimension(dc,1,_Cell,buffer)
                     #test_idc(dc,_Cell,buffer,1)
 
-                    AREA_Int.*=0
-                    _Center=midpoint_points(bufferlist,emptylist,empty_vector,vector)
+                    AREA_Int.*= (buffer in calculate) ? 0 : 1
+                    _Center=midpoint_points_fast(bufferlist,data,empty_vector,vector)
                     _Center.+=vector # midpoint shifts the result by -vector, so we have to correct that .... 
-                    vol2, integral2 = iterative_volume_fast(I,_function, _bulk, _Cell, V, y, AREA, AREA_Int, dim-1, neigh, _length, bufferlist, emptylist, emptylist,vector,empty_vector,all_dd,buffer_data,nothing,Full_Matrix,xs,taboo,dc=dc)
+                    vol2, integral2 = iterative_volume_fast(I,_function, _bulk, _Cell, V, y, AREA, AREA_Int, dim-1, neigh, _length, bufferlist, emptylist, emptylist,vector,empty_vector,all_dd,buffer_data,nothing,Full_Matrix,xs,taboo,dc,data)
                     neigh[k]=buffer
                     # Account for dimension (i.e. (d-1)! to get the true surface volume and also consider the distance="height of cone")
                     empty!(bufferlist) # the bufferlist is empty
@@ -274,7 +352,7 @@ function iterative_volume_fast(I,_function, _bulk, _Cell::Int64, V, y, A, Ay, di
                 else # the interface (buffer,_Cell) has been calculated in the systematic_voronoi - cycle for the cell "buffer"
                     #greife auf Full_Matrix zurück
                     empty!(bufferlist)
-                    empty!(bufferlist)
+                    #empty!(bufferlist)
                     distance=0.5*norm(vector-xs[buffer])#abs(dot(normalize(vector-xs[buffer]),vert))
                     vol2 = get_area(Full_Matrix,buffer,_Cell) 
                         # !!!!! if you get an error at this place, it means you probably forgot to include the boundary planes into "calculate"
@@ -282,7 +360,12 @@ function iterative_volume_fast(I,_function, _bulk, _Cell::Int64, V, y, A, Ay, di
                     A[k]=vol2
                     if typeof(_function)!=Nothing 
                         AREA_Int.*=0
-                        AREA_Int.+=get_integral(Full_Matrix,buffer,_Cell)
+                        try
+                            AREA_Int.+=get_integral(Full_Matrix,buffer,_Cell)
+                        catch
+                            println(neigh,buffer," k=$k, _Cell=$_Cell")
+                            rethrow()
+                        end
                     end
                     integral .+= AREA_Int .* distance
                 end
@@ -302,14 +385,13 @@ function iterative_volume_fast(I,_function, _bulk, _Cell::Int64, V, y, A, Ay, di
         all_neighbors = dc.neighbors
 
         lneigh = length(neigh)
-
         _count=1
         for k in 1:_length
             _count+=neigh[k]!=0 ? 1 : 0 # only if neigh[k] has not been treated earlier in the loop
         end
         _my_neigh=Vector{Int64}(undef,_count-1)
 
-        while length(dd)<_count push!(dd,copy(emptylist)) end
+        while length(dd)<_count push!(dd,Int64[]) end
         _count=1
         for k in 1:_length
             if (neigh[k]!=0) # only if neigh[k] has not been treated earlier in the loop
@@ -320,20 +402,20 @@ function iterative_volume_fast(I,_function, _bulk, _Cell::Int64, V, y, A, Ay, di
 
         ll=(length(verteces))
         for _ii in 1:(ll)  # iterate over all verteces
-            (sig,r) = _ii==ll ? first(verteces) : pop!(verteces)
+            (sig,r) = data[verteces[_ii]]
             count = 0
             for _neigh in sig # iterate over neighbors in vertex
                 (_neigh in taboo) && continue # if _N is a valid neighbor (i.e. has not been treated in earlier recursion)
                 index = _neigh_index(_my_neigh,_neigh)
                 #(index==0 ) && continue
                 index==0 && continue
-                push!( dd[index] , sig =>r) # push vertex to the corresponding list
+                push!( dd[index] , verteces[_ii]) # push vertex to the corresponding list
             end
         end
         l_mn = length(_my_neigh)
         for k in 1:(l_mn-1)
             #neigh[k]==0 && continue
-            clear_double_lists_iterative_vol(buffer_data.sub,dd,k,all_neighbors,neigh,_my_neigh)
+            clear_double_lists_iterative_vol(buffer_data.sub,dd,k,data,_my_neigh)
         end
         _count=1
         vol = 0.0 
@@ -359,15 +441,15 @@ function iterative_volume_fast(I,_function, _bulk, _Cell::Int64, V, y, A, Ay, di
             end
             fi = facett_identifier(dc,buffer_data,_Cell,buffer)
 
-            distance = projected_distance(dc,buffer_data.center,empty_vector,first(bufferlist)[2],next_ortho_dim)
+            distance = projected_distance(dc,buffer_data.center,empty_vector,data[bufferlist[1]][2],next_ortho_dim) # ✓
             #distance==0 && error("\n $(buffer_data.center), $(empty_vector), $(first(bufferlist)[2]), $next_ortho_dim \n $(dc.local_basis[1]), $(dc.local_basis[2])")
             vol2, integral2 = 0.0, Float64[]
             if !haskey(buffer_data.facets,fi)
-                _Center = midpoint_points(bufferlist,emptylist,empty_vector,vector)
+                _Center = midpoint_points_fast(bufferlist,data,empty_vector,vector) # ✓
                 _Center .+= vector
                 neigh[k]=0
                 taboo[dim-1]=buffer
-                vol2, integral2 = iterative_volume_fast(I,_function, _bulk, _Cell, V, y, A,         Ay        , dim-1, neigh, _length, bufferlist, emptylist, emptylist,vector,empty_vector,all_dd,buffer_data.sub,nothing,Full_Matrix,xs,taboo,dc=dc)
+                vol2, integral2 = iterative_volume_fast(I,_function, _bulk, _Cell, V, y, A,         Ay        , dim-1, neigh, _length, bufferlist, emptylist, emptylist,vector,empty_vector,all_dd,buffer_data.sub,nothing,Full_Matrix,xs,taboo,dc,data)
                 neigh[k]=buffer
                 taboo[dim-1]=0
                 push!(buffer_data.facets,fi=>PolyBufferData(vol2,integral2))
@@ -376,7 +458,9 @@ function iterative_volume_fast(I,_function, _bulk, _Cell::Int64, V, y, A, Ay, di
                 vol2 = pbd.volume
                 integral2 = pbd.integral                
             end
-            if !isempty(bufferlist) empty!(bufferlist) end
+
+            empty!(bufferlist)
+            
             vol += vol2*distance
             if vol2!=0.0 
                 integral .+= integral2 .* distance
@@ -405,19 +489,22 @@ function joint_neighs(vertices)
     return v1
 end
 
-function clear_double_lists_iterative_vol(sub::PolyBuffer,dd,_count,all_neighbors,neighbors,_my_neigh)
+function clear_double_lists_iterative_vol(::PolyBuffer,dd,_count,data,_my_neigh)
     length(dd[_count])==0 && return
-    generators = copy(first(dd[_count])[1])
-    keep_similars!(generators,keys(dd[_count]))
+    generators = copy(data[dd[_count][1]][1])
+    keep_similars!(generators,view(data,dd[_count]))
     #intersect!(generators,keys(dd[_count])...)
 #    for (sig,r) in dd[_count]
 #        intersect!(generators,sig)
 #    end
+    v = dd[_count]
     for k in (_count+1):length(_my_neigh)
         ( !(_my_neigh[k] in generators)) && continue
         b = true
-        for (sig,r) in dd[k]
-            if !haskey(dd[_count],sig)
+        for index in dd[k]
+            #iii = searchsortedfirst(v, x)
+            #iii <= length(v) && v[iii] == x
+            if !(index in dd[_count])
                 b=false
                 break
             end
@@ -432,6 +519,7 @@ function keep_similars!(sig::Vector{Int64},sig2::Vector{Int64},lsig=length(sig))
     k=1
     lsig2=length(sig2)
     for i in 1:lsig
+        sig[i]==0 && continue
         while k<=lsig2 && sig2[k]<sig[i]
             k += 1
         end
@@ -443,24 +531,33 @@ end
 
 function keep_similars!(sig::Vector{Int64},itr)
     lsig = length(sig)
-    for sig2 in itr
-        keep_similars!(sig,sig2,lsig)
+    for tup in itr
+        sig2 = tup[1]
+        k=1
+        lsig2=length(sig2)
+        for i in 1:lsig
+            sig[i]==0 && continue
+            while k<=lsig2 && sig2[k]<sig[i]
+                k += 1
+            end
+            
+            (k>lsig2 || sig[i]<sig2[k]) && (sig[i]=0)
+        end
     end
     return sig
 end
 
-function clear_double_lists_iterative_vol(sub::NoPolyBuffer,dd,k,all_neighbors,neighbors,_my_neigh)
+function clear_double_lists_iterative_vol(::NoPolyBuffer,dd,k,data,_my_neigh)
         l_mn = length(_my_neigh)
         if length(dd[k])!=2
             empty!(dd[k]) 
             return
         end
-        keys_1 = keys(dd[k])
         for i in (k+1):l_mn
             length(dd[i])!=2 && continue
             count = 0
-            for s1 in keys_1
-                count += haskey(dd[i],s1) ? 1 : 0
+            for s1 in dd[k]
+                count += s1 in dd[i] ? 1 : 0
             end 
             if count==2
                 empty!(dd[i])

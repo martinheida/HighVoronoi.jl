@@ -2,7 +2,7 @@ struct ProjRow
     cols::Vector{Int64}
     vals::Vector{Float64}
 end
-
+ 
 function ProjRow()
     return ProjRow(zeros(Int64,10),zeros(Float64,10))
 end
@@ -56,16 +56,16 @@ function interactionmatrix(vg_r::VoronoiGeometry,vg_c::VoronoiGeometry; check_co
         @warn "The domains "*boundaryToString(vg_r.domain.boundary)*" and "*boundaryToString(vg_c.domain.boundary)*" are not identical!!"
     end
     domain = vg_r.domain.boundary
-    nodes_r = vg_r.Integrator.Integral.MESH.nodes
+    nodes_r = nodes(mesh(integral(vg_r.domain)))#Integrator.Integral.MESH.nodes
     lm_r = length(nodes_r)
-    tree_r = KDTree(vg_r.Integrator.Integral.MESH.nodes)
-    nodes_c = vg_c.Integrator.Integral.MESH.nodes
+    tree_r = NearestNeighbors.KDTree(nodes_r)
+    nodes_c = nodes(mesh(integral(vg_c.domain)))
     lm_c = length(nodes_c)
-    tree_c = KDTree(vg_c.Integrator.Integral.MESH.nodes)
+    tree_c = NearestNeighbors.KDTree(nodes_c)
     reference_r = zeros(Int64, lm_r)
     referenc_c = zeros(Int64, lm_c)
     for i in 1:lm_r
-        ref = nn(tree_c,nodes_r[i])[1]
+        ref = NearestNeighbors.nn(tree_c,nodes_r[i])[1]
         if norm(nodes_r[i]-nodes_c[ref])<tolerance
             reference_r[i] = ref
             referenc_c[ref] = i
@@ -88,9 +88,9 @@ function interactionmatrix(vg_r::VoronoiGeometry,vg_c::VoronoiGeometry; check_co
     number_of_hits_per_dim = (noh_in_cube*1.0)^(1/dim) # take the number of samples per dimension 
     box_dimensions .*= number_of_hits_per_dim # rescale this number to the dimensions of the range 
     range = DensityRange(map(k->unsafe_trunc(Int64,box_dimensions[k])+1,1:dim),map(k->(left[k],right[k]),1:dim))
-    ref_r = vg_r.domain.references
+    ref_r = references(vg_r.domain)#.references
     off_r = length(ref_r)
-    ref_c = vg_c.domain.references
+    ref_c = references(vg_c.domain)#.references
     off_c = length(ref_c)
     my_increase(rows,r,c) = increase(rows, r>off_r ? r-off_r : ref_r[r]-off_r, c>off_c ? c-off_c : ref_c[c]-off_c)
     rows = Vector{ProjRow}(undef,lm_r-off_r)
@@ -106,8 +106,8 @@ function iterate_interactions(tree_r,tree_c,rows,range::DensityRange,level,x,inc
         if level<DIMENSION(range)
             iterate_interactions(tree_r,tree_c,rows,range,level+1,x,increase)
         else
-            r = nn(tree_r,x)[1]
-            c = nn(tree_c,x)[1]
+            r = NearestNeighbors.nn(tree_r,x)[1]
+            c = NearestNeighbors.nn(tree_c,x)[1]
             increase(rows,r,c)
         end
         x[level] += range.dimensions[level]

@@ -1,4 +1,4 @@
-
+ 
 R_proj_tree(tree::Nothing,VG) = VoronoiKDTree(VG)
 R_proj_tree(tree,VG) = tree
 R_proj_diam(diameters::Nothing,VG,tree) = DiameterFunction(VG,tree=tree)

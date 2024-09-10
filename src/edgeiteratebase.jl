@@ -50,9 +50,8 @@ function General_EdgeIterator(_sig,r,_Cell,EI::General_EdgeIterator{S}) where {S
     end
 end
 
-function General_EdgeIterator(dim::Int)
-    return General_EdgeIterator(MVector{dim+1,Int64}(zeros(Int64,dim+1)),dim+1,0,SVector{dim+1,Int64}(zeros(Int64,dim+1)))
-end
+@inline General_EdgeIterator(dim::INT) where {INT<:Integer} = General_EdgeIterator(MVector{dim+1,Int64}(zeros(Int64,dim+1)),dim+1,0,SVector{dim+1,Int64}(zeros(Int64,dim+1)))
+
 function General_EdgeIterator(x::Point)
     return General_EdgeIterator(MVector{length(x)+1,Int64}(zeros(Int64,length(x)+1)),length(x)+1,0,SVector{length(x)+1,Int64}(zeros(Int64,length(x)+1)))
 end
@@ -87,6 +86,9 @@ function get_EdgeIterator(sig,r,searcher,_Cell,xs,O::OnQueueEdges)
         return General_EdgeIterator(sig,r,_Cell,searcher.find_general_edgeiterator)
     else
         my_iterator = searcher.edgeiterator2
+        #@descend get!(searcher.FEIStorage_global,sig,FEIStorage(sig,r))
+        #error("")
+        #print("P")
         fei = reset(get!(searcher.FEIStorage_global,sig,FEIStorage(sig,r)))
         HighVoronoi.reset(my_iterator,sig,r,searcher.tree.extended_xs,_Cell,searcher,fei)
         return my_iterator
@@ -106,13 +108,17 @@ function get_EdgeIterator(sig,r,searcher,_Cell,xs,neighbors) # special version f
 end
 
 function queue_edges_general_position(sig,r,searcher,_Cell,xs,edgecount,EI)
+    length(sig)==(length(r)+1) && sig[2]<_Cell && (return true)
+    all_edges_exist = true
     for (edge,skip) in EI
-        info = get(edgecount, edge, (0::Int64,0::Int64))
+        all_edges_exist &= pushedge!(edgecount,edge,skip,false)
+#=        info = get(edgecount, edge, (0::Int64,0::Int64))
         if !(skip in info) && info[2]==0
+            #_fulledge = get_full_edge_indexing(sig,r,edge,EI,xs)
             edgecount[edge] = (skip,info[1])
-        end
+        end=#
     end
-
+    return all_edges_exist
 end
 function queue_edges_OnCell(sig,r,searcher,_Cell,xs,edgecount)
         EI = get_EdgeIterator(sig,r,searcher,_Cell,xs,OnQueueEdges())

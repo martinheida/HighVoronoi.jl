@@ -1,8 +1,8 @@
-
+ 
 function sample_data_periodic(dim,_NON)
     periodicity = PeriodicData(3*ones(Int64,dim),(1.0/3)*ones(Int64,dim),_NON,zeros(Float64,dim))
 
-    xs = periodicgeodata(rand(dim,_NON),periodicity,SVector{dim,Float64}(zeros(Float64,dim)))
+    xs = periodicgeodata(rand(dim,_NON),periodicity)#,SVector{dim,Float64}(zeros(Float64,dim)))
     offset = _NON*(index_from_array(2*ones(Int64,dim),periodicity)-1)
     println(length(xs),"  ",offset)
     for i in 1:_NON
@@ -15,8 +15,8 @@ end
 
 function sample_data_random(dim,_NON)
     xs = VoronoiNodes(rand(dim,6^dim))
-    tree = KDTree(xs)
-    idxs,_ = knn(tree,0.5*ones(Float64,dim),_NON)
+    tree = NearestNeighbors.KDTree(xs)
+    idxs,_ = NearestNeighbors.knn(tree,0.5*ones(Float64,dim),_NON)
     for i in 1:_NON
         a = xs[i]
         xs[i] = xs[idxs[i]]
@@ -40,11 +40,11 @@ function VoronoiStatistics(dim,samples;periodic=nothing,points=1,my_generator=no
         #voronoi( Integrator, Iter=i_nodes, searcher=searcher, intro="Block $(string(i, base = 10, pad = max_string_len)), Voronoi cells:   ",compact=true,printsearcher=false)
         I,_=voronoi(xs,searcher=Raycast(xs),intro="Run number: $S  ",compact=true, Iter=1:number)
         vp_line_up()
-        I2=Integrator(I.Integral.MESH,geodata ? VI_POLYGON : VI_GEOMETRY,integrand=nothing)
+        I2=Integrator(I.Integral,geodata ? VI_POLYGON : VI_GEOMETRY,integrand=nothing)
         _integrate( I2, intro="Run number: $S  ", calculate = 1:length(xs), iterate=1:number, compact=true)
         mesh = I.Integral.MESH
         for i in 1:number
-            verteces[(S-1)*number+i] = length(I2.Integral.MESH.All_Verteces[i])+length(I2.Integral.MESH.Buffer_Verteces[i])
+            verteces[(S-1)*number+i] = length(I2.Integral.MESH.All_Vertices[i])+length(I2.Integral.MESH.Buffer_Vertices[i])
             interfaces[(S-1)*number+i] = length(I2.Integral.neighbors[i])
             neigh = neighbors_of_cell(i,mesh)#,adjacents=true)
             vn_count = zeros(Int64,length(neigh))
@@ -52,7 +52,7 @@ function VoronoiStatistics(dim,samples;periodic=nothing,points=1,my_generator=no
                 volumes[(S-1)*number+i] = I2.Integral.volumes[i]
                 areas[(S-1)*number+i] = I2.Integral.area[i]
             end
-                for (sig,_) in Iterators.flatten((mesh.All_Verteces[i],mesh.Buffer_Verteces[i]))
+                for (sig,_) in Iterators.flatten((mesh.All_Vertices[i],mesh.Buffer_Vertices[i]))
             #        print("   $n: $sig  -->  ")
                     for s in sig
                         if s in neigh
@@ -104,7 +104,7 @@ function vor_calc_statistics_1(dim,NN,searchdata,cycle=1,silence=false,counts=[0
         print(" - $i")
         redirect_stdout(silence ? devnull : oldstd)
         try
-        	I,searcher = HighVoronoi.voronoi(xs,searcher=HighVoronoi.Raycast(xs,domain=cuboid(dim,periodic=[]),allow_irregular=false, force_irregular_search = false)) 
+        	I,searcher = HighVoronoi.voronoi(xs,searcher=HighVoronoi.Raycast(xs,domain=cuboid(dim,periodic=[]))) 
             searchdata .+= searcher.rare_events
         catch err
             redirect_stdout(oldstd)
@@ -209,12 +209,13 @@ function vor_calc_statistics_1(unit_nodes::Matrix,iterator,searchdata,cycle,sile
         extended_cube = cuboid( dim, periodic = [], dimensions = cubedimensions )
     
         periodicity = PeriodicData(iterator,dimensions,number_of_nodes,offsetvector)
-        xs = periodicgeodata(data,periodicity,SVector{dim,Float64}(zeros(Float64,dim)))
+        xs = periodicgeodata(data,periodicity)#,SVector{dim,Float64}(zeros(Float64,dim)))
         lmesh = length(xs)
     
         redirect_stdout(oldstd)
         print(" - $i")
         redirect_stdout(silence ? devnull : oldstd)
+        try
         for x in xs
             if !(x in extended_cube)
                 println(iterator) 
@@ -222,13 +223,17 @@ function vor_calc_statistics_1(unit_nodes::Matrix,iterator,searchdata,cycle,sile
             end
         end
 #        try
-            I,searcher=voronoi(xs,searcher=Raycast(xs;domain=extended_cube,perturb_nodes=true),intro="")
+            I,searcher=voronoi(xs,searcher=Raycast(xs;domain=extended_cube),intro="")
             searchdata .+= searcher.rare_events
 #        catch err
 #            redirect_stdout(oldstd)
 #            println("Error: $err")
 #            count -= 1
 #        end
+        catch
+            redirect_stdout(oldstd)
+            rethrow()
+        end
     end   
     counts[1]=count
     if count==0

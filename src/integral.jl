@@ -8,7 +8,7 @@
     struct Voronoi_Integral{T}
     Stores calculated volumes, interface areas, bulk integral and interface integrals as well as a list of neighbors for each cell
 """
-struct Voronoi_Integral{T}
+struct Voronoi_Integral{P<:Point, T<:Voronoi_MESH{P}} <: HVIntegral{P}
     neighbors::Vector{Vector{Int64}}
     volumes::Vector{Float64}
     area::Vector{Vector{Float64}}
@@ -16,40 +16,93 @@ struct Voronoi_Integral{T}
     interface_integral::Vector{Vector{Vector{Float64}}}
     MESH::T
 end
-function Voronoi_Integral(mesh; get_volume=true, get_area=true, integrate_bulk=false, integrate_interface=false)
-    l=length(mesh.nodes)
+
+struct Voronoi_Integral_Store_Container_1
+    neighbors::Vector{Vector{Int64}}
+    volumes::Vector{Float64}
+    area::Vector{Vector{Float64}}
+    bulk_integral::Vector{Vector{Float64}}
+    interface_integral::Vector{Vector{Vector{Float64}}}
+end
+Voronoi_Integral_Store_Container_1(vi::Voronoi_Integral) = Voronoi_Integral_Store_Container_1(vi.neighbors,vi.volumes,vi.area,vi.bulk_integral,vi.interface_integral)
+Voronoi_Integral(visc::Voronoi_Integral_Store_Container_1,mesh::T) where {P<:Point, T<:Voronoi_MESH{P}} = 
+            Voronoi_Integral{P,T}(visc.neighbors,visc.volumes,visc.area,visc.bulk_integral,visc.interface_integral,mesh)
+pack_integral(I::VI) where VI<:Voronoi_Integral = Voronoi_Integral_Store_Container_1(I)
+unpack_integral(I::VI,m) where VI<:Voronoi_Integral_Store_Container_1 = Voronoi_Integral(I,m)
+
+function Voronoi_Integral(mesh; get_volume=true, get_area=true, integrate_bulk=false, integrate_interface=false,get_neighbors=true)
+    l=length(nodes(mesh))
     l_volume=get_volume*l
     l_area=get_area*l
     l_bulk=integrate_bulk*l
     l_int=integrate_interface*l
 
-    VI=Voronoi_Integral(Vector{Vector{Int64}}(undef,l), 
+    VI=Voronoi_Integral(Vector{Vector{Int64}}(undef,l*get_neighbors), 
     Vector{Float64}(undef,l_volume),
     Vector{Vector{Float64}}(undef, l_area),
     Vector{Vector{Float64}}(undef, l_bulk),
     Vector{Vector{Vector{Float64}}}(undef, l_int),
     mesh)
-    emptyint=Int64[]
-    for i in 1:l VI.neighbors[i]=copy(emptyint) end
+#    emptyint=Int64[]
+#    for i in 1:l VI.neighbors[i]=copy(emptyint) end
     return VI
 end
+function Voronoi_Integral(mesh::T, neigh::Vector{Vector{Int64}}) where T
+    # Initialize the other vectors with zero length
+    volumes = Float64[]
+    area = Vector{Float64}[]
+    bulk_integral = Vector{Float64}[]
+    interface_integral = Vector{Vector{Float64}}[]
 
+    # Return the new instance of Voronoi_Integral
+    return Voronoi_Integral(neigh, volumes, area, bulk_integral, interface_integral, mesh)
+end
+function EmptyVoronoi_Integral(mesh::AM;parameters=nothing) where AM<:AbstractMesh
+    VI=Voronoi_Integral(Vector{Vector{Int64}}(undef,0), 
+    Vector{Float64}(undef,0),
+    Vector{Vector{Float64}}(undef, 0),
+    Vector{Vector{Float64}}(undef, 0),
+    Vector{Vector{Vector{Float64}}}(undef, 0),
+    mesh)
+    return VI
+end
+function enable_geo_data(int::Voronoi_Integral)
+    l = internal_length(int.MESH)
+    resize!(int.volumes,l)
+    resize!(int.area,l)
+    resize!(int.neighbors,l)
+end
+function enable_neighbor_data(int::Voronoi_Integral)
+    l = internal_length(int.MESH)
+    resize!(int.neighbors,l)
+end
+function enable_integral_data(int::Voronoi_Integral)
+    l = internal_length(int.MESH)
+    resize!(int.bulk_integral,l)
+    resize!(int.interface_integral,l)
+    resize!(int.neighbors,l)
+end
+
+
+mesh(Integral::Voronoi_Integral) = Integral.MESH
 """
 returns a function x->(r,R) where `r` and `R` are the inner and outer radius of the cell in which lies `x`.
 """
-function DiameterFunction(Integral::Voronoi_Integral,_boundary::Boundary,lref;tree = KDTree(Integral.MESH.nodes))
-    nodes = Integral.MESH.nodes
-    _av = Integral.MESH.All_Verteces
-    _bv = Integral.MESH.Buffer_Verteces
+function DiameterFunction(Integral;tree = KDTree(nodes(mesh(Integral))))
+    nodes = Integral.nodes
+    _boundary = Integral.boundary
+    #_av = Integral.MESH.All_Verteces
+    #_bv = Integral.MESH.Buffer_Verteces
     _neigh = Integral.neighbors
-    function dists(index,av,bv,boundary,neigh,lref)
+    lref = length(Integral.references)
+    function dists(index,vertices,boundary,neigh)
         R = 0.0
-        for (sig,r) in Iterators.flatten((av[index],bv[index]))
+        for (sig,r) in vertices[index]
             nn = norm(r-nodes[index])
             R = max(R,nn)
         end
         r = 2*R
-        ln = length(neigh)+lref
+        ln = length(neigh)
         for n in neigh[index]
             if n<=ln
                 nn = 0.5*norm(nodes[n]-nodes[index])
@@ -63,7 +116,7 @@ function DiameterFunction(Integral::Voronoi_Integral,_boundary::Boundary,lref;tr
         return [r,R]
     end
     
-    return x->dists(nn_id(tree,x),_av,_bv,_boundary,_neigh[(lref+1):end],lref)
+    return x->dists(nn_id(tree,x)+lref,Integral.vertices,_boundary,_neigh)
 end
 
 
@@ -162,21 +215,25 @@ function length(Integral::Voronoi_Integral)
     return length(Integral.MESH)
 end
 
-function dimension(Integral::Voronoi_Integral)
-    return length(Integral.MESH.nodes[1])
+function dimension(Integral::VI) where {P,VI<:Voronoi_Integral{P}}
+    return length(zeros(P))
 end
 
+add_virtual_points(Integral::Voronoi_Integral, xs) = prepend!(Integral,xs)
 @doc raw"""
     prepend!(Integral::Voronoi_Integral, xs)
     adds the points 'xs' to the beginning of the mesh and correpsondingly shifts the indeces in the field of the integral, including 'neighbors'
 """
-function prepend!(Integral::Voronoi_Integral, xs)
-    lnxs=length(xs)
+prepend!(Integral::Voronoi_Integral, xs::HVNodes) = prepend!(Integral,length(xs))
+function prepend!(Integral::Voronoi_Integral, len::Int64)
     for i in 1:(length(Integral.neighbors)) # have in mind that the nodes are renumbered, so we have to update the neighbors indeces
-        (Integral.neighbors[i]).+=lnxs
+        try
+            isassigned(Integral.neighbors,i) && ((Integral.neighbors[i]).+=len)
+        catch
+            println(Integral.neighbors[1:10],i)
+            rethrow()
+        end
     end
-    prepend!(Integral.MESH,xs)
-    len=length(xs)
     if length(Integral.neighbors)>0 
         prepend!(Integral.neighbors,Vector{Vector{Int64}}(undef,len)) 
         for i in 1:len Integral.neighbors[i]=Int64[] end
@@ -195,19 +252,22 @@ function prepend!(Integral::Voronoi_Integral, xs)
     end
     return Integral
 end
-
+@inline enabled_volumes(Integral::Voronoi_Integral) = length(Integral.volumes)>0
+@inline enabled_area(Integral::Voronoi_Integral) = length(Integral.area)>0
+@inline enabled_bulk(Integral::Voronoi_Integral) = length(Integral.bulk_integral)>0
+@inline enabled_interface(Integral::Voronoi_Integral) = length(Integral.interface_integral)>0
+@inline enabled_neighbors(Integral::Voronoi_Integral) = length(Integral.neighbors)>0
 
 @doc raw"""
     append!(Integral::Voronoi_Integral, xs)
     adds the points 'xs' to the beginning of the mesh and correpsondingly shifts the indeces in the field of the integral, including 'neighbors'
 """
-function append!(Integral::Voronoi_Integral, xs)
-    lnxs=length(xs)
-    append!(Integral.MESH,xs)
-    len=length(xs)
+append!(Integral::Voronoi_Integral, xs::HVNodes) = append!(Integral,length(xs))
+function append!(Integral::Voronoi_Integral, len::Int64)
+    len_I=length(Integral)
     if length(Integral.neighbors)>0 
         append!(Integral.neighbors,Vector{Vector{Int64}}(undef,len)) 
-        for i in (lnxs+1):(lnxs+len) Integral.neighbors[i]=Int64[] end
+        for i in (len_I+1):(len_I+len) Integral.neighbors[i]=Int64[] end
     end
     if length(Integral.volumes)>0 
         append!(Integral.volumes,Vector{Float64}(undef,len))
@@ -225,6 +285,20 @@ function append!(Integral::Voronoi_Integral, xs)
 end
 
 function keepat!(Integral::Voronoi_Integral,entries)
+    for I in 1:length(Integral)
+        if !isassigned(Integral.area,I) && length(Integral.area)>=I
+            Integral.area[I] = Float64[]
+        end
+        if !isassigned(Integral.bulk_integral,I) && length(Integral.bulk_integral)>=I
+            Integral.bulk_integral[I] = Float64[]
+        end
+        if !isassigned(Integral.neighbors,I) && length(Integral.neighbors)>=I
+            Integral.neighbors[I] = Int64[]
+        end
+        if !isassigned(Integral.interface_integral,I) && length(Integral.interface_integral)>=I
+            Integral.interface_integral[I] = Float64[Float64[]]
+        end
+    end
     if length(Integral.volumes)>0 keepat!(Integral.volumes,entries) end
     if length(Integral.area)>0 keepat!(Integral.area,entries) end
     if length(Integral.bulk_integral)>0 keepat!(Integral.bulk_integral,entries) end
@@ -233,101 +307,32 @@ function keepat!(Integral::Voronoi_Integral,entries)
     keepat!(Integral.MESH,entries)
 end
 
-function contains_only(sig,keeps,lmax)
-    for s in sig
-        s>lmax && break
-        ( !keeps[s] ) && (return false)
-    end
-    return true
+
+@inline _has_cell_data(I::Voronoi_Integral,_Cell) = isassigned(I.area,_Cell)#_Cell<=length(I.volumes)
+
+@inline function cell_data_writable(I::Voronoi_Integral,_Cell,vec,vecvec,::StaticFalse;get_integrals=statictrue)
+    inter = get_integrals==true ? enabled_interface(I) : false
+    return (volumes = view(I.volumes,_Cell:_Cell),area = length(I.area)>0 ? I.area[_Cell] : Float64[], bulk_integral = inter ? I.bulk_integral[_Cell] : vec, interface_integral = inter ? I.interface_integral[_Cell] : vecvec, neighbors = I.neighbors[_Cell])
 end
 
+@inline cell_data(I::Voronoi_Integral,_Cell,vec,vecvec;get_integrals=statictrue) = cell_data_writable(I,_Cell,vec,vecvec,get_integrals=get_integrals)
 
-function reduce_sig(sig,keeps,lmax)
-    pos = 1
-    for i in 1:length(sig)
-        if sig[i] in keeps || sig[i]>lmax
-            sig[pos] = sig[i]
-            pos += 1
-        end
-    end
-    resize!(sig,pos-1)
-end
-
-"""keeps n in Integral.MESH.nodes if either filter_nodes(reference[n])==true xor  filter_nodes(n)==true. Keeps a vertex only if all nodes are kept. Shortens references accordingly. rehashes only if required """
-function filter!(filter_nodes,filter_verteces,Integral::Voronoi_Integral,references,reference_shifts,lb,keeps=BitVector(undef,length(Integral.MESH.nodes)),modified=BitVector(undef,length(Integral.MESH.nodes)),rehash=false;valid_vertex_checker=nothing,modified_tracker=nothing)
-    nodes = Integral.MESH.nodes
-    mesh = Integral.MESH
-    ln1 = length(Integral.MESH.nodes)
-    
-    lref = length(references)
-    keeps = map!(n->filter_nodes(n<=lref ? references[n] : n),keeps,1:ln1)
-    old_node_indeces = view(1:(length(nodes)),keeps)
-    #for n in 1:ln1
-    #    println(n,"   ",Integral.neighbors[n])
-    #end
-    #modified = map!(n->(!keeps[n]) || (!first_is_subset(Integral.neighbors[n],old_node_indeces,ln1)),modified,1:ln1)
-    vertex_check = typeof(valid_vertex_checker)!=Nothing
-    mycondition(sig,r) = valid_vertex_checker==nothing ? contains_only(sig,keeps,ln1) : check(valid_vertex_checker,sig,r,keeps,ln1,modified_tracker)
-    num_verteces_old = map!(n->length(mesh.All_Verteces[n])+length(mesh.Buffer_Verteces[n]),Vector{Int64}(undef,ln1),1:ln1)
-    filter!((sig,r)->mycondition(sig,r) && filter_verteces(sig,r,modified),Integral.MESH)#,affected=keeps)
-    map!(n->!keeps[n] || ((length(mesh.All_Verteces[n])+length(mesh.Buffer_Verteces[n])-num_verteces_old[n])!=0),modified,1:ln1)
-    keepat!(modified,keeps)
-    keepnodes = BitVector(undef,ln1)
-    tracker = typeof(modified_tracker)==ModifiedTracker
-    for n in 1:ln1
-        (!keeps[n]) && continue
-        neigh = Integral.neighbors[n]
-        lneigh = length(neigh)
-        keepmynodes = view(keepnodes,1:lneigh)
-        map!(k->k>ln1 || keeps[k],keepnodes,neigh)
-        if length(Integral.area)>0  && (isassigned(Integral.area,n)) keepat!(Integral.area[n],keepmynodes) end
-        if length(Integral.interface_integral)>0 && (isassigned(Integral.interface_integral,n))  keepat!(Integral.interface_integral[n],keepmynodes) end
-        tracker && keepat!(modified_tracker.data[n],keepmynodes) 
-        keepat!(Integral.neighbors[n],keepmynodes)
-    end
-    keepat!(Integral,keeps)
-    keepat!(references,view(keeps,1:lref))
-    keepat!(reference_shifts,view(keeps,1:lref))
-    # find new indeces for all remaining nodes
-    newindeces = map!(n->sum(i->keeps[i], 1:n),Vector{Int64}(undef,ln1+lb),1:ln1)
-    # find new indeces for all boundaries 
-    sk = sum(keeps)
-    map!(n->sk+n,view(newindeces,(ln1+1):(ln1+lb)),1:lb)
-    #println(newindeces)
-    switch_indeces(arr)=map!(s->newindeces[s],arr,arr)
-    for n in 1:length(mesh)
-        for (sig,_) in mesh.All_Verteces[n]
-    #        print(sig)
-            vertex_check && reduce_sig(sig,keeps,ln1)
-            switch_indeces(sig)
-    #        print(" ->  $sig  ;  ")
-            #for i in 1:length(sig)
-            #    sig[i] = newindeces[sig[i]]
-            #end
-        end
-    #    println()
-        switch_indeces(Integral.neighbors[n])
-        #for i in 1:length(Integral.neighbors[n])
-        #    Integral.neighbors[n][i]=newindeces[Integral.neighbors[n][i]]
-        #end
-    end
-    switch_indeces(references)
-    return Integral
-end
 
 @doc raw"""
     copy(Integral::Voronoi_Integral)
     returns a autonomous copy of the 'Integral'
 """
-function copy(Integral::Voronoi_Integral)
-    g_v=length(Integral.volumes)>0
-    g_a=length(Integral.area)>0
-    i_b=length(Integral.bulk_integral)>0
-    i_i=length(Integral.interface_integral)>0
-    n_n=length(Integral.neighbors)>0
-    new_Integral = Voronoi_Integral(copy(Integral.MESH),get_volume=g_v,get_area=g_a,integrate_bulk=i_b,integrate_interface=i_i)
+function copy(Integral::Voronoi_Integral,new_mesh = copy(Integral.MESH);volumes=true,area=true,bulk_integral=true,interface_integral=true,neighbors=true,kwargs...)
+    g_v=volumes && length(Integral.volumes)>0
+    g_a=neighbors && area && length(Integral.area)>0
+    i_b=bulk_integral && length(Integral.bulk_integral)>0
+    i_i=neighbors && interface_integral && length(Integral.interface_integral)>0
+    n_n=neighbors && length(Integral.neighbors)>0
+    new_Integral = Voronoi_Integral(new_mesh,get_volume=g_v,get_area=g_a,integrate_bulk=i_b,integrate_interface=i_i,get_neighbors=n_n)
     for i in 1:(length(Integral))
-        if n_n new_Integral.neighbors[i]=copy(Integral.neighbors[i]) end
+        if n_n && isassigned(Integral.neighbors,i) 
+            new_Integral.neighbors[i]=copy(Integral.neighbors[i]) 
+        end
         if g_v new_Integral.volumes[i]=Integral.volumes[i] end
         if g_a && isassigned(Integral.area,i)
             new_Integral.area[i]=copy(Integral.area[i]) 
@@ -347,72 +352,83 @@ function copy(Integral::Voronoi_Integral)
     return new_Integral
 end
 
-@doc raw"""
-    copy_volumes(Integral::Voronoi_Integral)
-    returns a autonomous copy of the 'Integral'
-"""
-function copy_volumes(Integral::Voronoi_Integral)
-    g_v=length(Integral.volumes)>0
-    g_a=length(Integral.area)>0
-    i_b=length(Integral.bulk_integral)>0
-    i_i=length(Integral.interface_integral)>0
-    n_n=length(Integral.neighbors)>0
-    new_Integral = Voronoi_Integral(copy(Integral.MESH),get_volume=g_v,get_area=g_a,integrate_bulk=i_b,integrate_interface=i_i)
-    for i in 1:(length(Integral.volumes))
-        if n_n new_Integral.neighbors[i]=copy(Integral.neighbors[i]) end
-        if g_v new_Integral.volumes[i]=Integral.volumes[i] end
-        if g_a new_Integral.area[i]=copy(Integral.area[i]) end
+
+@inline get_neighbors(I::Voronoi_Integral,_Cell,::StaticFalse) = I.neighbors[_Cell]
+
+function set_neighbors(I::Voronoi_Integral,_Cell,new_neighbors,proto_bulk,proto_interface,::StaticFalse)
+    old_neighbors = isassigned(I.neighbors,_Cell) ? I.neighbors[_Cell] : Int64[]
+    bulk = enabled_bulk(I) && proto_bulk!=nothing
+    ar = enabled_area(I)
+    inter = enabled_interface(I) && proto_interface!=nothing
+    vol = enabled_volumes(I)
+
+
+    if ar && !isassigned(I.area,_Cell)
+        I.area[_Cell]=zeros(Float64,length(old_neighbors))
     end
-    return new_Integral
+    #if ar && !isdefined(I.area,_Cell)
+    #    I.area[_Cell]=zeros(Float64,length(old_neighbors))
+    #end
+    if (length(old_neighbors)>0)
+        #print(" ho  ")
+        if bulk && (!(isdefined(I.bulk_integral,_Cell)) || length(I.bulk_integral[_Cell])!=length(proto_bulk))
+            I.bulk_integral[_Cell]=copy(proto_bulk)
+        end
+        if inter && !(isdefined(I.interface_integral,_Cell))
+            I.interface_integral[_Cell]=Vector{Vector{Float64}}(undef,length(old_neighbors))
+            for i in 1:(length(old_neighbors)) 
+                (I.interface_integral[_Cell])[i]=copy(proto_interface) 
+            end
+        end
+        knn = 0
+        for n in new_neighbors
+            knn += (n in old_neighbors) ? 0 : 1
+        end
+        if (knn>0) && ar
+            a_neighbors = zeros(Int64,knn)
+            a_areas = zeros(Int64,knn)
+            n_interface = Vector{Vector{Float64}}(undef,inter ? knn : 0)
+            for i in 1:(inter ? knn : 0)
+                n_interface[i]=copy(proto_interface) 
+            end
+            knn2 = 1
+            for n in new_neighbors
+                if !(n in old_neighbors)
+                    a_neighbors[knn2] = n
+                    knn2 += 1
+                end
+            end
+            areas = I.area[_Cell]
+            append!(old_neighbors,a_neighbors)
+            append!(areas,a_areas)
+            inter && append!(I.interface_integral[_Cell],n_interface)
+            for k in 1:length(old_neighbors)
+                if !(old_neighbors[k] in new_neighbors)
+                    old_neighbors[k] = maxInt # length(data.extended_xs)+data.size
+                end
+            end
+            quicksort!(old_neighbors, ar ? areas : old_neighbors, inter ? I.interface_integral[_Cell] : old_neighbors)
+            lnn = length(new_neighbors)
+            resize!(old_neighbors,lnn)
+            resize!(areas,lnn)
+            inter && resize!(I.interface_integral[_Cell],lnn)
+        end
+    else
+        old_neighbors=new_neighbors
+        I.neighbors[_Cell]=new_neighbors
+        vol && (I.volumes[_Cell]=0)
+        ar && (I.area[_Cell]=zeros(Float64,length(old_neighbors)))
+        bulk && (I.bulk_integral[_Cell]=copy(proto_bulk))
+        inter && (I.interface_integral[_Cell]=Vector{Vector{Float64}}(undef,length(old_neighbors)))
+        inter && (for i in 1:(length(old_neighbors)) 
+            (I.interface_integral[_Cell])[i]=copy(proto_interface) 
+        end)
+    end
+
 end
 
-@doc raw"""
-    export_geometry(Integral::Voronoi_Integral)
-    returns a new instance of 'Voronoi_Integral' refering to the original arrays for 'neighbors',
-    'volumes', 'area' and 'MESH'. However, the arrays 'bulk_integral' amd 'interface_integral' are autonomous.
-    This method allows e.g. a newly constructed Integrator to use geometric information calculated by another
-    Integrator without doubling the memory needed for calculations. Furthermore, updates in the geometry are 
-    automatically communicated.
-    On the downside, Integrators with exported geometry MUST NEVER change the exported data to avoid 
-    confusion.
-"""
-function export_geometry(Integral::Voronoi_Integral)
-    I=Integral
-    bulk_integral=Vector{Float64}[]
-    interface_integral=Vector{Vector{Float64}}[]
-    new_Integral = Voronoi_Integral(I.neighbors,I.volumes,I.area,bulk_integral,interface_integral,I.MESH)
-    return new_Integral
-end
 
-function set_integral(Integral::Voronoi_Integral,_Cell,Neigh,val)
-    k=1
-    neighbors=Integral.neighbors[_Cell]
-    if length(Integral.interface_integral)==0 return Float64[] end
-    while k<=length(neighbors)
-        if Neigh==neighbors[k] break end
-        k+=1
-    end
-    if k<=length(neighbors) && isassigned(Integral.interface_integral,_Cell) && isassigned(Integral.interface_integral[_Cell],k)
-        (Integral.interface_integral[_Cell])[k] = val
-    end
-end
-
-function set_area(Integral::Voronoi_Integral,_Cell,Neigh,val)
-    k=1
-    neighbors=Integral.neighbors[_Cell]
-    while k<=length(neighbors)
-        if Neigh==neighbors[k] break end
-        k+=1
-    end
-    if k<=length(neighbors) && isassigned(Integral.area,_Cell) && isassigned(Integral.area[_Cell],k) 
-        (Integral.area[_Cell])[k] = val
-    end
-end
-
-
-
-
-function get_integral(Integral::Voronoi_Integral,_Cell,Neigh)
+function get_integral(Integral::Voronoi_Integral,_Cell,Neigh,::StaticTrue)
     k=1
     neighbors=Integral.neighbors[_Cell]
     if length(Integral.interface_integral)==0 return Float64[] end
@@ -431,8 +447,9 @@ end
 
 function isassigned_integral(Integral::Voronoi_Integral,_Cell,Neigh)
     k=1
+    !isassigned(Integral.neighbors,_Cell) && return false
     neighbors=Integral.neighbors[_Cell]
-    if length(Integral.interface_integral)==0 return Float64[] end
+    if length(Integral.interface_integral)==0 return false end
     while k<=length(neighbors)
         if Neigh==neighbors[k] break end
         k+=1
@@ -440,8 +457,9 @@ function isassigned_integral(Integral::Voronoi_Integral,_Cell,Neigh)
     return isassigned(Integral.interface_integral,_Cell) && isassigned(Integral.interface_integral[_Cell],k)
 end
 
-function get_area(Integral::Voronoi_Integral,_Cell,Neigh)
+function get_area(Integral::Voronoi_Integral,_Cell,Neigh,::StaticTrue)
     k=1
+    if isassigned(Integral.neighbors,_Cell)
     neighbors=Integral.neighbors[_Cell]
     while k<=length(neighbors)
         if Neigh==neighbors[k] break end
@@ -450,197 +468,10 @@ function get_area(Integral::Voronoi_Integral,_Cell,Neigh)
     if k<=length(neighbors) && isassigned(Integral.area,_Cell) && isassigned(Integral.area[_Cell],k)
         return (Integral.area[_Cell])[k]
     else
-        return 0
+        return 0.0
     end
+else
+    return 0.0
+end
 end
 
-@doc raw"""
-    shift_block!(Integral::Voronoi_Integral,_start,_end,shift)
-
-shifts the nodes _start:_end of mesh.nodes by "shift" places and modifies the other fields of "mesh" accordingly
-such that in the end "mesh" remains a consistent mesh. In the course, Buffer_Verteces is emptied and recalculated.  
-"""
-function shift_block!(Integral::Voronoi_Integral,_start,_end,shift)
-    shift_block!(Integral.MESH,_start,_end,shift)
-    neigh = Integral.neighbors
-    area  = Integral.area
-    vol   = Integral.volumes
-    bulk  = Integral.bulk_integral
-    inter = Integral.interface_integral
-    #println(neigh)
-    #println(area)
-    length(neigh)>0          && shift_block!(neigh,_start,_end,shift)
-    length(area)>0           && shift_block!(area,_start,_end,shift)
-    length(vol)>0            && shift_block!(vol,_start,_end,shift)
-    length(bulk)>0           && shift_block!(bulk,_start,_end,shift)
-    length(inter)>0          && shift_block!(inter,_start,_end,shift)
-    a=(length(area)>0)
-    inte=(length(inter)>0)
-    if length(neigh)>0
-        for i in 1:length(neigh)
-            length(neigh[i])==0 && continue
-            permute_nodes!(neigh[i],_start,_end,shift)
-            quicksort!( neigh[i] , a ? area[i] : neigh[i] , inte ? inter[i] : neigh[i] )
-        end
-    end
-end
-
-struct qs_step
-    left::Int64
-    right::Int64
-end
-
-mutable struct qs_data
-    data::Vector{qs_step}
-    counter::Int64
-    lsteps::Int64
-end
-
-function qs_data(len::Int64)
-    return qs_data(Vector{qs_data}(undef,len),0,len)
-end
-    
-function add_qs(left,right,data::qs_data)
-    if left<right
-        data.counter += 1
-        if data.counter>data.lsteps
-            data.lsteps += min(10,round(Int64,data.lsteps/10))
-            resize!(data.data,data.lsteps)
-        end
-        data.data[data.counter] = qs_step(left,right)
-    end
-end
-
-function pop_qs(data)
-    if data.counter>0
-        data.counter -= 1
-        return data.data[data.counter+1].left,data.data[data.counter+1].right
-    else 
-        return 100,0
-    end
-end
-
-function quicksort!(neigh,area,inter)
-    lsteps = round(Int64,length(neigh)/2)
-    left=1
-    right=length(neigh)
-    data = qs_data(lsteps)
-    while (left<right)
-        split = split!(neigh,area,inter,left,right)
-        add_qs(left, split - 1,data)
-        add_qs(split + 1, right,data)
-        left,right=pop_qs(data)
-        #println(left,right)
-    end
-end
-
-function parallelquicksort!(x...)
-    x2=(x[1],)
-    le=length(x[1])
-    for i in 2:length(x)
-        if typeof(x[i])!=Nothing && length(x[i])>=le
-            x2=(x2...,x[i])
-        end
-    end
-    _parallelquicksort!(1,length(first(x2)),x2...)
-end
-function _parallelquicksort!(left,right,x...)
-    right<=left && return  
-    split = _parallelsplit!(left,right,x...)
-    _parallelquicksort!(left, split - 1,x...)
-    _parallelquicksort!(split + 1, right,x...)
-end
-
-function _parallelsplit!(left,right,x...)
-    i = left
-    # start with j left from the Pivotelement
-    j = right - 1
-    neigh=x[1]
-    pivot = neigh[right]
-
-    while i < j  
-        # start from left to look for an element larger than the Pivotelement 
-        while i < j && neigh[i] <= pivot
-            i = i + 1
-        end
-        # start from right to look for an element larger than the Pivotelement 
-        while j > i && neigh[j] > pivot
-            j = j - 1
-        end
-
-        if neigh[i] > neigh[j]
-            #switch data[i] with data[j] :
-            for k in 1:length(x)
-                buffer=x[k][i]
-                x[k][i]=x[k][j]
-                x[k][j]=buffer
-            end
-        end
-    end
-   
-    # switch Pivotelement (neigh[right]) with neu final Position (neigh[i])
-    # and return the new Position of  Pivotelements, stop this iteration
-    if neigh[i] > pivot 
-            #switch data[i] with data[right] :
-            for k in 1:length(x)
-                buffer=x[k][i]
-                x[k][i]=x[k][right]
-                x[k][right]=buffer
-            end
-    else
-        i = right
-    end
-
-    return i
-end
-
-function split!(neigh,area,inter,left,right)
-    i = left
-    # start with j left from the Pivotelement
-    j = right - 1
-    pivot = neigh[right]
-
-    while i < j  
-        # start from left to look for an element larger than the Pivotelement 
-        while i < j && neigh[i] <= pivot
-            i = i + 1
-        end
-
-        # start from right to look for an element larger than the Pivotelement 
-        while j > i && neigh[j] > pivot
-            j = j - 1
-        end
-
-        if neigh[i] > neigh[j]
-            #switch data[i] with data[j] :
-            N=neigh[i]
-            A=area[i]
-            I=inter[i]
-            neigh[i]=neigh[j]
-            area[i]=area[j]
-            inter[i]=inter[j]
-            neigh[j]=N
-            area[j]=A
-            inter[j]=I 
-        end
-    end
-   
-    # switch Pivotelement (neigh[right]) with neu final Position (neigh[i])
-    # and return the new Position of  Pivotelements, stop this iteration
-    if neigh[i] > pivot 
-            #switch data[i] with data[right] :
-            N=neigh[i]
-            A=area[i]
-            I=inter[i]
-            neigh[i]=neigh[right]
-            area[i]=area[right]
-            inter[i]=inter[right]
-            neigh[right]=N
-            area[right]=A
-            inter[right]=I 
-    else
-        i = right
-    end
-
-    return i
-end
