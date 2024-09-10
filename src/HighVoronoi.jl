@@ -14,7 +14,7 @@ using GLPK
 using Plots
 using Distances
 using ProgressMeter
-using Cthulhu
+#using Cthulhu
 using Base.Threads
 using Base.Threads: Atomic, atomic_cas!
 
