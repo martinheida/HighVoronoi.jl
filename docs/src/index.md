@@ -2,7 +2,7 @@
 CurrentModule = HighVoronoi
 ```
 
-# HighVoronoi 1.2.0: $N\log N$ complexity Voronoi Grids in $\mathbb{R}^d$
+# HighVoronoi 1.3.0: $N\log N$ complexity Parallel Computed Voronoi Grids in $\mathbb{R}^d$
 
 Documentation for [HighVoronoi](https://github.com/martinheida/HighVoronoi.jl). Voronoi mesh generation in arbitrary dimensions + Finite Volume setup, also for vertices with $d+k$, $k>1$ generators.
 
@@ -10,12 +10,13 @@ Documentation for [HighVoronoi](https://github.com/martinheida/HighVoronoi.jl). 
 - [QUICK START on FINITE VOLUME methods: Click here](@ref QuickFV) / [The ABSTRACT WORKFLOW is here](@ref workflowfv)  
 - [Toy file for testing numerical solver](@ref toyfile)
 
-### News to version 1.1.0:
+### News to version 1.3.0:
 
-- improved algorithms for faster calculation of all features
-- 3D output
-- autmaticaly improving geometric quality of meshes if wanted by user: Nodes will be locally modified until voronoi nodes almost coincide with center of gravity of cells.
-
+- Parallelized compuation of Voronoi Diagrams, volumes and integrals
+- Comprimated internal database with accellerated access, free choice of database
+- Improved, accellerated Raycast routine (heart of Voronoi computations), free choice of Raycast method
+- Storage is directly possible via JLD2.
+- `substitute` is currently disabled as it has to be rewritten for new database structure.
 
 ### News to version 1.2.0:
 
@@ -23,6 +24,13 @@ Documentation for [HighVoronoi](https://github.com/martinheida/HighVoronoi.jl). 
 - `VI_POLYGON` has been modified. I uses more memory but is more than twice as fast in higher dimensions.
 - A new `Integrator` has been implemented: `VI_FAST_POLYGON`, see [here](@ref integratoroverview). Even more precise than `VI_POLYGON` and much faster (factor 15-20 to for 500 nodes in 6D) but using a lot of memory. Competitive with `VI_MONTECARLO` with `mc_accurate=(10_000,2,2)` in 6D (recall that a cell has on average `9_000` vertices in 6D).
 - Bug fixes for unbounded domains in the far field.
+
+### News to version 1.1.0:
+
+- improved algorithms for faster calculation of all features
+- 3D output
+- autmaticaly improving geometric quality of meshes if wanted by user: Nodes will be locally modified until voronoi nodes almost coincide with center of gravity of cells.
+
 
 ### Preprints
 

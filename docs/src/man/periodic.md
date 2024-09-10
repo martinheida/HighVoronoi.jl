@@ -23,7 +23,7 @@ A new feature is the field `periodic_grid` as a keyword that signals to `HighVor
 - `dimensions`: The box that contains the data $X$. Its default is `ones(Float64,dim)`.
 - `scale`: a diagonal matrix to scale $(x_j)_{j\in\{1,\dots,N\}}$ before repeating. Its default is `ones(Float64,dim)`.
 - `repeat`: corresponds to $(n_i)_{i\in\{1,\dots,dim\}}$, i.e. tells how often the data shall be repeated in each dimension. Its default is `2*ones(Int64,dim)`.
-- `fast`: `true` uses internal copy-and-paste algorithms to speed up the calculation significantly in high dimensions. Integration of functions  falls back to `Heuristic`. `false` uses classical computations. Integration of functions using `Polygon` and `MonteCarlo` is then possible. Default: `true`.
+- `fast`: `true` uses internal copy-and-paste algorithms to speed up the calculation significantly in high dimensions. Integration of functions  falls back to `Heuristic`. `false` uses classical computations. Integration of functions using `Polygon` and `MonteCarlo` is then possible. Default: `true`. Note that `fast=true` will disable multithreading. It will have to be reactivated in subsequent calls of `refine!(...)`.
 
 The resulting domain will be a `cuboid(dim,periodic=periodic,dimensions=(scale.*dimensions.*repeat))` of dimensions: `scale.*dimensions.*repeat`. The second un-named argument usually indicating the domain becomes meaningless. 
 
