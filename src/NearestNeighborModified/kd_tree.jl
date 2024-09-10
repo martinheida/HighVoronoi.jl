@@ -283,7 +283,7 @@ function knn_kernel_flex!(tree::HVKDTree{V},
         if old_r!=data.new_r
             #data.dist_new_r_x0_2 = norm(r-x0)^2 needs no change
             data.r = data.new_r
-            data.bestdist[1] = evaluate(tree.metric, data.x0, data.new_r, false)*(1+1000*data.plane_tolerance)
+            data.bestdist[1] = myevaluate(tree.metric, data.x0, data.new_r, false)*(1+1000*data.plane_tolerance)
             data.dist_r_x0_2 = data.bestdist[1]
             return false
         end
