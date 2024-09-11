@@ -76,27 +76,26 @@ nodes(m::RefineMesh) = nodes(m.data)
 @inline haskey(m::RefineMesh, v::AbstractVector{Int64}) = haskey(m.data,v)
 
 function push!(m::RefineMesh{T, VDB, T1}, vertex::Pair{Vector{Int64}, T}) where {T<:Point, VDB<:HighVoronoi.VertexDB{T}, T1<:AbstractMesh{T, VDB} }
-#function push!(m::RefineMesh{T}, vertex::Pair{Vector{Int64},T}) where T
     ret = push!(m.data,vertex)
     sig, _ = vertex
-    sort!(sig) 
+    sort!(sig)
+    _push_affected!(m,sig) 
+    return ret
+end
+
+function _push_affected!(m::RefineMesh{T, VDB, T1}, sig) where {T<:Point, VDB<:HighVoronoi.VertexDB{T}, T1<:AbstractMesh{T, VDB} }
     for j in sig
         j>m.length && break
         if !(m.affected[j])    m._count+=1    end
         m.affected[j]=true
     end
-    return ret
 end
 
 function push!(m::RefineMesh{T, VDB, T1}, vertex::Pair{Vector{Int64}, T},i) where {T<:Point, VDB<:HighVoronoi.VertexDB{T}, T1<:AbstractMesh{T, VDB} }
     ret = push!(m.data,vertex,i)
     sig, _ = vertex
     sig = external_index(m,sig)
-    for j in sig
-        j>m.length && break
-        if !(m.affected[j])    m._count+=1    end
-        m.affected[j]=true
-    end
+    _push_affected!(m,sig) 
     return ret
 end
 @inline push_ref!(mesh::TM, ref, index) where {T<:Point, TM<:RefineMesh{T}} = push_ref!(mesh.data, ref, index)
@@ -150,11 +149,11 @@ function clean_affected!(mesh::AbstractMesh,nxs,affected; clean_neighbors=Static
 end
 
 
-function systematic_refine!( Integral::Voronoi_Integral, new_xs::HVNodes, domain=Boundary(); settings=DefaultRaycastSetting, obligatories=Int64[], kwargs...)
+#=function systematic_refine!( Integral::Voronoi_Integral, new_xs::HVNodes, domain=Boundary(); settings=DefaultRaycastSetting, obligatories=Int64[], kwargs...)
     #return mesh(Integral)
     length(new_xs)!=0 && prepend!(Integral,new_xs)
     return systematic_refine!( mesh(Integral),new_xs,domain; obligatories=obligatories, settings=settings, kwargs...)
-end
+end=#
 
 """
     systematic_refine!(mesh::AbstractMesh, new_xs::HVNodes; domain=Boundary(), settings=DefaultRaycastSetting, subroutine_offset=0, intro="Refine with ..... points", pdomain=StaticBool{false}(), obligatories=Int64[])

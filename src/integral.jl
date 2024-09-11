@@ -15,6 +15,9 @@ struct Voronoi_Integral{P<:Point, T<:Voronoi_MESH{P}} <: HVIntegral{P}
     bulk_integral::Vector{Vector{Float64}}
     interface_integral::Vector{Vector{Vector{Float64}}}
     MESH::T
+    vol_buffer::Vector{Float64}
+    Voronoi_Integral{P,T}(a,b,c,d,e,f) where {P,T} = new{P,T}(a,b,c,d,e,f,[0.0])
+    Voronoi_Integral(a,b,c,d,e,f::T) where {P<:Point, T<:Voronoi_MESH{P}} = new{P,T}(a,b,c,d,e,f,[0.0])
 end
 
 struct Voronoi_Integral_Store_Container_1
@@ -312,7 +315,12 @@ end
 
 @inline function cell_data_writable(I::Voronoi_Integral,_Cell,vec,vecvec,::StaticFalse;get_integrals=statictrue)
     inter = get_integrals==true ? enabled_interface(I) : false
-    return (volumes = view(I.volumes,_Cell:_Cell),area = length(I.area)>0 ? I.area[_Cell] : Float64[], bulk_integral = inter ? I.bulk_integral[_Cell] : vec, interface_integral = inter ? I.interface_integral[_Cell] : vecvec, neighbors = I.neighbors[_Cell])
+    if _has_cell_data(I,_Cell)
+        return (volumes = view(I.volumes,_Cell:_Cell),area = length(I.area)>0 ? I.area[_Cell] : Float64[], bulk_integral = inter ? I.bulk_integral[_Cell] : vec, interface_integral = inter ? I.interface_integral[_Cell] : vecvec, neighbors = I.neighbors[_Cell])
+    else
+        resize!(I.vol_buffer,max(1,length(I.neighbors[_Cell])))
+        return (volumes = view(I.vol_buffer,1:1),area = I.vol_buffer, bulk_integral = inter ? I.bulk_integral[_Cell] : vec, interface_integral = inter ? I.interface_integral[_Cell] : vecvec, neighbors = I.neighbors[_Cell])
+    end
 end
 
 @inline cell_data(I::Voronoi_Integral,_Cell,vec,vecvec;get_integrals=statictrue) = cell_data_writable(I,_Cell,vec,vecvec,get_integrals=get_integrals)

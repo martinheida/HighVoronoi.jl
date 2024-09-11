@@ -160,22 +160,7 @@ function transfer_values!(destination,origin,len,offset::Int=0)
     end
 end
 
-function first_is_subset(sig,iter)
-    k=1
-    i=1
-    len=length(sig)
-    len_k=length(iter)
-    while i<=len
-        while k<=len_k && sig[i]>iter[k] 
-            k+=1
-        end
-        if k>len_k || iter[k]>sig[i]
-            break
-        end
-        i+=1
-    end
-    return i>len 
-end
+first_is_subset(sig,iter) = first_is_subset(sig,iter,typemax(eltype(sig)))
 
 function first_is_subset(sig,iter,top)
     k=1
@@ -764,7 +749,7 @@ end
     end
 end
 
-@StaticArrays.propagate_inbounds intersects_cuboid_ball(c::StaticVector, mins::StaticVector, maxs::StaticVector, r_squared::Float64) = _intersects_cuboid_ball(Size(c),c, mins, maxs, r_squared)
+#=@StaticArrays.propagate_inbounds intersects_cuboid_ball(c::StaticVector, mins::StaticVector, maxs::StaticVector, r_squared::Float64) = _intersects_cuboid_ball(Size(c),c, mins, maxs, r_squared)
 @StaticArrays.generated function _intersects_cuboid_ball(::Size{s},c, mins, maxs, r_squared) where {s}
     return quote
         dists_squared = 0.0
@@ -788,7 +773,7 @@ end
     end
 end    
 
-
+=#
 
 
 

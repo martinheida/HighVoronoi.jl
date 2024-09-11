@@ -13,14 +13,14 @@ struct Fast_Polygon_Integrator{T,TT,IDC<:IterativeDimensionChecker,D}
         D = typeof(data)
         return new{T,TT,IDC,D}(f,b,I,Itc,data)
     end
-    function Fast_Polygon_Integrator(mesh,integrand=nothing, bulk_integral=false)
+    #=function Fast_Polygon_Integrator(mesh,integrand=nothing, bulk_integral=false)
         b_int=(typeof(integrand)!=Nothing) ? bulk_integral : false
         i_int=(typeof(integrand)!=Nothing) ? true : false
         Integ=Voronoi_Integral(mesh,integrate_bulk=b_int, integrate_interface=i_int)
         idc = IterativeDimensionChecker(dimension(mesh))
         PI=Fast_Polygon_Integrator{typeof(integrand),typeof(Integ),typeof(idc)}( integrand, b_int, Integ, idc )
         return PI
-    end
+    end=#
     function Fast_Polygon_Integrator(Integ::HVIntegral,integrand=nothing, bulk_integral=false)
         b_int=(typeof(integrand)!=Nothing) ? bulk_integral : false
         enable(Integ,volume=true,integral=b_int)
@@ -32,7 +32,7 @@ struct Fast_Polygon_Integrator{T,TT,IDC<:IterativeDimensionChecker,D}
         return new{T,TT,IDC,D}(fpi._function,fpi.bulk,fpi.Integral,fpi.iterative_checker,d)
     end
 end
-function parallelize_integrators(myintes2::Vector{I}) where {I<:Fast_Polygon_Integrator}
+function parallelize_integrators(myintes2::AVI) where {I<:Fast_Polygon_Integrator,AVI<:AbstractVector{I}}
     meshes = map(i->mesh(i.Integral),myintes2)
     tmdh = ThreadsafeMeshDictHierarchy(meshes,zeros(PointType(myintes2[1].Integral)))
     return map(i->Fast_Polygon_Integrator(myintes2[i],tmdh[i]),1:length(meshes))

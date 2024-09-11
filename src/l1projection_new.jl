@@ -74,8 +74,8 @@ function interactionmatrix(vg_r::VoronoiGeometry,vg_c::VoronoiGeometry; check_co
 
     dim = length(nodes_r[1])
     number_of_all_nodes = lm_r+lm_c-sum(map(k->k!=0,reference_r))
-    println(referenc_c)
-    println(reference_r)
+    #println(referenc_c)
+    #println(reference_r)
     
 
     # set up range

@@ -119,7 +119,7 @@ Voronoi_MESH(xs::Points,refs) = Voronoi_MESH(xs,refs,nothing)
 function Voronoi_MESH(xs::Points,refs,vertex_storage::DatabaseVertexStorage) #where {T}
     P = eltype(xs)
     dimension = size(P)[1]
-    hdb = HeapDataBase(P,round(Int,lowerbound(dimension,dimension)))
+    hdb = HeapDataBase(P,round(Int,max(2^dimension+2*dimension,lowerbound(dimension,dimension))))
     return Voronoi_MESH(xs,refs,hdb)
 end
 function Voronoi_MESH(xs::Points,refs,vertex_storage) #where {T}

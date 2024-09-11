@@ -46,12 +46,6 @@ end
     __voronoi(mesh,TODO,compact,v_offset,silence,iteration_reset, printsearcher,searcher, threading,queue,intro)
 end
 
-struct PLock
-    lock::ReadWriteLock
-    data::String
-    running::Threads.Atomic{Bool}
-    PLock() = new(ReadWriteLock(),"",Threads.Atomic{Bool}(true))
-end
 
 @inline function _voronoi(mesh::AM,TODO,compact,v_offset,silence,iteration_reset, printsearcher,searcher,intro,threading::MultiThread) where {P,AM<:AbstractMesh{P}}
     dimension = size(P)[1]
@@ -85,29 +79,6 @@ end
         println() 
     end
     println("Total number of vertices: $(new_vertices[])")
-end
-function plock(g,a)
-    #writelock(g.lock)
-    #print(a)
-    #=g.data *= a
-    ll = length(g.data)
-    if ll>100
-        for i in 51:ll
-            g.data[i-50] = g.data[i]
-        end
-        resize!(g.data,ll-50)
-    end=#
-    #writeunlock(g.lock)
-end
-function print_plock(g)
-    while g.running[]
-        sleep(0.1)
-        writelock(g.lock)
-        print(g.data)
-        resize!(g.data,0)
-        writeunlock(g.lock)
-    end
-    println("Ende")
 end
 
 #=function __voronoi(mesh::AM,TODO,compact,v_offset,silence,iteration_reset, printsearcher,searcher,threading,queue, new_vertices_atomic = Atomic{Int64}(0),progress=ThreadsafeProgressMeter(1,silence)) where {P,AM<:AbstractMesh{P}}
@@ -256,11 +227,6 @@ global CORRECTIONS=0::Int64
 global SUCCESSFUL=0::Int64
 global FIRSTCORRECTIONS=0::Int64
 global SECONDCORRECTIONS=0::Int64=#
-function __loop1(i,searcher_vec,_Cell,xs,edgecount,vi_wrapper)
-    for (sig,r) in vi_wrapper
-        queue_edges_OnCell(sig,r,searcher_vec[i],_Cell,xs,edgecount)
-    end
-end
 
 function systematic_explore_cell(xs::Points,_Cell,mesh::AM,edgecount,searcher_vec::RC,queue,b_index,new_vertices,globallock) where {AM<:AbstractMesh, RI<:RaycastIncircleSkip,RC<:AbstractVector{RI}}
 try
@@ -513,13 +479,10 @@ function fraud_vertex(dim,sig,r,lsig2,searcher,xs)
         if !verify_vertex(sig,r,xs,searcher)
             return true
         end
-        max_dist = 0.0
-        lsig = length(sig)
-        for k in 1:lsig
-            max_dist = max(max_dist,norm(r-xs[sig[k]]))
-        end
+        max_dist = max(map(s->norm(r-xs[s]),sig))
         distance = 0.0
         max_distance = 0.0
+        lsig = length(sig)
         for k in 1:(lsig-1)
             for i in (k+1):lsig
                 dd = norm(xs[sig[i]]-xs[sig[k]])

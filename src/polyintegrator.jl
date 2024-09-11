@@ -11,13 +11,13 @@ end
 function Polygon_Integrator(f,b,I)
     return Polygon_Integrator(f,b,I,IterativeDimensionChecker(mesh(I)))
 end
-function Polygon_Integrator(mesh::VM,integrand, bulk_integral=false) where VM<:Voronoi_MESH
+#=function Polygon_Integrator(mesh::VM,integrand, bulk_integral=false) where VM<:Voronoi_MESH
     b_int=(typeof(integrand)!=Nothing) ? bulk_integral : false
     i_int=(typeof(integrand)!=Nothing) ? true : false
     Integ=Voronoi_Integral(mesh,integrate_bulk=b_int, integrate_interface=i_int)
     PI=Polygon_Integrator( integrand, b_int, Integ, IterativeDimensionChecker(mesh) )
     return PI
-end
+end=#
 
 function Polygon_Integrator(Integ::HVIntegral,integrand, bulk_integral=false)
     b_int=(typeof(integrand)!=Nothing) ? bulk_integral : false

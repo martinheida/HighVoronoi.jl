@@ -24,6 +24,8 @@
         #println("Transformed Tuple: ", transformed_tuple)
     
         tft2 = HighVoronoi.group_last(test_tuple,Int,mycollectlast,StaticArrays.Size(2))
+        tft4 = HighVoronoi.cut_off_last(test_tuple,Int,mycollectlast)
+        HighVoronoi.remove_first_entry(test_tuple)
         # Return the value of the last entry of the new tuple
         #return transformed_tuple[end]==[4,6,8] && tft2[end]==[6,8]
         return  tft2[end]==[6,8]
