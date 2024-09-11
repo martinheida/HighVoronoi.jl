@@ -60,7 +60,8 @@ function reset(f::FEIStorage)
     return f
 end
 
-function reset(fei::FEIStorage,sig,_Cell,neighbors,sig_neigh_iterator)
+### Maybe useful in future
+#=function reset(fei::FEIStorage,sig,_Cell,neighbors,sig_neigh_iterator)
     reset(sig_neigh_iterator,sig,neighbors)
     lsig = length(sig)
     resize!(fei.free_nodes,lsig)
@@ -76,7 +77,7 @@ function reset(fei::FEIStorage,sig,_Cell,neighbors,sig_neigh_iterator)
     _swap(1,first_index,fei.valid_nodes)
     fei.active_nodes[1] = 1
     return fei
-end
+end=#
 
 struct FastEdgeIterator{T,FLOAT}
     iterators::T
@@ -109,12 +110,12 @@ function get_full_edge(sig,r,edge,NF_::FastEdgeIterator,xs)
     return Vector{Int64}(view(NF.sig, fullview[1:count])), convert_SVector( -1 .* ray(NF_) )
 end
 
-function get_full_edge_indexing(sig,r,edge,NF_::FastEdgeIterator,xs)
+#=function get_full_edge_indexing(sig,r,edge,NF_::FastEdgeIterator,xs)
     NF=NF_.iterators[1]
     fullview, count  = get_full_edge_indexing(NF.rays,NF.local_cone,NF.new_node,NF.active_nodes[1],length(NF.sig),NF.dim,NF_.ray_tol)
     return view(NF.sig, fullview[1:count])
 end
-
+=#
 
 
 

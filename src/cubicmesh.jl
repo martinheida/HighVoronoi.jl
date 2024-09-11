@@ -222,7 +222,6 @@ function cubic_voronoi(domain,periodicity,deviation,cell_size,search,my_integrat
     Integrator = my_integrator(Integral)
     proto = prototype_bulk(Integrator)
     _function = integrand
-    
     get_volumes = enabled_volumes(Integral)
     data = IntegrateData(xs,extended_cube,Integrator) 
     

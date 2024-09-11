@@ -318,9 +318,9 @@ function same(boundary1::Boundary, boundary2::Boundary, i::Int)
     plane1 = boundary1.planes[i]
     plane2 = boundary2.planes[i]
 
-    normal_match = norm(plane1.normal_vector - plane2.normal_vector) < 1e-5
+    normal_match = norm(plane1.normal - plane2.normal) < 1e-5
     
-    b1, b2 = plane1.base_point, plane2.base_point
+    b1, b2 = plane1.base, plane2.base
     if norm(b1 + b2) > 1e-5
         base_match = norm(b1 - b2) / norm(b1 + b2) < 1e-5
     else
@@ -441,18 +441,8 @@ function check_boundary(nodes,b::Boundary)
 end
 
 
-function adjust_boundary_vertex(x,B::Boundary,sig,lmesh,lsig=length(sig),tolerance=1.0E-10)
+@inline function adjust_boundary_vertex(x,B::Boundary,sig,lmesh,lsig=length(sig),tolerance=1.0E-10)
     return x
-    x2 = x
-    for i in lsig:-1:1
-        sig[i]<=lmesh && break
-        plane=B.planes[sig[i]-lmesh]
-        my_prod = dot(plane.base-x2,plane.normal)
-        if my_prod<0 && my_prod>-tolerance 
-            x2 = x2 + 2*my_prod*plane.normal 
-        end
-    end
-    return x2
 end
 
 function show_in(x,B::Boundary)
@@ -544,3 +534,21 @@ function cuboid(dim;dimensions=ones(Float64,dim),periodic=collect(1:dim),neumann
 end
 
 
+function testboundary()
+    p1 = BC_Dirichlet([1.0,0.0],[1.0,0.0])
+    p2 = BC_Neumann([0.0,0.0],[-1.0,0.0])
+    p3 = BC_Periodic([0.0,1.0],[0.0,0.0],[0.0,1.0])
+    b = Boundary(p1,p2,p3)
+    println(boundaryToString(b))
+    show(b)
+    intersections!(b,[0.5,0.5],[1.0,0.0])
+    c = cuboid(2,periodic=[1])
+    c2 = cuboid(2,periodic=[2])
+    show_in([0.5,0.5],c)
+    same(c,c2)
+    reduce_periodic_part(c)
+    reduce_to_periodic(c2)
+    push!(c,p1)
+    push!(c,p3)
+    return true
+end

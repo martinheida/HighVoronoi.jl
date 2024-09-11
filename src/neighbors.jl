@@ -476,19 +476,6 @@ function get_sup_edge(dc::IterativeDimensionChecker,edges,xs)
     return r,r2,val
 end
 
-function getedge(idc::IterativeDimensionChecker,verteces,space_dim,xs,_Cell)
-    (sig,r)=pop!(verteces)
-    sig2,r2 = sig,r
-    lv = length(verteces)
-    b = true
-    if lv==0
-        b=false
-    else
-        (sig2,r2)=pop!(verteces) # isempty(verteces) ? ([0],r) : pop!(verteces)
-    end
-    return b, r, r2
-end
-
 
 
 #=

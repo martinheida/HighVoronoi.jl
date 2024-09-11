@@ -2,7 +2,7 @@
 function sample_data_periodic(dim,_NON)
     periodicity = PeriodicData(3*ones(Int64,dim),(1.0/3)*ones(Int64,dim),_NON,zeros(Float64,dim))
 
-    xs = periodicgeodata(rand(dim,_NON),periodicity)#,SVector{dim,Float64}(zeros(Float64,dim)))
+    xs = periodicgeodata(VoronoiNodes(rand(dim,_NON)),periodicity)#,SVector{dim,Float64}(zeros(Float64,dim)))
     offset = _NON*(index_from_array(2*ones(Int64,dim),periodicity)-1)
     println(length(xs),"  ",offset)
     for i in 1:_NON
@@ -209,7 +209,7 @@ function vor_calc_statistics_1(unit_nodes::Matrix,iterator,searchdata,cycle,sile
         extended_cube = cuboid( dim, periodic = [], dimensions = cubedimensions )
     
         periodicity = PeriodicData(iterator,dimensions,number_of_nodes,offsetvector)
-        xs = periodicgeodata(data,periodicity)#,SVector{dim,Float64}(zeros(Float64,dim)))
+        xs = periodicgeodata(VoronoiNodes(data),periodicity)#,SVector{dim,Float64}(zeros(Float64,dim)))
         lmesh = length(xs)
     
         redirect_stdout(oldstd)

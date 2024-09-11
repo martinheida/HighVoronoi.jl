@@ -102,7 +102,7 @@ end
 
 
 
-function periodicgeodata(data,periodicity)#,dispatch_resolve)
+#=function periodicgeodata(data,periodicity)#,dispatch_resolve)
     pc = Periodic_Counter(periodicity)
     DATA = Vector{typeof(data)}(undef,pc.maxindex)
     while !eol(pc)
@@ -110,7 +110,7 @@ function periodicgeodata(data,periodicity)#,dispatch_resolve)
         increase(pc)
     end
     return VoronoiNodes(hcat(DATA...))#,length(dispatch_resolve))
-end
+end=#
 
 function periodicgeodata(data::HN,periodicity) where {P,HN<:HVNodes{P}} #,dispatch_resolve)
     pc = Periodic_Counter(periodicity)
@@ -219,13 +219,13 @@ end
 ###############################################################################################################################
 
 
-function _Matrix_from_Points(xs::Points)
+#=function _Matrix_from_Points(xs::Points)
     data = zeros(Float64,length(xs[1]),length(xs))
     for i in 1:(length(xs))
         data[:,i] .= xs[i]
     end
     return data
-end
+end=#
 
 function periodic_geo_data(periodic,scale,dimensions,repeat,matrix_data,dim,_print=statictrue)
     number_of_nodes = length(matrix_data)
@@ -446,7 +446,7 @@ function PeriodicVoronoiGeometry(matrix_data; vertex_storage=false, silence=fals
     end
     redirect_stdout(oldstd)
     standardize(domain)
-    result = VoronoiGeometry(result_integrator,domain,integrand,search,mc_accurate,NoFile())
+    result = VoronoiGeometry(result_integrator,domain,integrand,search,mc_accurate,nothing)#NoFile())
 
 #=    integral = HighVoronoi.integral(domain)
     v = 0.0
@@ -513,7 +513,7 @@ function right_indeces(indexarray,data,current_dim,dim,indeces=zeros(Int64,3^(di
     return indeces,count
 end
 
-function block_neighbors(counter::Periodic_Counter,lmesh)
+#=function block_neighbors(counter::Periodic_Counter,lmesh)
     lrp = length(counter.data.repeat)
     boundaries = collect((1+lmesh):(lmesh+2*lrp))
     for i in 1:lrp
@@ -525,7 +525,7 @@ function block_neighbors(counter::Periodic_Counter,lmesh)
         end
     end
     return filter!(x->(x!=0),boundaries)
-end
+end=#
 
 function mark_modified(sig2,modified,lmesh)
     for i in 1:length(sig2)

@@ -124,7 +124,11 @@ function read_from_db(data,buffer_,pos,block,l,blocksize)
         sig .= view(data[block],(pos+1):(pos+l))
     else
         view(buffer_,1:l1) .= view(data[block],(pos+1):(pos+l1))
-        view(buffer_,(l1+1):l) .= view(data[block+1],1:(l-l1))
+        #try
+            view(buffer_,(l1+1):l) .= view(data[block+1],1:(l-l1))
+        #catch
+        #    error("$(length(data[block+1])), $blocksize")
+        #end
     end
     return sig
 end

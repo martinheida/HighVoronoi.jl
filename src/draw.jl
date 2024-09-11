@@ -421,7 +421,7 @@ function iterative_3D_edge(_Cell, dim, space_dim, neigh, _length,verteces,vertec
                 push!( dd[index] , sig =>r) # push vertex to the corresponding list
             end
         end
-        for (sig,r) in verteces2 # repeat in case verteces2 is not empty
+        #=for (sig,r) in verteces2 # repeat in case verteces2 is not empty
             for _neigh in sig
                 _neigh==_Cell && continue
                 index=_neigh_index(neigh,_neigh)
@@ -430,7 +430,7 @@ function iterative_3D_edge(_Cell, dim, space_dim, neigh, _length,verteces,vertec
                     push!( dd[index] , sig =>r) # push vertex to the corresponding list
                 end
             end
-        end
+        end=#
         taboo[dim]=_Cell
         for k in 1:_length
             buffer=neigh[k] # this is the (further) common node of all verteces of the next iteration

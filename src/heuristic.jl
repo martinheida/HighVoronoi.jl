@@ -8,13 +8,13 @@ struct Heuristic_Integrator{T,TT}
     function Heuristic_Integrator{T,TT}(f::T,b::Bool,I::TT) where {T,TT}
         return new(f,b,I)
     end
-    function Heuristic_Integrator(mesh::AbstractMesh,integrand=nothing, bulk_integral=false)
+    #=function Heuristic_Integrator(mesh::AbstractMesh,integrand=nothing, bulk_integral=false)
         b_int=(typeof(integrand)!=Nothing) ? bulk_integral : false
         i_int=(typeof(integrand)!=Nothing) ? true : false
         Integ=Voronoi_Integral(mesh,integrate_bulk=b_int, integrate_interface=i_int)
         PI=Heuristic_Integrator{typeof(integrand),typeof(Integ)}( integrand, b_int, Integ )
         return PI
-    end
+    end=#
     function Heuristic_Integrator(Integ::HVIntegral,integrand=nothing, bulk_integral=false)
         b_int = bulk_integral || (typeof(integrand) != Nothing)
         enable(Integ,integral=b_int)

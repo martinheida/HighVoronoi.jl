@@ -16,16 +16,8 @@ function systematic_refine!(domain::AD,_new_xs::Points;intro="Refine discrete do
     return iter #_my_modified_cells(Integrator.Integral.MESH,old_length,old_references,length(domain.references),length(_new_xs))
 end 
 
-# The following is no longer needed
-#=function _my_modified_cells(mesh,old_length,old_references,new_references,lnxs)
-    lmesh = length(mesh)
-    start_old = lmesh-new_references+1
-    neigh = neighbors_of_cell(Iterators.flatten((1:(new_references-old_references), (lmesh-lnxs+1):lmesh)),mesh,adjacents=true)
-    keepat!(neigh,map(n->(n in ((new_references-old_references)+1):(lmesh-lnxs)),neigh))
-    return vcat(collect(1:(new_references-old_references)),sort!(neigh),collect((lmesh-lnxs+1):lmesh))
-end=#
-
-function repair_periodic_structure!(domain,Integral,iter,sr_offset=0)
+## seemingly the following is no longer needed
+#=function repair_periodic_structure!(domain,Integral,iter,sr_offset=0)
     known_reflections = retrieve_reflections(domain,Integral)
     lref1 = length( domain.references )
     iter2=periodize!(domain,Integral,known_reflections,sr_offset)
@@ -39,3 +31,4 @@ function repair_periodic_structure!(domain,Integral,iter,sr_offset=0)
     sort!(iter)
     unique!(iter)
 end
+=#

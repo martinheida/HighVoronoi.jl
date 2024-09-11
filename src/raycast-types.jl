@@ -7,23 +7,13 @@
 ########################################################################################################################################
 ########################################################################################################################################
 ########################################################################################################################################
-
+#=
 struct MyTree{T,TT,TTT}
     tree::T
     extended_xs::TTT
     active::BitVector
     size::Int64
     mirrors::Int64
-    #=function MyTree{T,TT,TTT}(t,m,a,s,m2) where {T,TT,TTT}
-        return new(t,m,a,s,m2)        
-    end=#
-#=    function MyTree(xs,l=0;perturbed_nodes=false)
-        t=KDTree(xs)
-        #t=BallTree(xs)#VoronoiNodes(xs,perturbation=perturbed_nodes ? 1.0E-10 : 0.0))
-        m=append!(copy(xs),Vector{typeof(xs[1])}(undef,l))
-        a=BitVector(zeros(Int8,l))
-        return MyTree{typeof(t),eltype(xs),typeof(xs)}(t,m,a,length(xs),l)
-    end=#
     function MyTree(xs,b::Boundary;perturbed_nodes=false)
         #println(typeof(xs))
         t = SearchTree(xs)
@@ -73,7 +63,7 @@ function _inrange(tree::MyTree,x,r)
     end    
     return idx
 end
-
+=#
 
 ########################################################################################################################################
 ########################################################################################################################################

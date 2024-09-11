@@ -14,7 +14,7 @@ using GLPK
 using Plots
 using Distances
 using ProgressMeter
-#using Cthulhu
+using Cthulhu
 using Base.Threads
 using Base.Threads: Atomic, atomic_cas!
 
@@ -127,7 +127,7 @@ include("NearestNeighborModified/NearestNeighbors.jl")
 include("edgehashing.jl")
 include("indexhash.jl")
 include("staticparams.jl")
-include("database.jl")
+#include("database.jl")
 include("quicksort.jl")
 include("searchtrees.jl")
 #HVView and descendant SwitchView

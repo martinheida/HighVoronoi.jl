@@ -175,7 +175,7 @@ function randray(xs::Points)
     return u
 end=#
 
-function rand_oriented(dim,base,start)
+#=function rand_oriented(dim,base,start)
     ret = zeros(Float64,dim)
     elements = min(50,length(base))
     for i in 1:elements
@@ -186,7 +186,7 @@ function rand_oriented(dim,base,start)
     normalize!(ret)
     ret .+= 0.1 .* normalize!(randn(dim))
     return ret
-end
+end=#
 
 function randray(xs::Points,v,count::Int64=0,base=xs,start=1)
     k = length(xs)
@@ -354,10 +354,6 @@ end
 #    println("node $i : activate $plane <-> $(searcher.tree.size+plane)  ;  $(searcher.tree.extended_xs[i]) <-> $(searcher.tree.extended_xs[searcher.tree.size+plane])")
 end
 
-function deactivate_mirror(searcher,i,plane)
-    searcher.tree.active[plane] = false
-    searcher.rare_events[SRI_deactivate_boundary] += 1
-end
 
 ########################################################################################################################################
 
@@ -427,12 +423,7 @@ function verify_vertex(sig,r,xs,searcher,output=StaticBool{false})
     for i in eachindex(idx)
         b &= idx[i] in sig
     end
-    if output==true && !b 
-        println("  $sig and $idx not identical in list with $(length(xs)) entries!")
-        for i in idx
-            #println("      $i: $(norm(xs[i]-r))")
-        end
-    end
+    output==true && !b && println("  $sig and $idx not identical in list with $(length(xs)) entries!")
     b &= vertex_variance(sig,r,xs,length(sig)-1)<1E-20
     output==true && !b && println("  var_sig = $(vertex_variance(sig,r,xs,length(sig)-1)),  var_idx = $(vertex_variance(idx,r,xs,length(idx)-1))")    
     dim = length(xs[1])

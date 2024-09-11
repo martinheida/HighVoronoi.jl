@@ -12,7 +12,7 @@ However, there is always the possibility to access the data also via the followi
     The reason is that particularly for periodic boundary conditions, the mesh is enriched by a periodization of the boundary nodes. 
     These nodes are lateron dropped by the VoronoiData-Algorithm.       
 """
-struct VoronoiGeometry{T,TT,SNP,DT,MC,HVF<:Union{HVFile,NoFile}}
+struct VoronoiGeometry{T,TT,SNP,DT,MC,HVF}#<:Union{HVFile,NoFile}}
     Integrator::T
     adress::Vector{Int64}
     domain::DT
@@ -42,9 +42,9 @@ const ClassicGeometry = VoronoiGeometry{T,TT,SNP,DT,MC,HVF} where {T,TT,SNP,DT<:
 @inline integral(vg::VoronoiGeometry) = integral(vg.domain)
 
 @inline function Base.open(func::Function,vg::VG) where {VG<:VoronoiGeometry}
-    open(vg.file) do ff
+    #open(vg.file) do ff
         func(vg)
-    end
+    #end
 end
 
 function show(vg::VoronoiGeometry)
@@ -161,7 +161,7 @@ function VoronoiGeometry(xs::Points,b=Boundary(); vertex_storage=DatabaseVertexS
             
             lboundary = length(b)
             integrate_geo(integrate,d2,myintegrator,integrand,mc_accurate,collect(1:public_length(d2)),collect(1:(length(mesh(d2))+lboundary)),silence)
-            result = VoronoiGeometry(myintegrator,d2,integrand,search,mc_accurate,NoFile())
+            result = VoronoiGeometry(myintegrator,d2,integrand,search,mc_accurate,nothing)#NoFile())
             end
     catch err
         redirect_stdout(oldstd)
@@ -255,7 +255,7 @@ function VoronoiGeometry(file::String,proto=nothing; _myopen=jldopen, offset="",
         lboundary = length(b)
         myinte = backup_Integrator(II2,true)
         integrate && HighVoronoi.integrate(myinte,domain=internal_boundary(d2),relevant=collect(1:public_length(d2)),modified=collect(1:(length(mesh(d2))+lboundary)))
-        result = VoronoiGeometry(myintegrator,d2,integrand,RaycastParameter(Float64),mc_accurate,NoFile())
+        result = VoronoiGeometry(myintegrator,d2,integrand,RaycastParameter(Float64),mc_accurate,nothing)#NoFile())
         redirect_stdout(oldstd)
     catch
         redirect_stdout(oldstd)
@@ -525,7 +525,12 @@ If you want to make sure that the data you load will be rich enough, compact inf
 This will print out compact information of the data stored in file `filename` and the offset `offset`. Yields dimension, number of nodes, number of internal nodes and the dimension of the stored integrated data.
 Note that the latter information is of particular importance since here is the highest risk for the user to mess up stored data with the algorithm.
 """
-function load_Voronoi_info()
+function load_Voronoi_info(filename::String,offset="")
+    l = nothing
+    jldopen(filename, "r") do myfile
+        l = load_Voronoi_info(myfile,offset)
+    end
+    return l
 end
 
 """ returns CompactData on stored Geometry """
