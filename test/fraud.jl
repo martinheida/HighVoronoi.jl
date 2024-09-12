@@ -25,7 +25,7 @@
                 #HighVoronoi._nn(btree,zeros(Float64,5))
                 #HighVoronoi._inrange(btree,zeros(Float64,5),0.1)
                 #println("-------- 3  ---------------------------------------------------")
-                vg = VoronoiGeometry(xs,integrate=false,silence=global_silence)
+                vg = VoronoiGeometry(xs,cuboid(5,periodic=[]),integrate=false,silence=global_silence)
                 vd = VoronoiData(vg)
                 values(vd.boundary_nodes)
                 vd2 = VoronoiData(vg,copyall=true)
@@ -36,16 +36,6 @@
     end
     @test test_2000()
     @test test_fraud()
-    function test_VoronoiData()
-        vg = VoronoiGeometry(VoronoiNodes(rand(3,100)),integrate=false,silence=global_silence)
-        vd = VoronoiData(vg)
-        values(vd.boundary_nodes)
-        vd2 = VoronoiData(vg,copyall=true)
-        return true
-    end
-#    @test test_fast_poly()
-    @test test_VoronoiData()
-
 end
 
 

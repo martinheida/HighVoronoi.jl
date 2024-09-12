@@ -1,10 +1,12 @@
 using Test
+using Revise
 using HighVoronoi
 
 using SpecialFunctions
 using LinearAlgebra
 using SparseArrays
 using StaticArrays
+using JLD2
 
 
 const global_silence = false
@@ -13,9 +15,13 @@ const global_silence = false
 @testset "HighVoronoi.jl" begin
     @testset "various" begin
         @test HighVoronoi.testboundary()
+        @test HighVoronoi.test_EdgeHashTable()
+        @test HighVoronoi.test_VertexHashTable()
+        @test HighVoronoi.test_queuehashing()
     end
     include("tools.jl")
     include("basics.jl")
+    include("voronoidata.jl")
     include("statistics.jl")
     include("fraud.jl")
     include("periodicgrids.jl")
