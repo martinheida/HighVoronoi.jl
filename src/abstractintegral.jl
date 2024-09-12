@@ -52,6 +52,7 @@ end
 @inline bulk_integral(i::AI,k) where AI<:HVIntegral = isassigned(i.bulk_integral,k) ? i.bulk_integral[k] : Float64[]
 @inline interface_integral(i::AI,k) where AI<:HVIntegral = isassigned(i.interface_integral,k) ? i.interface_integral[k] : Vector{Vector{Float64}}()
 
+#=
 function compare(i::I1,ii::I2) where {I1<:HVIntegral,I2<:HVIntegral}
     _sum(A,B) = length(B)>0 ? sum(A,B) : 0.0
     result = true
@@ -122,9 +123,10 @@ function compare(i::I1,ii::I2) where {I1<:HVIntegral,I2<:HVIntegral}
     end
     return result
 end
-
+=#
 function resize_integrals(i::AI,_size) where AI<:HVIntegral
-    if enabled_bulk(i)
+    error("you may need to reactivate the following code")
+    #=if enabled_bulk(i)
         for k in 1:length(i)
             inte = bulk_integral(i,k)
             length(inte)>0 && resize!(inte,_size)
@@ -137,7 +139,7 @@ function resize_integrals(i::AI,_size) where AI<:HVIntegral
                 length(inte[kk])>0 && resize!(inte[kk],_size)
             end
         end
-    end
+    end=#
 end
 
 ############################################################################################################

@@ -17,7 +17,7 @@ function cleanup_cell(vol,ar,bulk,inter,_Cell,iterate, calculate, data,Integrato
     V = 0.0
     for i in 1:length(old_neighbors)
         n = old_neighbors[i]
-        hascelldata(Integrator.Integral,n)
+        #hascelldata(Integrator.Integral,n)
         if !(n in calculate) && hascelldata(Integrator.Integral,n)
             neigh_data = cell_data_writable(Integrator.Integral,n,dfvb,dfvvb)
             _Cell_index = findfirstassured(_Cell,neigh_data.neighbors)

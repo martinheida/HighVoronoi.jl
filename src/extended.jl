@@ -141,7 +141,7 @@ function nn(tree::ExtendedTree,x::Point,skip=(x->false))::Tuple{Int64,Float64}
     return index, dist
 end
 
-function search_vertex(tree::ExtendedTree,point::MV,skip,idx,dist,bv) where {S,MV<:Union{MVector{S,Float64},SVector{S,Float64}}}
+#=function search_vertex(tree::ExtendedTree,point::MV,skip,idx,dist,bv) where {S,MV<:Union{MVector{S,Float64},SVector{S,Float64}}}
     dist2(a,b) = sum(i->(a[i]-b[i])^2,1:S)
 
     search_vertex(tree.tree,SVector(point),skip,idx,dist,tree.tree.data)
@@ -150,7 +150,7 @@ function search_vertex(tree::ExtendedTree,point::MV,skip,idx,dist,bv) where {S,M
         skip(tree.size+i)#,dist2(tree.extended_xs[tree.size+i],point)) 
         #skip(tree.size+i,dist2(tree.extended_xs[tree.size+i],point)) 
     end    
-end
+end=#
 
 function search_vertex2(tree::ExtendedTree,point::MV,idx,dist) where {S,FLOAT<:Real,MV<:Union{MVector{S,FLOAT},SVector{S,FLOAT}}}
     #(a,b) = sum(i->(a[i]-b[i])^2,1:S)

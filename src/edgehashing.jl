@@ -72,14 +72,12 @@ function pushedge!(ht::EdgeHashTable, key::K, cell::Int64, mode=true) where K
     i = UInt64(0)
     ret = false
     lock(ht.lock)
+    #print("$value, $index2")
     while true
         idx = reinterpret(Int64,(index1 + i * index2) & ht.mylength[1] + 1) # try bitcast( ) instead
+        #print(" $idx $(ht.occupied[idx] ? 1 : 0) ")
         @inbounds data = ht.occupied[idx] ? ht.table[idx] : HashedEdge()
         ht.occupied[idx] = true
-        if data.cell2 != 0
-            ret = true
-            break
-        end
         if data.value == 0
             ht.table[idx] = HashedEdge(value, index2, cell, 0)
             break #return false
@@ -87,6 +85,10 @@ function pushedge!(ht::EdgeHashTable, key::K, cell::Int64, mode=true) where K
             ht.table[idx] = HashedEdge(value, index2, cell, 0)
             break #return false
         elseif data.value == value && data.value2==index2 
+            if data.cell2 != 0
+                ret = true
+                break
+            end
             if mode || data.cell1 != cell
                 ht.table[idx] = HashedEdge(value, index2, data.cell1, cell)
                 break #return false
@@ -245,6 +247,7 @@ end
 
 # Funktion zum Erweitern der VertexHashTable
 function extend(ht::VertexHashTable)
+    println("extending...")
     len2 = 2 * (ht.mylength[1] + 1)
     V2 = similarvertexhash(HashedVertex, reinterpret(Int64, len2))
     new_occupied = falses(len2)
@@ -278,33 +281,47 @@ function Base.empty!(ht::VertexHashTable)
     fill!(ht.occupied, false)
 end
 
-#=
-# Beispielverwendung
-len = 10
-v = Vector{HashedEdge}(undef, len)
-ht = EdgeHashTable(v, len)
-println(ht)
-empty!(ht)
-# Beispiel für das Einfügen mit Vector{Int64} keys
-println(pushedge!(ht, [1, 2, 3], 1)) # sollte false zurückgeben, da es ein neuer Eintrag ist
-println(pushedge!(ht, [1, 2, 3], 1,false)) # sollte false zurückgeben, da es ein neuer Eintrag ist
-println(pushedge!(ht, [1, 2, 3], 1)) # sollte false zurückgeben, da es ein neuer Eintrag ist
-println(pushedge!(ht, [1, 2, 3], 2)) # sollte true zurückgeben, da der Schlüssel bereits vorhanden ist
-println(pushedge!(ht, [4, 5, 6], 3)) # sollte false zurückgeben, da es ein neuer Eintrag ist
-
-# Beispiel für das Prüfen mit Vector{Int64} keys
-println(haskey(ht, [1, 2, 3])) # sollte true zurückgeben
-println(haskey(ht, [4, 5, 6])) # sollte true zurückgeben
-println(haskey(ht, [7, 8, 9])) # sollte false zurückgeben
-
-# Leeren der HashTable
-empty!(ht)
-
-# Prüfen nach dem Leeren
-println(haskey(ht, [1, 2, 3])) # sollte false zurückgeben
-println(haskey(ht, [4, 5, 6])) # sollte false zurückgeben
-println(haskey(ht, [7, 8, 9])) # sollte false zurückgeben
-=#
+function test_EdgeHashTable()
+    len = 3
+    ht = EdgeHashTable(len)
+    println(ht)
+    empty!(ht)
+    # Beispiel für das Einfügen mit Vector{Int64} keys
+    println(pushedge!(ht, [1, 2, 3], 1)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    println(pushedge!(ht, [1, 2, 3], 1,false)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    println(pushedge!(ht, [1, 2, 3], 2)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    println(pushedge!(ht, [1, 2, 3], 4)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    println(pushedge!(ht, [1, 2, 3], 2)) # sollte true zurückgeben, da der Schlüssel bereits vorhanden ist
+    println(pushedge!(ht, [4, 5, 6], 3)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    println(pushedge!(ht, [4, 7, 6], 3)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    println(pushedge!(ht, [4, 8, 6], 3)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    println(pushedge!(ht, [4, 9, 6], 3)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    println(pushedge!(ht, [4, 10, 6], 3)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    # Beispiel für das Prüfen mit Vector{Int64} keys
+    empty!(ht)
+    
+    return true
+end
+function test_VertexHashTable()
+    len = 3
+    ht = VertexHashTable(len)
+    println(ht)
+    empty!(ht)
+    # Beispiel für das Einfügen mit Vector{Int64} keys
+    println(pushvertex!(ht, [1, 2, 3], 1)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    println(pushvertex!(ht, [1, 2, 3], 2)) # sollte true zurückgeben, da der Schlüssel bereits vorhanden ist
+    println(pushvertex!(ht, [4, 5, 6], 3)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    println(pushvertex!(ht, [4, 7, 6], 3)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    println(pushvertex!(ht, [4, 8, 6], 3)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    println(pushvertex!(ht, [4, 9, 6], 3)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    println(pushvertex!(ht, [4, 10, 6], 3)) # sollte false zurückgeben, da es ein neuer Eintrag ist
+    println(haskey(ht,[1,2,3],1))
+    println(haskey(ht,[10,2,3],10))
+    # Beispiel für das Prüfen mit Vector{Int64} keys
+    empty!(ht)
+    
+    return true
+end
 
 
 #=

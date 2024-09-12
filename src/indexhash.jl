@@ -137,6 +137,7 @@ function extend(ht::IndexHashTable)
     ht.mylength[1] = len2
 end
 
+#=
 function Base.resize!(ht::IndexHashTable,len::Int64)
     len2 = next_power_of_two(len)
     len2<=(ht.mylength[1]+1) && return
@@ -167,6 +168,7 @@ function Base.resize!(ht::IndexHashTable,len::Int64)
     ht.deleted = falses(len2+1)
     ht.mylength[1] = len2
 end
+=#
 
 # Method to empty the IndexHashTable
 function Base.empty!(ht::IndexHashTable)

@@ -61,20 +61,8 @@ end
 
 @inline copy_sig(mesh::LM,sig) where {LM<:SerialMesh} = _copy_indeces(mesh,sig,mesh.buffer_sig)
 
-const SerialMeshTuple{P <: Point, VDB <: VertexDB{P},PARAMS,RT} = SerialMesh{P, VDB , T , D , PARAMS,RT} where {T <: Tuple{Vararg{AbstractMesh{P,VDB}}}, D <: Tuple{Vararg{CompoundData}}}
 const SerialMeshVector{P <: Point, VDB <: VertexDB{P},MType,PARAMS,RT} = SerialMesh{P, VDB , Vector{MType} , Vector{CompoundData} , PARAMS,RT} where {MType <: AbstractMesh{P,VDB}}
 
-
-function SerialMeshTuple(m::SerialMeshTuple{P,VDB}, n::AbstractMesh{P,VDB}, isvisible=true) where {P,VDB} 
-    _l = sum(getfield(mesh, :data)._length for mesh in m.meshes)
-    l = sum(getfield(mesh, :data).length for mesh in m.meshes)
-    visible = StaticBool(isvisible)
-    newcompound = CompoundMesh(n, visible, l + 1, _l + 1)
-    set_offset(n,_l)
-    m2 = (m.meshes..., newcompound)
-    dims = (m.dimensions...,newcompound.data)
-    SerialMesh{P,ptype(m),typeof(m2),typeof(dims),typeof(m.parameters),typeof(m.rt)}(m2, dims, Int64[],MVector{1,Int64}([length(m)+length(newcompound)]),m.parameters,m.rt)
-end
 
 function copy(m::SM;kwargs...) where {P,SM<:SerialMesh{P}}
     crt(::Nothing) = nothing
@@ -91,7 +79,22 @@ function copy(m::SM;kwargs...) where {P,SM<:SerialMesh{P}}
     return SerialMesh{P,ptype(m),typeof(m2),typeof(dims),typeof(m.parameters),typeof(m.rt)}(m2, dims, Int64[],copy(m.data),m.parameters,crt(m.rt))
 end
 
-# Constructor for creating a new SerialMesh from an AbstractMesh
+const SerialMeshTuple{P <: Point, VDB <: VertexDB{P},PARAMS,RT} = SerialMesh{P, VDB , T , D , PARAMS,RT} where {T <: Tuple{Vararg{AbstractMesh{P,VDB}}}, D <: Tuple{Vararg{CompoundData}}}
+#=
+#FlexibleMeshContainer(m::M) where M<:SerialMeshTuple = MeshContainer
+#FlexibleMeshContainer(m::M) where M<:SerialMeshVector = ExplicitMeshContainer
+
+
+function SerialMeshTuple(m::SerialMeshTuple{P,VDB}, n::AbstractMesh{P,VDB}, isvisible=true) where {P,VDB} 
+    _l = sum(getfield(mesh, :data)._length for mesh in m.meshes)
+    l = sum(getfield(mesh, :data).length for mesh in m.meshes)
+    visible = StaticBool(isvisible)
+    newcompound = CompoundMesh(n, visible, l + 1, _l + 1)
+    set_offset(n,_l)
+    m2 = (m.meshes..., newcompound)
+    dims = (m.dimensions...,newcompound.data)
+    SerialMesh{P,ptype(m),typeof(m2),typeof(dims),typeof(m.parameters),typeof(m.rt)}(m2, dims, Int64[],MVector{1,Int64}([length(m)+length(newcompound)]),m.parameters,m.rt)
+end
 function SerialMeshTuple(m::AM, isvisible=true;parameters = nothing,references = Int64[]) where {P,VDB, AM<:AbstractMesh{P,VDB} }
     visible = StaticBool(isvisible)
     cm = CompoundMesh(m, StaticBool(visible), 1, 1)
@@ -122,6 +125,11 @@ function SerialMeshTuple(m::SerialMeshTuple{P,VDB},xs::P2,isvisible=true) where 
     refmode(n) = copy(n)
     return SerialMeshTuple(m,Voronoi_MESH(xs,refmode(m.rt),m.parameters),isvisible)
 end
+@inline append(m::SerialMeshTuple,d,visible=true) = SerialMeshTuple(m,d,visible)
+SearchTree(nodes::SerialNodes{P,SM},type=HVKDTree) where {P,SM<:SerialMeshTuple} = error("please implement") #HVTree(nodes,type)
+
+=#
+
 function SerialMeshVector(xs::HV,visible::Bool=true; parameters = nothing, references = Int64[]) where {P, HV<:HVNodes{P}}
     m = Voronoi_MESH(xs,references,parameters)
     SerialMeshVector(m,visible)
@@ -163,7 +171,7 @@ function append!(m::SerialMeshVector,xs::HVNodes,visible = true)# where {P <: Po
     refmode(n) = copy(n)
     append!(m,Voronoi_MESH(xs,refmode(m.rt),m.parameters),visible)
 end
-@inline append(m::SerialMeshTuple,d,visible=true) = SerialMeshTuple(m,d,visible)
+
 
 @inline Base.getproperty(cd::SerialMesh, prop::Symbol) = dyncast_get(cd,Val(prop))
 @inline @generated dyncast_get(cd::SerialMesh, ::Val{:length}) =  :(getfield(cd,:data)[1])
@@ -382,7 +390,6 @@ function Base.iterate(sn::SerialNodes, state=1)
 end
 
 SearchTree(nodes::SerialNodes{P,SM},type=HVKDTree) where {P,SM<:SerialMeshVector} = HVTree(nodes,type)
-SearchTree(nodes::SerialNodes{P,SM},type=HVKDTree) where {P,SM<:SerialMeshTuple} = error("please implement") #HVTree(nodes,type)
 
 
     

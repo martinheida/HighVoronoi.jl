@@ -7,6 +7,7 @@ struct General_EdgeIterator{S}
     b::Int64
     proto::SVector{S,Int64}
 end
+#=
 function General_EdgeIterator(_sig,_Cell)
     a::Int64 = 1
     sig = SVector{length(_sig),Int64}(_sig)
@@ -31,7 +32,7 @@ end
     (a,b) = a>1 ? (a-1,1::Int64) : (1,length(_sig))
     return General_EdgeIterator(sig,a,b,SVector{length(r)+1,Int64}(_sig))
 end
-
+=#
 function General_EdgeIterator(_sig,r,_Cell,EI::General_EdgeIterator{S}) where {S}
     a::Int64 = 1
     sig = EI.sig
@@ -95,6 +96,7 @@ function get_EdgeIterator(sig,r,searcher,_Cell,xs,O::OnQueueEdges)
     end
 end
 
+#=
 function get_EdgeIterator(sig,r,searcher,_Cell,xs,neighbors) # special version for fast_polygon
     if (length(sig)==length(r)+1)
         return General_EdgeIterator(sig,r,_Cell,searcher.general_edgeiterator)
@@ -106,6 +108,7 @@ function get_EdgeIterator(sig,r,searcher,_Cell,xs,neighbors) # special version f
         return my_iterator
     end
 end
+=#
 
 function queue_edges_general_position(sig,r,searcher,_Cell,xs,edgecount,EI)
     length(sig)==(length(r)+1) && sig[2]<_Cell && (return true)

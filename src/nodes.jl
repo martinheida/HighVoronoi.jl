@@ -65,7 +65,7 @@ SearchTree(nodes::Vector{<:Point},type=HVKDTree()) = HVTree(nodes,type)
 
 #####################################################################################################################
 
-
+#=
 # Definition der Struktur DoubleVector
 struct DoubleVector{V, AV1<:AbstractVector{V}, AV2<:AbstractVector{V}} <: HVNodes{V}
     d1::AV1
@@ -98,13 +98,13 @@ function Base.setindex!(v::DoubleVector, value, i::Int)
         v.d2[i - v.l1] = value
     end
 end
-
+=#
 #####################################################################################################################
 
 ##  NodesContainer{S} 
 
 #####################################################################################################################
-
+#=
 
 struct NodesContainer{S,P<:Point{S},N<:HVNodes{P}} <: HVNodes{P} #AbstractVector{AbstractVector{S}}
     data::N
@@ -121,13 +121,13 @@ Base.setindex!(nc::NodesContainer, val, idx) = setindex!(nc.data, val, idx)
 Base.iterate(nc::NodesContainer, state...) = iterate(nc.data, state...)
 SearchTree(nodes::NodesContainer,type=HVKDTree) = SearchTree(nodes.data)
 
-
+=#
 #####################################################################################################################
 
 ##  SortedNodes
 
 #####################################################################################################################
-
+#=
 struct SortedNodes{S,P<:Point{S},T<:HVNodes{P}} <: HVNodes{P} #AbstractVector{AbstractVector{S}}
     data::T
     indices::Vector{Int64}
@@ -143,15 +143,14 @@ Base.setindex!(nc::SortedNodes, val, idx) = setindex!(nc.data, val, nc.indices[i
 #Base.eltype(nc::SortedNodes) = eltype(nc.data)
 Base.iterate(nc::SortedNodes, state=1) = state<=length(nc.data) ? (nc.data[nc.indices[state]], state+1) : nothing
 SearchTree(nodes::SortedNodes) = error("SearchTree(SortedNodes) needing proper implementation")
-
-
-#####################################################################################################################
-
-##  PrependedNodes
+=#
 
 #####################################################################################################################
 
-#struct PrependedNodes{S, T<:Points{S}, TT<:Points{S}} <: HighVoronoiNodes{S}
+##  generate_CombinedNodes_struct
+
+#####################################################################################################################
+#=
 
 macro generate_CombinedNodes_struct(struct_name)
     return quote
@@ -176,13 +175,6 @@ end
 @generate_CombinedNodes_struct PrependedNodes
 @generate_CombinedNodes_struct BoundaryNodes
 @generate_CombinedNodes_struct RefinedNodes
-
-#=
-Base.getproperty(x::PrependedNodes, p::Symbol) = getproperty_impl(x, Val(p))
-@inline @generated getproperty_impl(x::PrependedNodes, ::Val{:first}) = :(x.prepended)
-@inline @generated getproperty_impl(x::PrependedNodes, ::Val{:second}) = :(x.data)
-@generated getproperty_impl(x::PrependedNodes, ::Val{:length1}) = :(x.length_d)
-getproperty_impl(x::PrependedNodes, ::Val{p}) where p = getfield(x, p)
 =#
 
 #####################################################################################################################
@@ -207,7 +199,7 @@ NodesView(data::HVN, view::HVV)  where {P<:Point, HVN<:HVNodes{P},HVV<:HVView} =
 @inline Base.setindex!(nv::NV, value, i::Int) where NV<:NodesView = setindex!(nv.data, value, nv.view / i)
 
 @inline Base.iterate(nv::NV, state=1) where NV<:NodesView  = state > length(nv.data) ? nothing : (getindex(nv.data, nv.view / state), state + 1)
-
+#=
 struct NodesViewTree{P <: Point,T<:AbstractTree{P},NV<:NodesView{P}} <: AbstractTree{P}
     nodes::NV
     tree::T
@@ -252,6 +244,7 @@ end
 #    return inrange(tree.tree2,x,r)
     return ids
 end
+=#
 
 SearchTree(nodes::ACN) where ACN<:NodesView = KDTree(nodes)
 SearchTree(nodes::ACN,type=HVKDTree) where {P<:Point,S,ACN<:SubArray{P,S,NodesView{P}}} = KDTree(nodes)

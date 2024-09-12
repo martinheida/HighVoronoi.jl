@@ -78,9 +78,9 @@ struct DatabaseVertexStorage{F}
 end
 ClassicVertexStorage() = nothing 
 ReferencedVertexStorage() = ExternalMemory()
-ExternalMemory(::Nothing) = nothing
+#ExternalMemory(::Nothing) = nothing
 ExternalMemory(;filename="",vertices=false,indices=false,refs=false) = __vstore(filename,vertices,indices,refs)
-ExternalMemory(i::Int) = i<5 ? ExternalMemory(nothing) : ExternalMemory(filename="",vertices=false,indices=false,refs=false)
+#ExternalMemory(i::Int) = i<5 ? ExternalMemory(nothing) : ExternalMemory(filename="",vertices=false,indices=false,refs=false)
 change_db_type(_,::MT) where {MT<:MultiThread} = DatabaseVertexStorage()
 change_db_type(type,::ST) where {ST<:SingleThread} = type 
 """
@@ -232,6 +232,7 @@ end
 @inline external_sig(mesh::VM,sig::AVI,static::StaticTrue) where {VM<:Voronoi_MESH,AVI<:AbstractVector{Int64}} = sort!(external_index(mesh,sig))
 
 ## the following is not used or will be restricted to ClassicMesh
+#=
 function pop!(mesh::Voronoi_MESH{T}, key) where {T}
     if length(key)>0
         eI = mesh.nodes[1]
@@ -241,7 +242,7 @@ function pop!(mesh::Voronoi_MESH{T}, key) where {T}
         end
     end
 end
-
+=#
 
 
 #################################################################################################################

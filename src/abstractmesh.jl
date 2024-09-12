@@ -205,7 +205,7 @@ function Base.iterate(pbi::PBI,state=1) where {PBI<:Public_BV_Iterator}
         edge2 = _external_indeces(pbi.mesh,edge,pbi.buffer)
         return (ReadOnlyView(edge2),boundary_vertex(info.base,info.direction,external_index(pbi.mesh,info.node))), data[2]
     end
-    return modify(iterate(mesh.boundary_Vertices, state...))
+    return modify(iterate(pbi.mesh.boundary_Vertices, state...))
 end
 
 convert_to_vector(pbi::PBI) where {PBI<:Public_BV_Iterator} = begin
@@ -372,8 +372,6 @@ mutable struct ExplicitMeshContainer{P <: Point, VDB <: VertexDB{P},AM<:Abstract
 end
 @inline mesh(m::ExplicitMeshContainer) = m.data
 
-#FlexibleMeshContainer(m::M) where M<:SerialMeshTuple = MeshContainer
-#FlexibleMeshContainer(m::M) where M<:SerialMeshVector = ExplicitMeshContainer
 
 ###########################################################################################################
 
@@ -494,8 +492,13 @@ dictmodify(a,default) = default
     index = state
     return dictmodify(iterate(vi,state),default)
 end=#
+################################################################################################################################################################
 
-struct MyFlatten{A,B,T,D}
+## MyFlatten
+
+################################################################################################################################################################
+
+#=struct MyFlatten{A,B,T,D}
     iter1::A
     iter2::B
     mode::MVector{1,Bool}
@@ -526,6 +529,9 @@ end
     return nothing #_iterate(vi.iter2,state,vi.default)
 end
 @inline Base.length(mf::MF) where {MF<:MyFlatten} = length(mf.iter1)+length(mf.iter2)
+=#
+
+
 
 @inline function VertexIterator(m::AM,i::BufferVertexData_Dict{VRA,SI}, index::Int64, s::S=statictrue) where {T,AM<:AbstractMesh{T},VRA,SI,S<:StaticBool} 
     #println("a")
@@ -600,6 +606,14 @@ end
 @inline Base.length(vi::HeapVertexIterator) = length(vi.iterator)
 
 
+################################################################################################################################################################
+
+## ThreadsafeHeapVertexIterator
+
+################################################################################################################################################################
+
+
+#=
 struct ThreadsafeHeapVertexIterator{AM<:AbstractMesh, II, S<:StaticBool}
     mesh::AM
     iterator::II
@@ -637,4 +651,4 @@ end
 @inline Base.length(vi::ThreadsafeHeapVertexIterator) = length(vi.iterator)
 
 
-
+=#

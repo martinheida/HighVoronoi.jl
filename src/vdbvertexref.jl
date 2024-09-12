@@ -1,6 +1,6 @@
 const ___VDBVertices{P} = Vector{Vector{Pair{Vector{Int64}, P}}} where P<:Point
 const ___VDBIndex = Vector{Dict{Vector{Int64},Int64}}
-const ___VDBIndexCompact{T} = Vector{HashedDict{Vector{Int64},Int64,T}}
+#const ___VDBIndexCompact{T} = Vector{HashedDict{Vector{Int64},Int64,T}}
 const ___VDBVertexRefs = Vector{Vector{VertexRef}}
 const empty_sigma = Int64[]
 
@@ -257,8 +257,8 @@ end
 @inline store_vertices(v::V) where V = v
 @inline load_vertices(v) = v
 @inline store_indices(i::___VDBIndex) = [Dict{Vector{Int64},Int64}() for _ in 1:length(i)]
-@inline store_indices(i::___VDBIndexCompact{T})  where T = [HashedDict{Vector{Int64},Int64,T}() for _ in 1:length(i)]
-function load_indices(indices::Union{___VDBIndex,___VDBIndexCompact{T}},verts) where T
+#@inline store_indices(i::___VDBIndexCompact{T})  where T = [HashedDict{Vector{Int64},Int64,T}() for _ in 1:length(i)]
+function load_indices(indices::Union{___VDBIndex},verts) #where T #Union{___VDBIndex,___VDBIndexCompact{T}}
     for i in 1:length(indices)
         for (sig,k) in safe_sig_index_iterator(verts[i])
             push!(indices[i],sig=>k)

@@ -136,14 +136,14 @@ function Base.deepcopy(v::DeepVector{P,T,W,Val{:neighbors}}) where {P<:AbstractV
     l = length(v)
     neighs = Vector{Vector{Int64}}(undef,l) 
     for i in 1:l
-        _n = ReadOnlyVector(transform(v.bonus,v.data[i+v.offset],v.offset))
+        _n = transform(v.bonus,v.data[i+v.offset],v.offset)
         neighs[i] = [_n[j] for j in 1:length(_n)]
     end
     return neighs
 end
 
 
-function test_deep()
+#=function test_deep()
     t = [[[1,2,3],[4,5,6]],[[1]]]
 dv = DeepVector(t)
 println(dv[2])
@@ -159,7 +159,7 @@ println(typeof(dv2))
 println(typeof(dv2)<:DeepVectorFloat64Vector)
 
 end
-
+=#
 ###############################################################################################################################
 
 ## Vertices_Vector
@@ -212,11 +212,11 @@ struct Vertices_Vector{M,B} #<: AbstractArray{PublicIterator}
         b = DeepNeighborData(ref,mesh(i))    
         return new{typeof(m),typeof(b)}(m,publicview*length(ref),b)
     end
-end
+end 
 
 @inline Base.getindex(v::Vertices_Vector, i::Int) = PublicIterator(vertices_iterator(v.mesh,i + v.offset),v.offset,v.bonus)
 
-@inline convert_to_vector(v::Vertices_Vector) = [convert_to_vector(v[i],PointType(v.mesh),number_of_vertices(v.mesh,i)) for i in 1:length(v.mesh)]
+@inline convert_to_vector(v::Vertices_Vector) = [convert_to_vector(v[i],PointType(v.mesh),number_of_vertices(v.mesh,i+ v.offset)) for i in 1:(length(v.mesh)-v.offset)]
 
 @inline function Base.deepcopy(vv::VV) where {P,M<:AbstractMesh{P},VV<:Vertices_Vector{M}}
     l = length(vv.mesh)-vv.offset

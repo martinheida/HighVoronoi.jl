@@ -31,7 +31,7 @@ struct CompoundIntegral{P <: Point, T<: HVIntegral{P}, V <: Union{StaticTrue,Sta
     CompoundIntegral(integral::HVI, visible::V, data::CompoundData) where {P,V, HVI<:HVIntegral{P}} = new{P,HVI, V}(integral,  visible, data)
 end
 
-@inline Base.length(m::CompoundIntegral) = length(mesh(m.integral))
+#=@inline Base.length(m::CompoundIntegral) = length(mesh(m.integral))
 @inline nodes(m::CompoundIntegral) = nodes(mesh(m.integral))
 
 @inline internal_index(m::CM,index::Int64) where CM<:CompoundIntegral = internal_index(mesh(m.integral),index)
@@ -40,7 +40,7 @@ end
 @inline internal_index(m::CM,inds::AVI) where {CM<:CompoundIntegral,AVI<:AbstractVector{Int64}} = internal_index(mesh(m.integral),inds)
 @inline internal_sig(m::CM,sig::AVI,static::StaticTrue) where {CM<:CompoundIntegral,AVI<:AbstractVector{Int64}} = internal_sig(mesh(m.integral),sig,static)
 @inline internal_sig(m::CM,sig::AVI,static::StaticFalse) where {CM<:CompoundIntegral,AVI<:AbstractVector{Int64}} = internal_sig(mesh(m.integral),sig,static)
-
+=#
 
 ###########################################################################################################
 
@@ -152,7 +152,6 @@ const SerialIntegralVector{P <: Point, AM <: SerialMesh{P},MType,PARAMS} = Seria
 @inline mesh(i::SerialIntegral) = i.mesh
 
 SerialIntegral(m::VM,  visible, newdimensions, meshes::SM;parameters = nothing) where {VM<:Voronoi_MESH, SM<:SerialMeshVector } = SerialIntegralVector(m,  visible, newdimensions, meshes, parameters = parameters)
-SerialIntegral(m::VM,  visible, newdimensions, meshes::SM;parameters = nothing) where {VM<:Voronoi_MESH, SM<:SerialMeshTuple } = SerialIntegralTuple(m,  visible, newdimensions, meshes, parameters = parameters)
 function SerialIntegralVector(m::VM,  visible, newdimensions, meshes::SerialMesh;parameters = nothing) where {VM<:Voronoi_MESH }
     inte = EmptyVoronoi_Integral(m,parameters=parameters)
     newcompound = CompoundIntegral(inte, visible, newdimensions)
@@ -165,6 +164,11 @@ function SerialIntegralVector(m::VM,  visible, newdimensions, meshes::SerialMesh
     _ii = SerialVector_Vector(inte.interface_integral, newdimensions)
     SerialIntegral(meshes,m2, dims, MVector{1,Int64}([length(m)]),parameters,_neighbors,_volumes,_area,_ii,_bi,Int64[],MVector{3,Bool}([false,false,false]))
 end
+
+## everything about SerialIntegralTuple => Needed for later
+#=
+SerialIntegral(m::VM,  visible, newdimensions, meshes::SM;parameters = nothing) where {VM<:Voronoi_MESH, SM<:SerialMeshTuple } = SerialIntegralTuple(m,  visible, newdimensions, meshes, parameters = parameters)
+
 function SerialIntegralTuple(m::VM,  visible, newdimensions, meshes::SerialMesh;parameters = nothing) where {VM<:Voronoi_MESH }
     inte = EmptyVoronoi_Integral(m,parameters=parameters)
     newcompound = CompoundIntegral(inte, visible, newdimensions)
@@ -191,6 +195,9 @@ function SerialIntegralTuple(old_inte::SI, m::VM,  visible, newdimensions, meshe
     _ii = append(old_inte.interface_integral,inte.interface_integral,cdata)
     SerialIntegral(meshes,m2, dims, MVector{1,Int64}([length(m)]),parameters,_neighbors,_volumes,_area,_ii,_bi,Int64[],MVector{3,Bool}([false,false,false]))
 end
+@inline append(m::SerialIntegralTuple,i_mesh,visible=true) = SerialIntegralTuple(m, i_mesh.meshes[end].mesh,  visible, i_mesh.dimensions[end], i_mesh)
+=#
+
 function append!(m::SM,n::MType,cdata::CompoundData,visible=true) where {SM<:SerialIntegralVector,MType<:AbstractMesh}#P <: Point, VDB <: VertexDB{P},MType<:HVIntegral{P,VDB},PARAMS,RT, SM<:SerialIntegralVector{P,VDB,MType,PARAMS,RT}}
     inte = EmptyVoronoi_Integral(n,parameters=m.parameters)
     newcompound = CompoundIntegral(inte, visible, cdata)
@@ -206,7 +213,6 @@ function append!(m::SM,n::MType,cdata::CompoundData,visible=true) where {SM<:Ser
     return m
 end
 @inline append(m::SerialIntegralVector,i_mesh,visible=true) = append!(m,i_mesh.meshes[end].mesh, i_mesh.dimensions[end],visible)
-@inline append(m::SerialIntegralTuple,i_mesh,visible=true) = SerialIntegralTuple(m, i_mesh.meshes[end].mesh,  visible, i_mesh.dimensions[end], i_mesh)
 #@inline append(m::SerialIntegralTuple,d,visible=true) = SerialIntegralTuple(m,d,visible)
 @inline add_virtual_points(I::SI,m::M) where {SI<:SerialIntegral,M<:AbstractMesh} = append(I,m,false)
 
@@ -305,10 +311,7 @@ end
     try
         return get_integral(I.integrals[found].integral,c2,n,statictrue)
     catch
-        println(found)
-        println(c2)
-        println(c)
-        rethrow()
+        error("$found, \n $c2, \n $c")
     end
 end
 

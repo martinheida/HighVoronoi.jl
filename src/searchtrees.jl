@@ -197,7 +197,7 @@ end
 struct UnstructuredTree{P <: Point,T,NNSD<:NNSearchData{P}} <: AbstractTree{P}  # Making UnstructuredTree a subtype of HVTree
     tree::T # tree.data refers to nodes
     data::NNSD
-    function UnstructuredTree(old::UnstructuredTree{P ,T,NNSD}, xs::AbstractVector{P}) where {P <: Point,T,NNSD<:NNSearchData{P}}  # Constraining xs to AbstractVector{P <: Point}
+    #=function UnstructuredTree(old::UnstructuredTree{P ,T,NNSD}, xs::AbstractVector{P}) where {P <: Point,T,NNSD<:NNSearchData{P}}  # Constraining xs to AbstractVector{P <: Point}
         xs = old.tree.data
         _tree = old.tree
         sd = NNSearchData(xs[1],length(_tree.nodes),length(xs))
@@ -208,7 +208,7 @@ struct UnstructuredTree{P <: Point,T,NNSD<:NNSearchData{P}} <: AbstractTree{P}  
         sd.no_box_tolerance = min_diff^2
     
         new{P,T,NNSD}(_tree,sd)  # Passing P as an argument to new
-    end 
+    end=# 
     function UnstructuredTree(t::HVUnstructuredTree, xs::AbstractVector{P}) where {P}  # Constraining xs to AbstractVector{P <: Point}
         _tree = getUnstructuredTree(t, xs)
         sd = NNSearchData(xs[1],length(_tree.nodes),length(xs))

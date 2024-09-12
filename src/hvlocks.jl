@@ -224,7 +224,7 @@ end
 @inline Base.unlock(rwl::ReadWriteLock) = writeunlock(rwl)
 
 
-
+#=
 @inline function check(rwl::ReadWriteLock)
     cw = rwl.counts_write[Threads.threadid()][]
     cr = rwl.counts_read[Threads.threadid()][]
@@ -241,7 +241,7 @@ end
         unlock(rwl.lock)
     end
 end
-
+=#
 #=struct SyncLock
     locks::Threads.Atomic{Int64}
     SyncLock() = new(Threads.Atomic{Int64}(0))

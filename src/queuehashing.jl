@@ -197,7 +197,7 @@ end
 ## USE FOLLOWING CODE FOR TESTING
 
 
-#=
+function test_queuehashing()
 
 # Create a QueueHashTable with an initial size
 ht = HighVoronoi.QueueHashTable(8)
@@ -273,5 +273,5 @@ for i in 1:length(ht.table)
     end
 end
 
-error("")
-=#
+return true
+end

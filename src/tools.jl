@@ -27,6 +27,7 @@ function fnv1a_hash(vec::VI,::Type{T},bias=0) where {T,VI<:AbstractVector{Int}}
     return hash
 end
 
+#=
 @inline doublehash(vec::VI,::Type{T}) where {T,VI<:AbstractVector{Int}} = fnv1a_hash(vec,UInt128), fnv1a_hash(vec,UInt64)
 
 # Definition des HashedDict
@@ -60,19 +61,6 @@ end
 @inline Base.length(dict::HashedDict) = length(dict.data)
 
 @inline Base.sizehint!(dict::HashedDict,l::Int64) = sizehint!(dict.data,l)
-
-# FNV-0 hash function 
-#=function fnv0_hash(data::VI) where {VI<:Vector{Int}}
-    hash = UInt64(0)
-
-    for entry in data
-        uentry = UInt64(abs(entry))
-        hash *= FNV_prime
-        hash ⊻= uentry
-    end
-
-    return hash
-end
 =#
 
 
@@ -445,15 +433,10 @@ end
 
 function Base.show(io::IO, v::HVViewVector{P}) where P
     # Extract the elements from v[1] to v[length] as a vector
-    elements_to_print = Vector{P}(undef,v.length)
     print(io,"[")
     for i in 1:v.length 
-        print(io,v[i],)
-        i<v.length && print(io,",")
+        print(io,v[i], i<v.length ? "," : "]")
     end 
-    print(io,"]")
-    # Print the elements as a vector
-#    print(io, elements_to_print)
 end
 
 ################################################################################################################

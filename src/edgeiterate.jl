@@ -734,6 +734,7 @@ function get_full_edge(nu,my_cone,edge,first_entry,lsig,dim,_max_angle=1.0E-12)
     return edge, count
 end
 
+#=
 function get_full_edge_indexing(nu,my_cone,edge,first_entry,lsig,dim,_max_angle=1.0E-12)
     #println("hier")
     count = 0
@@ -751,7 +752,7 @@ function get_full_edge_indexing(nu,my_cone,edge,first_entry,lsig,dim,_max_angle=
     end         
     return edge, count
 end
-
+=#
 
 @Base.propagate_inbounds function max_angle(nu,my_cone,lsig,my_vals,angle_condition,active_condition,dim)
     #map!(k->dot(nu[dim],my_cone[k]),my_vals,1:lsig)

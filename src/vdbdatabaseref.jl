@@ -175,7 +175,7 @@ JLD2.writeas(::Type{VDBVertexCentral{P,VI,D}}) where {P,VI,D} = VDBVertexCentral
 JLD2.wconvert(::Type{VDBVertexCentral_Store_1{P,VI,D}},m::VDBVertexCentral{P,VI,D}) where {P,VI,D} = 
                                             VDBVertexCentral_Store_1{P,VI,D}(m.indices,m.database,m._offset,m.data)
 function JLD2.rconvert(::Type{VDBVertexCentral{P,VI,D}},m::VDBVertexCentral_Store_1{P,VI,D}) where {P,VI,D} 
-    VDBVertexCentral_Store_1{P,VI,D}(m.indices,m.databse,m._offset,m.data)
+    VDBVertexCentral{P,VI,D}(m.indices,m.database,m._offset,m.data)
 end
 
 
