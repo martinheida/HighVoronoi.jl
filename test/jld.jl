@@ -13,6 +13,7 @@
             return sum(mysum)<0.00001
         end
         function test_jld(db)
+            xs = VoronoiNodes(rand(5,100))
             vg = VoronoiGeometry(xs,cuboid(5,periodic=[1]),vertex_storage=db,search_settings=(method=RCOriginal,),integrate=true,integrator=VI_FAST_POLYGON,integrand=x->[x[1]],silence=false)
             println("Step 1")
             jldopen("geometry5d.jld2","w") do file

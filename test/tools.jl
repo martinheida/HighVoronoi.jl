@@ -25,7 +25,7 @@
     
         tft2 = HighVoronoi.group_last(test_tuple,Int,mycollectlast,StaticArrays.Size(2))
         tft4 = HighVoronoi.cut_off_last(test_tuple,Int,mycollectlast)
-        tft4 = HighVoronoi.cut_off_first(test_tuple,Int)
+        tft4 = HighVoronoi.cut_off_first(test_tuple,Int,mycollectlast)
         HighVoronoi.remove_first_entry(test_tuple)
         HighVoronoi.split_tuple_at_A_sequence(("a",1,2,3,"b"),Int64)
         # Return the value of the last entry of the new tuple
