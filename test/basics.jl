@@ -51,6 +51,7 @@
     vd2d = VoronoiData(vg2c)
     @test abs(sum( abs, vd2d.volume .- map(x->x[1],vd2d.bulk_integral)))<1.0E-1
     HighVoronoi.vp_print(HighVoronoi.Raycast(VoronoiNodes(rand(2,10))),mirrors=true)
+
 end
 
 @testset "improving" begin
