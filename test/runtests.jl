@@ -1,4 +1,5 @@
 using Test
+using Revise
 using HighVoronoi
 
 using SpecialFunctions
