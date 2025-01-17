@@ -67,9 +67,9 @@ boundary(d::SimpleSphericalDomain) = boundary(d.domain)
 shifts(d::SimpleSphericalDomain) = shifts(d.domain)
 reference_shifts(d::SimpleSphericalDomain) = reference_shifts(d.domain)#view(reference_shifts(d.domain),1:(reference_length(reference_shifts(domain))-1))
 internal_boundary(d::SimpleSphericalDomain) = internal_boundary(d.domain)
+VDDomain(d::SimpleSphericalDomain{P}) where {P} = d
 
-
-struct PublicSphericalDomain{P,Integral<:HVIntegral{P},D} <: AbstractDomain{P}
+#=struct PublicSphericalDomain{P,Integral<:HVIntegral{P},D} <: AbstractDomain{P}
     integral::Integral
     domain::D
 end
@@ -85,6 +85,7 @@ boundary(d::PublicSphericalDomain) = boundary(d.domain)
 shifts(d::PublicSphericalDomain) = shifts(d.domain)
 reference_shifts(d::PublicSphericalDomain) = view(reference_shifts(d.domain),1:(length(reference_shifts(d.domain))-1))
 internal_boundary(d::PublicSphericalDomain) = internal_boundary(d.domain)
+=#
 
 function internal_boundary(d2::SimpleSphericalDomain,myinte)
     m2 = mesh(myinte.Integral)

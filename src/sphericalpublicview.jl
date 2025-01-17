@@ -210,7 +210,7 @@ Base.eltype(::Type{PublicVolVector{D}}) where D = Float64
 # Implement getindex for PublicVolVector
 @inline Base.getindex(pvv::PublicVolVector, ind::Int64) = ind <= pvv.skip ? 0.0 : pvv.data[ind][end]
 
-struct PublicAVVector{AV<:AbstractVector, D<:AbstractVector{AV}} <: AbstractVector{AV}
+#=struct PublicAVVector{AV<:AbstractVector, D<:AbstractVector{AV}} <: AbstractVector{AV}
     data::D
     skip::Int64
 
@@ -237,7 +237,7 @@ function Base.getindex(pavv::PublicAVVector, ind::Int64)
         throw(ErrorException("Access to indices <= skip is not allowed."))
     end
     return pavv.data[ind]
-end
+end=#
 
 ########################################################################################################################################################################
 ########################################################################################################################################################################
@@ -261,7 +261,7 @@ function Base.iterate(it::PublicSphereMeshIterator,state=1)
         sig = data[1][1]
         r2 = data[1][2] 
         r = it.center + it.radius * normalize(r2-it.center)
-        resize(it.sigma,length(sig)-1)
+        resize!(it.sigma,length(sig)-1)
         count = 0
         count2 = 0 
         for i in 1:length(sig)
@@ -272,7 +272,7 @@ function Base.iterate(it::PublicSphereMeshIterator,state=1)
         end
         return (it.sigma,r), st+1 
     end
-    return decide(iterate(it.iterator),it,state)
+    return decide(iterate(it.iterator,state),it,state)
 end
 
 struct PublicSphereNodes{P,N<:HVNodes{P}} <: HVNodes{P}

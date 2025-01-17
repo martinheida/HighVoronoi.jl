@@ -170,32 +170,28 @@ end
 #@inline copy_sig(mesh::LM,sig) where {LM<:LockMesh} = _copy_indeces(mesh,sig,mesh.sigma)
 
 @inline Base.getproperty(cd::SphericalMeshView, prop::Symbol) = dyncast_get(cd,Val(prop))
-@inline @generated dyncast_get(cd::SphericalMeshView, ::Val{:length_sigma}) =  :(getfield(cd,:int_data)[1])
-@inline @generated dyncast_get(cd::SphericalMeshView, ::Val{:internal_length_sigma}) =  :(getfield(cd,:int_data)[2])
-@inline @generated dyncast_get(cd::SphericalMeshView, ::Val{:_Cell}) =  :(getfield(cd,:int_data)[3])
+#@inline @generated dyncast_get(cd::SphericalMeshView, ::Val{:length_sigma}) =  :(getfield(cd,:int_data)[1])
+#@inline @generated dyncast_get(cd::SphericalMeshView, ::Val{:internal_length_sigma}) =  :(getfield(cd,:int_data)[2])
+#@inline @generated dyncast_get(cd::SphericalMeshView, ::Val{:_Cell}) =  :(getfield(cd,:int_data)[3])
 @inline @generated dyncast_get(cd::SphericalMeshView, ::Val{:boundary_Vertices}) =  :(getfield(cd,:data).boundary_Vertices)
 @inline @generated dyncast_get(cd::SphericalMeshView, d::Val{S}) where S = :( getfield(cd, S))
 
-@inline Base.setproperty!(cd::SphericalMeshView, prop::Symbol, val) = dyncast_set(cd,Val(prop),val)
-@inline @generated dyncast_set(cd::SphericalMeshView, ::Val{:length_sigma},val) =  :(getfield(cd,:int_data)[1]=val)
-@inline @generated dyncast_set(cd::SphericalMeshView, ::Val{:internal_length_sigma},val) =  :(getfield(cd,:int_data)[2]=val)
-@inline @generated dyncast_set(cd::SphericalMeshView, ::Val{:_Cell},val) =  :(getfield(cd,:int_data)[3]=val)
-@inline @generated dyncast_set(cd::SphericalMeshView, d::Val{S},val) where S = :( setfield(cd, S,val))
+#@inline Base.setproperty!(cd::SphericalMeshView, prop::Symbol, val) = dyncast_set(cd,Val(prop),val)
+#@inline @generated dyncast_set(cd::SphericalMeshView, ::Val{:length_sigma},val) =  :(getfield(cd,:int_data)[1]=val)
+#@inline @generated dyncast_set(cd::SphericalMeshView, ::Val{:internal_length_sigma},val) =  :(getfield(cd,:int_data)[2]=val)
+#@inline @generated dyncast_set(cd::SphericalMeshView, ::Val{:_Cell},val) =  :(getfield(cd,:int_data)[3]=val)
+#@inline @generated dyncast_set(cd::SphericalMeshView, d::Val{S},val) where S = :( setfield(cd, S,val))
 
 @inline Base.length(mv::SphericalMeshView) = length(mv.data)
-@inline internal_length(mv::SphericalMeshView) = internal_length(mv.data)
+#@inline internal_length(mv::SphericalMeshView) = internal_length(mv.data)
 
-@inline internal_index(m::MV,index::Int64) where MV<:SphericalMeshView = internal_index(m.data, index)
-@inline external_index(m::MV,index::Int64) where MV<:SphericalMeshView = external_index(m.data,index)
-@inline external_index(m::MV,inds::AVI) where {MV<:SphericalMeshView,AVI<:AbstractVector{Int64}} = external_index(m.data,inds)
-@inline internal_index(m::MV,inds::AVI) where {MV<:SphericalMeshView,AVI<:AbstractVector{Int64}}  = internal_index(m.data,inds)
+#@inline internal_index(m::MV,index::Int64) where MV<:SphericalMeshView = internal_index(m.data, index)
+#@inline external_index(m::MV,index::Int64) where MV<:SphericalMeshView = external_index(m.data,index)
+@inline external_index(m::MV,inds::AVI) where {MV<:SphericalMeshView,AVI<:Union{Int64,AbstractVector{Int64}}} = external_index(m.data,inds)
+@inline internal_index(m::MV,inds::AVI) where {MV<:SphericalMeshView,AVI<:Union{Int64,AbstractVector{Int64}}}  = internal_index(m.data,inds)
 
-@inline internal_sig(mesh::MV,sig::AVI,static::StaticTrue) where {MV<:SphericalMeshView,AVI<:AbstractVector{Int64}} = sort!(internal_index(mesh,sig))
-@inline function internal_sig(mesh::MV,sig::AVI,static::StaticFalse) where {MV<:SphericalMeshView,AVI<:AbstractVector{Int64}} 
-    sig .= internal_sig(mesh,sig,statictrue)
-    return sig
-end
-@inline external_sig(mesh::MV,sig::AVI,static::StaticTrue) where {MV<:SphericalMeshView,AVI<:AbstractVector{Int64}} = sort!(external_index(mesh,sig))
+@inline internal_sig(mesh::MV,sig::AVI,static::SS) where {MV<:SphericalMeshView,AVI<:AbstractVector{Int64},SS<:Union{StaticTrue,StaticFalse}} = internal_sig(mesh.data,sig,static)
+@inline external_sig(mesh::MV,sig::AVI,static::StaticTrue) where {MV<:SphericalMeshView,AVI<:AbstractVector{Int64}} = external_sig(mesh.data,sig,static)
 
 
 ##################################################################################################################################################
@@ -217,7 +213,7 @@ end
 ##################################################################################################################################################
 ##################################################################################################################################################
 
-@inline all_vertices_iterator(m::MV, index::Int64, internal::StaticTrue) where MV<:SphericalMeshView = all_vertices_iterator(m.data,index,statictrue)
+#=@inline all_vertices_iterator(m::MV, index::Int64, internal::StaticTrue) where MV<:SphericalMeshView = all_vertices_iterator(m.data,index,statictrue)
 
 @inline push!(mesh::MV, p::Pair{Vector{Int64},T},index) where {T<:Point,MV<:SphericalMeshView{T}} = push!(mesh.data,p,index)
 @inline push_ref!(mesh::MV, ref,index) where {T<:Point,MV<:SphericalMeshView{T}} = push_ref!(mesh.data,ref,index)
@@ -228,7 +224,7 @@ end
 @inline mark_delete_vertex!(mesh::MV,sig,i,ii) where MV<:SphericalMeshView = mark_delete_vertex!(mesh.data,sig,i,ii)
 
 @inline get_vertex(m::MV,i) where MV<:SphericalMeshView = get_vertex(m.data,i)
-
+=#
 
 
 

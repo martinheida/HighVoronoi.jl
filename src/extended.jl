@@ -175,7 +175,7 @@ function search_vertex2(tree::ExtendedTree,point::MV,idx,dist) where {S,FLOAT<:R
     #error("")
 end
 
-mutable struct PlaneSearchData{P,P2,HVN}
+#=mutable struct PlaneSearchData{P,P2,HVN}
     blocked::BitVector
     c0::Float64
     direction::P
@@ -255,7 +255,7 @@ function search_vertex_plane(tree::ExtendedTree,data) #where {S,FLOAT<:Real} # ,
     #error("")
 end
 
-
+=#
 
 
 function _nn(tree::ExtendedTree,x::Point,skip=(x->false))::Tuple{Int64,Float64}

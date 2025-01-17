@@ -44,7 +44,9 @@ function Base.getindex(pv::PV, i::Int) where {T<:Int,PV<:PrependedVector{T}}
         return @inbounds pv.rest[i - 1] + 1
     else
         throw(BoundsError(pv, i))
+        return pv.first
     end
+    return pv.first
 end
 
 function Base.setindex!(pv::PV, value, i::Int) where {T<:Int,PV<:PrependedVector{T}}
@@ -71,6 +73,7 @@ function Base.iterate(pv::PrependedVector, state)
 end
 
 # Optional: print für eine anschauliche Ausgabe
+#=
 Base.show(io::IO, pv::PV) where {PV<:PrependedVector} = begin 
     print(io, "[$(pv.first)")
     for x in pv.rest
@@ -78,7 +81,7 @@ Base.show(io::IO, pv::PV) where {PV<:PrependedVector} = begin
     end
     print(io, "]")
 end
-
+=#
 
 ##################################################################################################################
 ##################################################################################################################
@@ -305,7 +308,6 @@ function __chull(db,indices,queue_position,prog,searcher,edgecount,node_threads,
     start_time = time_ns()
     atomic_xchg!(PRINT_STATUS,false)
     this_sig = [0]
-    ps_data = PlaneSearchData(P,length(xs.rest),xs.rest)
     try
     while !global_end[]
         status(1)
@@ -363,7 +365,7 @@ function __chull(db,indices,queue_position,prog,searcher,edgecount,node_threads,
             status(5)
             #@descend explore_chull_vertex(ei,facet_data,xs,onb,sig,r,edgecount,searcher,indices,db,RADIUS,final_edge,confirmed_hull,ps_data) 
             #error("")
-            nv = explore_chull_vertex(ei,facet_data,xs,onb,sig,r,edgecount,searcher,indices,db,RADIUS,final_edge,confirmed_hull,ps_data) 
+            nv = explore_chull_vertex(ei,facet_data,xs,onb,sig,r,edgecount,searcher,indices,db,RADIUS,final_edge,confirmed_hull)#,ps_data) 
         end
         status_2(6)
         #facet_data[1]==[18, 174, 243, 333, 377, 418]  && error("KLAPPT!")
@@ -384,6 +386,7 @@ end
     #println("ending: $(Threads.threadid())")
 end
 
+#=
 function verify(sig,r,u,xs)
     ret = true
     r += u * dot(u,xs[sig[2]]-r)
@@ -424,6 +427,7 @@ function verify(sig,r,u,xs)
     end
     return ret
 end
+=#
 
 @inline function queue_convex_edges_on_find(raw_data,searcher,xs::PV_P,edgecount) where {P,PV_P<:PrependedVector{P}}
     sig,r = preparate_convex_data!(xs,raw_data) 
@@ -540,7 +544,7 @@ end
 
 end=#
 
-function explore_chull_vertex(edgeIterator,facet_data,xs,onb,sig,original_r,edgecount,searcher,indices,db,RADIUS,final_edge,confirmed_hull,ps_data)
+function explore_chull_vertex(edgeIterator,facet_data,xs,onb,sig,original_r,edgecount,searcher,indices,db,RADIUS,final_edge,confirmed_hull)#,ps_data)
     dim = size(eltype(xs))[1]
     debug = false#facet_data[1]==[477, 1457, 1540, 1605, 1660, 1980] #[33, 104, 210, 285, 392, 458]
     #println(facet_data)
@@ -574,7 +578,7 @@ function explore_chull_vertex(edgeIterator,facet_data,xs,onb,sig,original_r,edge
         #@descend raycast_des2(full_edge, r, u, xs.rest, searcher,0,full_edge,facet_data[1],Raycast_By_Descend(),RCOriginalSafety,20,debug)
         #error("")
         #generator_1, t, r2 = raycast_des3(full_edge, r, u, xs.rest, searcher,0,full_edge,facet_data[1],Raycast_By_Descend(),RCOriginal,20,debug,ps_data)
-        generator_1, t, r2 = raycast_des3(full_edge, r, u, xs.rest, searcher,0,full_edge,facet_data[1],Raycast_By_Descend(),searcher.parameters.method,20,debug,ps_data)
+        generator_1, t, r2 = raycast_des3(full_edge, r, u, xs.rest, searcher,0,full_edge,facet_data[1],Raycast_By_Descend(),searcher.parameters.method,20,debug)#,ps_data)
         #generator_1, t, r2 = raycast_des3(full_edge, r, u, xs.rest, searcher,0,full_edge,facet_data[1],Raycast_By_Descend(),RCOriginalSafety,20,debug,ps_data)
 
         generator_1==0 && continue
@@ -733,7 +737,7 @@ function explore_chull_vertex(edgeIterator,facet_data,xs,onb,sig,original_r,edge
                 #error("$(facet_data[1]), e2=$edge2, fe=$full_edge, ir=$ir, m=$m")
             end
         end=#
-        debug && println("Final: ",final_edge,", ",full_edge,", ir=",sort!(copy(inrange(searcher.tree.tree,r3,norm(r3-xs.rest[final_edge[1]])*1.0000001))),", shift=",sort!(copy(inrange(searcher.tree.tree,r3-1*u,norm(r3-1*u-xs.rest[final_edge[1]])*1.0000001)))," ",norm(r3)," ",norm(u)," ",u, verify(final_edge,r3,u,xs.rest))
+        #debug && println("Final: ",final_edge,", ",full_edge,", ir=",sort!(copy(inrange(searcher.tree.tree,r3,norm(r3-xs.rest[final_edge[1]])*1.0000001))),", shift=",sort!(copy(inrange(searcher.tree.tree,r3-1*u,norm(r3-1*u-xs.rest[final_edge[1]])*1.0000001)))," ",norm(r3)," ",norm(u)," ",u, verify(final_edge,r3,u,xs.rest))
         vvvv = false
         HighVoronoi.samecount(final_edge,edge2,dim)==false && continue #error("what the fuck???  $final_edge, $(facet_data[1])")
         #HighVoronoi.samecount(facet_data[1],edge2,dim-1)==false && error("hier schon Mist: $edge2, $(facet_data[1])")
@@ -820,7 +824,7 @@ function rotate_outwards(onb,searcher,sig,r_::P,xs,x0,orientation,final_sig,fina
             full_sig = copy(sig)
             deleteat!(full_sig,i_)
             
-            if debug
+            #=if debug
                 println("+",sig,inrange(searcher.tree.tree,r,norm(r-x0)*1.00000001),", ",full_sig)
                 for iii in 1:dim
                     dd = dot(onb[dim],onb[iii])
@@ -835,7 +839,7 @@ function rotate_outwards(onb,searcher,sig,r_::P,xs,x0,orientation,final_sig,fina
                     end
                 end
                 println()
-            end
+            end=#
             #if sig==[248, 294, 379, 397, 418, 21, 406]
             #    raycast_hull(full_sig, r, u, xs, searcher,0,full_sig,last_sig,Raycast_By_Walkray())
             #    println(last_sig)
