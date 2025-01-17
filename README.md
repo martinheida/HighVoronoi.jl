@@ -1,5 +1,5 @@
-# HighVoronoi.jl
-A Julia Package for parallelized computing of high dimensional (i.e. any dimension >= 2) Voronoi Meshes and setting up Finite Volume computations on these Meshes
+# HighVoronoi.jl new version 1.4.0 
+A Julia Package for parallelized computing of high dimensional (i.e. any dimension >= 2) Euclidean and Spherical Voronoi Meshes and setting up Finite Volume computations on these Meshes. Also allows parallelized convex hull computation.
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://martinheida.github.io/HighVoronoi.jl/stable/)
 [![Dev(broken)](https://img.shields.io/badge/docs-dev-blue.svg)](https://martinheida.github.io/HighVoronoi.jl/dev/)
@@ -9,4 +9,5 @@ A Julia Package for parallelized computing of high dimensional (i.e. any dimensi
 
 Refer to the manual for detailed information on how to use.
 
+The new version 1.4.0 provides spherical meshes and convex hull computation.  
 The new version 1.3.0 has improved performance due to new internal data structure and parallelization.  
