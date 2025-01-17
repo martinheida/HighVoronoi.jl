@@ -19,6 +19,8 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
+DoubleFloats = "497a8b3b-efae-58df-a0af-a86822472b78"
+
 
 [compat]
 julia = "1.7"
@@ -34,6 +36,7 @@ StaticArrays = "1.5"
 Plots = "1.30"
 Distances = "0.10.11"
 ProgressMeter = "1.10"
+DoubleFloats = "1.0"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
