@@ -71,7 +71,9 @@ function pushedge!(ht::EdgeHashTable, key::K, cell::Int64, mode=true) where K
 
     i = UInt64(0)
     ret = false
+    #print("$(Threads.threadid())?")
     lock(ht.lock)
+    #print("#")
     #print("$value, $index2")
     while true
         idx = reinterpret(Int64,(index1 + i * index2) & ht.mylength[1] + 1) # try bitcast( ) instead
@@ -103,6 +105,7 @@ function pushedge!(ht::EdgeHashTable, key::K, cell::Int64, mode=true) where K
             break
         end
     end
+    #print("$(Threads.threadid())!")
     unlock(ht.lock)
     return ret
 end
@@ -146,6 +149,34 @@ function Base.empty!(ht::EdgeHashTable)
         fill!(ht.occupied,false)
     unlock(ht.lock)
 end
+struct HashEdgeContainer{EHT}
+    container::Vector{EHT}
+    length::Int64
+    function HashEdgeContainer(len::Int64,split::Int64,lock=SingleThread)
+        mysplit = reinterpret(Int64,next_power_of_two(split))-1
+        mylength = div(len,mysplit)
+        eht = EdgeHashTable(mylength,lock)
+        cont = Vector{typeof(eht)}(undef,mysplit+1)
+        cont[1] = eht
+        for i in 2:(mysplit+1)
+            cont[i] = EdgeHashTable(mylength,lock)
+        end
+        return new{typeof(eht)}(cont,mysplit)
+    end
+end
+
+function pushedge!(ht::HashEdgeContainer, key::K, cell::Int64, mode=true) where K
+    index = (sum(key) & ht.length) + 1
+#    error("$(sum(key)), $(ht.length), $(sum(key) & ht.length)")
+    pushedge!(ht.container[index],key,cell,mode)
+end
+function Base.empty!(ht::HashEdgeContainer)
+    for eht in ht.container 
+        empty!(eht)
+    end
+end
+
+
 #=
 # Methode zum Prüfen, ob ein Schlüssel in der EdgeHashTable vorhanden ist
 function Base.haskey(ht::EdgeHashTable, key)

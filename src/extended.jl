@@ -175,6 +175,88 @@ function search_vertex2(tree::ExtendedTree,point::MV,idx,dist) where {S,FLOAT<:R
     #error("")
 end
 
+#=mutable struct PlaneSearchData{P,P2,HVN}
+    blocked::BitVector
+    c0::Float64
+    direction::P
+    x0::P
+    r::P
+    vertex::P2
+    num_nodes::Int64
+    bestnode::MVector{1,Int64}
+    bestdist::MVector{1,Float64}
+    xs::HVN
+    PlaneSearchData(::Type{P},nn,xs) where P = new{P,MVector{size(P)[1],Float64},typeof(xs)}(falses(64+nn),0.0,zeros(P),zeros(P),zeros(P),zeros(MVector{size(P)[1],Float64}),nn,zeros(MVector{1,Int64}),zeros(MVector{1,Float64}),xs) 
+end
+function block(data::PlaneSearchData,index)
+    len = length(data.blocked)
+    if index>len
+        append!(data.blocked,falses(index-len))
+    end
+    data.blocked[index] = true
+end
+
+function blocked(data::PlaneSearchData,index)
+    len = length(data.blocked)
+    if index>len
+        return false
+    else
+        return data.blocked[index] 
+    end
+end
+
+function reset(data,x0,r,u,xs,origin,searcher)
+    data.r = r 
+    data.x0 = x0 
+    data.direction = u 
+    data.vertex .= 0.0 
+
+    tree = searcher.tree.tree.tree 
+
+    _min = tree.hyper_rec.mins 
+    _max = tree.hyper_rec.maxes
+    m1 = data.vertex
+    l1 = length(m1)
+    for i in 1:l1
+        if data.direction[i]>0 
+            m1[i] = _max[i]
+        end
+    end
+
+    #resize!(data.blocked, bla )
+
+    c1 = maximum(dot(xs[g], u) for g in origin)
+    c2 = abs(c1) 
+    data.c0 = c1 + c2*searcher.plane_tolerance
+
+    len = length(searcher.tree.tree.tree.nodes)
+    #resize!(data.blocked,len+data.num_nodes)
+    fill!(data.blocked,false)
+end
+
+function search_vertex_plane(tree::ExtendedTree,data) #where {S,FLOAT<:Real} # ,MV<:Union{MVector{S,FLOAT},SVector{S,FLOAT}}
+    #(a,b) = sum(i->(a[i]-b[i])^2,1:S)
+    exs = tree.extended_xs
+    s = tree.size
+    lm=tree.mirrors
+    data.bestnode[1]=0
+    data.bestdist[1]=typemax(Float64)
+        for j in 1:lm
+            #b_skip(s+j)
+            x_new = exs[s+j]
+            mydist = sum(abs2, data.r - x_new)
+            if mydist<data.bestdist[1] && dot(x_new,data.direction)>data.c0 
+                data.bestnode[1] = s+j 
+                data.bestdist[1] = mydist
+            end
+        end
+    search_vertex_plane(tree.tree,data.r,data.bestnode,data.bestdist,data)
+    return data.bestnode[1], data.bestdist[1]
+    #error("")
+end
+
+=#
+
 
 function _nn(tree::ExtendedTree,x::Point,skip=(x->false))::Tuple{Int64,Float64}
     nn(tree,x,skip)

@@ -5,10 +5,10 @@ struct Serial_Domain{P<:Point,M<:AbstractMesh{P}, AM<:AbstractMesh{P}, SI<:HVInt
     references::SerialVector_Vector{Int64}
     reference_shifts::SerialVector_Vector{BitVector}
     internal_boundary::Boundary
-    _mesh::M
-    _internal_mesh::AM
-    _integral::SI
-    _internal_integral::TT
+    _mesh::M # public mesh
+    _internal_mesh::AM # internal mesh
+    _integral::SI # public integral
+    _internal_integral::TT # internal integral 
     reflections::SerialVector_Vector{BitVector}
     _lref::MVector{1,Int64}
 end
@@ -118,6 +118,8 @@ end
     return (mesh = MeshView(vd.internal_mesh,sv), integral = IntegralView(vd.internal_integral,sv))
 end 
 
+VDDomain(vd::Serial_Domain) = vd
+
 @inline standardize_mesh(i_mesh::SM) where {SM<:SerialMesh} = MeshView(i_mesh,SortedView(i_mesh.meshes))
 @inline standardize_integral(integral::SI,i_mesh) where {SI<:SerialIntegral} = IntegralView(integral,SortedView(i_mesh.meshes))
 @inline function standardize(domain::Serial_Domain)
@@ -131,6 +133,7 @@ function prepend!(domain::SD,new_xs::ReflectedNodes;kwargs...) where SD<:Serial_
     l1 = length(references(domain))
     _internal_indeces(domain.mesh,new_xs.references) # transform `new_xs.references` to internal references first 
     domain.internal_mesh = append(domain.internal_mesh,new_xs.data,false)
+    # recall that append! for SerialVector is different from normal append!
     append!(domain.references,new_xs.references,domain.internal_mesh.dimensions[end])
     append!(domain.reference_shifts,new_xs.reference_shifts,domain.internal_mesh.dimensions[end])
     append!(domain.reflections,BitVector[],domain.internal_mesh.dimensions[end])
@@ -142,6 +145,22 @@ function prepend!(domain::SD,new_xs::ReflectedNodes;kwargs...) where SD<:Serial_
     #sv2 = SortedView2(domain.internal_mesh.meshes)
     #println(sv2.data)
     #println(sv2 / collect(1:50))
+end
+
+function prepend_center!(domain::SD,x) where SD<:Serial_Domain
+    lnxs = 1
+    l1 = length(references(domain))
+    domain.internal_mesh = append(domain.internal_mesh,[x],false)
+    lm = length(domain.internal_mesh)
+    # recall that append! for SerialVector is different from normal append!
+    append!(domain.references,[lm],domain.internal_mesh.dimensions[end])
+    append!(domain.reference_shifts,[falses(length(boundary(domain)))],domain.internal_mesh.dimensions[end])
+    append!(domain.reflections,BitVector[],domain.internal_mesh.dimensions[end])
+    i_mesh = domain.internal_mesh
+    domain.internal_integral = append(domain.internal_integral, i_mesh, false)
+    domain.lref = domain.lref + lnxs
+    standardize(domain)
+    #domain.references.vectors[2].data[1] = lm+1
 end
 
 

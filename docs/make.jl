@@ -19,10 +19,12 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
+        "Convex Hulls" => "man/convexhull.md",
         "Manual Voronoi" => Any[
             "Examples Voronoi Generation" => "man/short.md",
             "man/workflowmesh.md",
             "man/geometry.md",
+            "man/sphere.md",
             "man/raycast.md",
             "man/multithread.md",
             "man/database.md",
@@ -50,6 +52,6 @@ makedocs(;
 deploydocs(;
     repo="github.com/martinheida/HighVoronoi.jl",
     devbranch="main",
-    devurl = "v1.3.0",#"v1.0.2",
+    devurl = "v1.4.0",#"v1.0.2",
 #    versions = ["stable" => "v^", "v#.#.#",],
 )

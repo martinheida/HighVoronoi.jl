@@ -335,6 +335,153 @@ function knn_kernel_flex!(tree::HVKDTree{V},
     return true
 end
 
+###############################################################################################################################
+###############################################################################################################################
+
+## PEAK
+
+###############################################################################################################################
+###############################################################################################################################
+
+mutable struct PeakData{T,T2}
+    c0::Float64
+    direction::T
+    #maxes::T2
+    #mins::T2
+    vertex::T2
+    index::Int64
+    function PeakData(a,b,_max,_min)
+        m1 = MVector(zeros(typeof(b)))
+        #m2 = MVector(zeros(typeof(b)))
+        #m3 = MVector(zeros(typeof(b)))
+        m1 .= _min
+        l1 = length(m1)
+        for i in 1:l1
+            if b[i]>0 
+                m1[i] = _max[i]
+            end
+        end
+        #m2 .= d
+        return new{typeof(b),typeof(m1)}(a,b,m1,0)#,m2,m3,0)
+    end
+end
+
+function peak_direction(tree::H,
+    direction,
+    c0,return_on_find=false) where {A,B,C,H<:HVKDTree{A,B,C}}
+    d = PeakData(c0,direction,tree.hyper_rec.maxes, tree.hyper_rec.mins)
+    peak_kernel!(tree, 1, d,return_on_find)
+    return d.index
+end
+
+function peak_kernel!(tree::HVKDTree{V}, index, data::D,return_on_find) where {V, D}
+    sd = 0
+    v_dim = 0.0
+    if index<=length(tree.nodes)
+        node = tree.nodes[index]
+        sd = node.split_dim
+        v_dim = data.vertex[sd]
+            data.vertex[sd] = data.direction[sd]>0 ? node.hi : node.lo
+        c_ = dot(data.vertex,data.direction)
+        data.vertex[sd] = v_dim
+        c_ < data.c0 && (return false)
+    else
+        c_ = dot(data.vertex,data.direction)
+        c_ < data.c0 && (return false)
+    end
+
+    if isleaf(tree.tree_data.n_internal_nodes, index)
+        for z in get_leaf_range(tree.tree_data, index)
+            @inbounds tiz = tree.indices[z]
+            idx = tree.reordered ? z : tiz
+            p = tree.data[idx]
+            c_ = dot(p,data.direction)
+            #(tiz==10 || tiz==34) && print("TREFFER: c=$(data.c0), p*u=$(c_), u=$(data.direction), idx=$idx p=$p") 
+            if c_ > data.c0 
+                #println("+")
+                data.c0 = c_
+                data.index = idx
+                return_on_find && (return true)
+            end
+            #print("-")
+        end
+        return false
+    end
+
+    right = getright(index) # indices left and right
+    left = getleft(index)
+    data.vertex[sd] = data.direction[sd]>0 ? node.hi : node.split_val
+    peak_kernel!(tree,right,data,return_on_find) && return_on_find && (return true)
+    data.vertex[sd] = data.direction[sd]<0 ? node.lo : node.split_val
+    peak_kernel!(tree,left,data,return_on_find) && return_on_find && (return true)
+
+    data.vertex[sd] = v_dim
+    return false
+end
+
+
+#=function search_node_direction(tree::H,
+    direction,
+    c0,idx) where {A,B,C,H<:HVKDTree{A,B,C}}
+    d = PeakData(c0,direction,tree.hyper_rec.maxes, tree.hyper_rec.mins)
+    search_kernel!(tree, 1, d,idx,1)
+    return d.index
+end
+
+function search_kernel!(tree::HVKDTree{V}, index, data::D,idx,level) where {V, D}
+    sd = 0
+    v_dim = 0.0
+    if index<=length(tree.nodes)
+        node = tree.nodes[index]
+        sd = node.split_dim
+        v_dim = data.vertex[sd]
+    
+        data.vertex[sd] = data.direction[sd]>0 ? node.hi : node.lo
+        c_ = dot(data.vertex,data.direction)
+        data.vertex[sd] = v_dim
+        print("$level: $(data.vertex)")
+        println(" -> $c_")
+        #c_ < data.c0 && (return false)
+    else
+        c_ = dot(data.vertex,data.direction)
+        print("$level: $(data.vertex)")
+        println(" -> $c_")
+        #c_ < data.c0 && (return false)
+    end
+
+    if isleaf(tree.tree_data.n_internal_nodes, index)
+        for z in get_leaf_range(tree.tree_data, index)
+            @inbounds tiz = tree.indices[z]
+            idx_ = tree.reordered ? z : tiz
+            p = tree.data[idx_]
+            if tiz==idx 
+                println("$p")
+                return true
+            end
+        end
+        return false
+    end
+
+    right = getright(index) # indices left and right
+    left = getleft(index)
+    data.vertex[sd] = data.direction[sd]>0 ? node.hi : node.split_val
+    search_kernel!(tree,right,data,idx,level+1) && (return true)
+    data.vertex[sd] = data.direction[sd]<0 ? node.lo : node.split_val
+    search_kernel!(tree,left,data,idx,level+1) && (return true)
+
+    data.vertex[sd] = v_dim
+    return false
+end=#
+
+###############################################################################################################################
+###############################################################################################################################
+
+## KNN
+
+###############################################################################################################################
+###############################################################################################################################
+
+
 function _knn(tree::HVKDTree,
     point::AbstractVector,
     best_idxs::AbstractVector{Int},
@@ -354,41 +501,184 @@ function knn_kernel!(tree::HVKDTree{V},
               best_dists::AbstractVector,
               min_dist,
               skip::F) where {V, F}
-# At a leaf node. Go through all points in node and add those in range
-if isleaf(tree.tree_data.n_internal_nodes, index)
-add_points_knn!(best_dists, best_idxs, tree, index, point, false, skip)
-return
+    # At a leaf node. Go through all points in node and add those in range
+    if isleaf(tree.tree_data.n_internal_nodes, index)
+        add_points_knn!(best_dists, best_idxs, tree, index, point, false, skip)
+        return
+    end
+
+    node = tree.nodes[index]
+    p_dim = point[node.split_dim]
+    split_val = node.split_val
+    lo = node.lo
+    hi = node.hi
+    split_diff = p_dim - split_val
+    M = tree.metric
+    # Point is to the right of the split value
+    if split_diff > 0
+        close = getright(index)
+        far = getleft(index)
+        ddiff = max(zero(eltype(V)), p_dim - hi)
+    else
+        close = getleft(index)
+        far = getright(index)
+        ddiff = max(zero(eltype(V)), lo - p_dim)
+    end
+    # Always call closer sub tree
+    knn_kernel!(tree, close, point, best_idxs, best_dists, min_dist, skip)
+    
+    split_diff_pow = eval_pow(M, split_diff)
+    ddiff_pow = eval_pow(M, ddiff)
+    diff_tot = eval_diff(M, split_diff_pow, ddiff_pow)
+    new_min = eval_reduce(M, min_dist, diff_tot)
+    if new_min < best_dists[1]
+        knn_kernel!(tree, far, point, best_idxs, best_dists, new_min, skip)
+    end
+    return
 end
 
-node = tree.nodes[index]
-p_dim = point[node.split_dim]
-split_val = node.split_val
-lo = node.lo
-hi = node.hi
-split_diff = p_dim - split_val
-M = tree.metric
-# Point is to the right of the split value
-if split_diff > 0
-close = getright(index)
-far = getleft(index)
-ddiff = max(zero(eltype(V)), p_dim - hi)
-else
-close = getleft(index)
-far = getright(index)
-ddiff = max(zero(eltype(V)), lo - p_dim)
-end
-# Always call closer sub tree
-knn_kernel!(tree, close, point, best_idxs, best_dists, min_dist, skip)
 
-split_diff_pow = eval_pow(M, split_diff)
-ddiff_pow = eval_pow(M, ddiff)
-diff_tot = eval_diff(M, split_diff_pow, ddiff_pow)
-new_min = eval_reduce(M, min_dist, diff_tot)
-if new_min < best_dists[1]
-knn_kernel!(tree, far, point, best_idxs, best_dists, new_min, skip)
+###############################################################################################################################
+###############################################################################################################################
+
+## knn_plane
+
+###############################################################################################################################
+###############################################################################################################################
+
+#=function _knn_plane(tree::HVKDTree,
+    point::AbstractVector,
+    best_idxs::AbstractVector{Int},
+    best_dists::AbstractVector,
+    data) where {F}
+init_min = get_min_distance(tree.hyper_rec, point)
+knn_kernel_plane!(tree, 1, point, best_idxs, best_dists, init_min, data)
+@simd for i in eachindex(best_dists)
+@inbounds best_dists[i] = eval_end(tree.metric, best_dists[i])
 end
-return
 end
+
+function knn_kernel_plane!(tree::HVKDTree{V},
+              index::Int,
+              point::AbstractVector,
+              best_idxs::AbstractVector{Int},
+              best_dists::AbstractVector,
+              min_dist,
+              full_data) where {V}
+    # At a leaf node. Go through all points in node and add those in range
+    sd = 0
+    v_dim = 0.0
+    HighVoronoi.blocked(full_data,index) && (return true)
+    if index<=length(tree.nodes)
+        node = tree.nodes[index]
+        sd = node.split_dim
+        v_dim = full_data.vertex[sd]
+        full_data.vertex[sd] = full_data.direction[sd]>0 ? node.hi : node.lo
+        c_ = dot(full_data.vertex,full_data.direction)
+        full_data.vertex[sd] = v_dim
+        c_ < full_data.c0 && (return true)
+    else
+        c_ = dot(full_data.vertex,full_data.direction)
+        c_ < full_data.c0 && (return true)
+    end
+
+    if isleaf(tree.tree_data.n_internal_nodes, index)
+        return add_points_knn_plane!(best_dists, best_idxs, tree, index, point, false, full_data)
+    end
+
+    node = tree.nodes[index]
+    p_dim = point[node.split_dim]
+    split_val = node.split_val
+    lo = node.lo
+    hi = node.hi
+    split_diff = p_dim - split_val
+    M = tree.metric
+    # Point is to the right of the split value
+    if split_diff > 0
+        close = getright(index)
+        far = getleft(index)
+        ddiff = max(zero(eltype(V)), p_dim - hi)
+    else
+        close = getleft(index)
+        far = getright(index)
+        ddiff = max(zero(eltype(V)), lo - p_dim)
+    end
+    # Always call closer sub tree
+    plane1 = plane2 = knn_kernel_plane!(tree, close, point, best_idxs, best_dists, min_dist, full_data)
+    plane1 && HighVoronoi.block(full_data,close)
+    
+    split_diff_pow = eval_pow(M, split_diff)
+    ddiff_pow = eval_pow(M, ddiff)
+    diff_tot = eval_diff(M, split_diff_pow, ddiff_pow)
+    new_min = eval_reduce(M, min_dist, diff_tot)
+    if new_min < best_dists[1]
+        plane2 = knn_kernel_plane!(tree, far, point, best_idxs, best_dists, new_min, full_data)
+        plane2 && HighVoronoi.block(full_data,far)
+    else 
+        plane2 = HighVoronoi.blocked(full_data,far)
+    end
+    return plane1 && plane2
+end
+
+=#
+
+###############################################################################################################################
+###############################################################################################################################
+
+## REDUCTION
+
+###############################################################################################################################
+###############################################################################################################################
+
+reduction!(tree::HVKDT) where {HVKDT<:HVKDTree} = reduction_kernel!(tree, 1)
+
+function reduction_kernel!(tree::HVKDTree{V,M,T},
+    index::Int) where {V,M,T}
+    # At a leaf node. Go through all points in node and add those in range
+    low = MVector(Inf*ones(V))
+    hi = MVector(-Inf*ones(V))
+    if isleaf(tree.tree_data.n_internal_nodes, index)
+        for z in get_leaf_range(tree.tree_data, index)
+            @inbounds tiz = tree.indices[z]
+            idx = tree.reordered ? z : tiz
+            p = tree.data[idx]
+            for i in 1:size(V)[1]
+                val = p[i]
+                if val>hi[i]
+                    hi[i] = val
+                end
+                if val < low[i]
+                    low[i] = val
+                end
+            end
+        end
+    else        
+        close = getright(index)
+        far = getleft(index)
+        low1,hi1 = reduction_kernel!(tree, close)
+        low2,hi2 = reduction_kernel!(tree, far)
+        for i in 1:size(V)[1]
+            low[i] = min(low1[i],low2[i])
+            hi[i] = max(hi1[i],hi2[i])
+        end
+    end
+    if index<=length(tree.nodes)
+        old_node = tree.nodes[index]
+        sd = old_node.split_dim
+        new_node = KDNode{T}(low[sd],hi[sd],old_node.split_val,sd)
+        tree.nodes[index] = new_node
+    end
+    return low,hi
+end
+
+
+###############################################################################################################################
+###############################################################################################################################
+
+## INRANGE
+
+###############################################################################################################################
+###############################################################################################################################
 
 function _inrange(tree::HVKDTree,
         point::AbstractVector,

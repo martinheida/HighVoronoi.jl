@@ -31,8 +31,8 @@ function copy(I::Heuristic_Integrator)
     return Heuristic_Integrator{typeof(I._function),typeof(I.Integral)}(I._function,I.bulk,copy(I.Integral))
 end
 
-@inline function integrate(Integrator::Heuristic_Integrator; progress=ThreadsafeProgressMeter(0,true,""), domain=Boundary(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
-    _integrate(Integrator; domain=domain, calculate=modified, iterate=relevant,progress=progress) 
+@inline function integrate(Integrator::Heuristic_Integrator, domain, relevant, modified,progress) 
+    _integrate(Integrator, domain, modified, relevant, progress) 
 end
 #function integrate(Integrator::Heuristic_Integrator; domain=Boundary(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
     #println("PolyInt: ")#$(length(relevant)), $(length(modified))")

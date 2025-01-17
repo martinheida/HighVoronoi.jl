@@ -37,6 +37,8 @@ function Voronoi_Domain(mesh,boundary,internaly_precise=true)
 
     return Voronoi_Domain(mesh,boundary,shifts,Vector{BitVector}(),Vector{Int64}(),copy(boundary),internaly_precise,bv)
 end
+VDDomain(vd::Voronoi_Domain) = vd
+
 @inline function integrate_view(vd::Voronoi_Domain)
     sv = SwitchView(length(vd.references)+1,length(mesh(vd)))
     return (mesh = MeshView(vd._mesh.data,sv), integral = IntegralView(vd._integral,sv))

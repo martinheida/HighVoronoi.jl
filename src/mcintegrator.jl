@@ -59,8 +59,8 @@ function copy(I::Montecarlo_Integrator)
     return Montecarlo_Integrator(copy(I.Integral),I.bulk,I.interface,nmc_bulk=I.NMC_bulk,nmc_interface=I.NMC_interface,recycle=I._recycle,cal_area=I.area)
 end
 
-function integrate(Integrator::Montecarlo_Integrator; progress=ThreadsafeProgressMeter(0,true,""), domain=Boundary(), relevant=1:(length(mesh(Integrator.Integral))+length(domain)), modified=1:(length(mesh(Integrator.Integral)))) 
-    _integrate(Integrator; domain=domain, calculate=relevant, progress=progress, iterate=Base.intersect(relevant,1:(length(mesh(Integrator.Integral))))) 
+function integrate(Integrator::Montecarlo_Integrator, domain, relevant, modified, progress) 
+    _integrate(Integrator, domain, modified,  relevant, progress) 
 end
 
 
@@ -97,7 +97,7 @@ function integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Montecar
     vec = Float64[]
     vecvec = [vec]
     I=Integrator
-    xs=data.extended_xs
+    xs = data.extended_xs
     if mod(I.cycle[1], I._recycle)==0 
         new_directions!(I.directions,length(xs[1]))
         I.cycle[1]=0
@@ -107,6 +107,12 @@ function integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Montecar
     x = xs[_Cell]
     d = data.dimension
     lneigh = length(neighbors)
+    if _Cell==1 
+        println(x)
+        for n in neighbors 
+            println("$n: $(xs[n])")
+        end
+    end
 
     # Bulk computations: V stores volumes y stores function values in a vector format
     V = 0.0

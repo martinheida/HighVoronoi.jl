@@ -2,13 +2,18 @@
 CurrentModule = HighVoronoi
 ```
 
-# HighVoronoi 1.3.0: $N\log N$ complexity Parallel Computed Voronoi Grids in $\mathbb{R}^d$
+# HighVoronoi 1.4.0: $N\log N$ complexity Parallel Computed Voronoi Grids in $\mathbb{R}^d$ and on $\mathbb{S}^d$
 
 Documentation for [HighVoronoi](https://github.com/martinheida/HighVoronoi.jl). Voronoi mesh generation in arbitrary dimensions + Finite Volume setup, also for vertices with $d+k$, $k>1$ generators.
 
 - [QUICK START on VORONOI generation: Click here](@ref quickVG) / [The ABSTRACT WORKFLOW is here](@ref workflowgeometry) 
 - [QUICK START on FINITE VOLUME methods: Click here](@ref QuickFV) / [The ABSTRACT WORKFLOW is here](@ref workflowfv)  
 - [Toy file for testing numerical solver](@ref toyfile)
+
+### News to version 1.4.0:
+
+- [Parallelized computation of convex hulls](@ref convexhull) based on the raycast algorithm (no volumes / integrals)
+- [Parallelized computation of Voronoi diagrams on spheres](@ref voronoisphere), including volumes and integrals (spheres are the only non-euclidian geometry where the raycast algorithm can be applied)
 
 ### News to version 1.3.0:
 

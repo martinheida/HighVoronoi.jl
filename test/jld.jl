@@ -15,6 +15,9 @@
         function test_jld(db)
             xs = VoronoiNodes(rand(5,100))
             vg = VoronoiGeometry(xs,cuboid(5,periodic=[1]),vertex_storage=db,search_settings=(method=RCOriginal,),integrate=true,integrator=VI_FAST_POLYGON,integrand=x->[x[1]],silence=false)
+            vd = VoronoiData(vg)
+            vol = sum(vd.volume)
+            abs(vol-1.0)>0.01 && error("")
             println("Step 1")
             jldopen("geometry5d.jld2","w") do file
                 file["geo"] = vg

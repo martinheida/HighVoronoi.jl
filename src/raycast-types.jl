@@ -145,6 +145,84 @@ struct RaycastParameter{FLOAT,TREE,R,T,C}
     copynodes::C
 end
 
+struct NewRaycastParameter{FLOAT,TREE,R,T,C,LF}
+    variance_tol::FLOAT
+    break_tol::FLOAT
+    b_nodes_tol::FLOAT
+    plane_tolerance::FLOAT
+    ray_tol::FLOAT
+    nntree::TREE
+    method::R
+    threading::T
+    copynodes::C
+    locking_functions::LF
+end
+struct NewRaycastParameter_Store_1{FLOAT,TREE,R,T,C,LF}
+    variance_tol::FLOAT
+    break_tol::FLOAT
+    b_nodes_tol::FLOAT
+    plane_tolerance::FLOAT
+    ray_tol::FLOAT
+    nntree::TREE
+    method::R
+    threading::T
+    copynodes::C
+    locking_functions::LF
+end
+NewRaycastParameter_Store_1(p::NewRaycastParameter{FLOAT, TREE, R, T, C, LF}) where {FLOAT, TREE, R, T, C, LF} =
+NewRaycastParameter_Store_1(
+    p.variance_tol,
+    p.break_tol,
+    p.b_nodes_tol,
+    p.plane_tolerance,
+    p.ray_tol,
+    p.nntree,
+    p.method,
+    p.threading,
+    p.copynodes,
+    p.locking_functions
+)
+NewRaycastParameter(p::NewRaycastParameter_Store_1{FLOAT, TREE, R, T, C, LF}) where {FLOAT, TREE, R, T, C, LF} =
+NewRaycastParameter(
+    p.variance_tol,
+    p.break_tol,
+    p.b_nodes_tol,
+    p.plane_tolerance,
+    p.ray_tol,
+    p.nntree,
+    p.method,
+    p.threading,
+    p.copynodes,
+    p.locking_functions
+)
+NewRaycastParameter(p::RaycastParameter{FLOAT, TREE, R, T, C}) where {FLOAT, TREE, R, T, C} =
+NewRaycastParameter(
+    p.variance_tol,
+    p.break_tol,
+    p.b_nodes_tol,
+    p.plane_tolerance,
+    p.ray_tol,
+    p.nntree,
+    p.method,
+    p.threading,
+    p.copynodes,
+    nothing
+)
+
+JLD2.writeas(::Type{NewRaycastParameter{P, T , TT, X1, X2, X3}}) where {P, T, TT, X1, X2, X3} = NewRaycastParameter_Store_1{P, T , TT, X1, X2, X3}
+JLD2.wconvert(::Type{NewRaycastParameter_Store_1{P, T , TT, X1, X2, X3}},domain::NewRaycastParameter{P, T , TT, X1, X2, X3} ) where {P, T, TT, X1, X2, X3} = 
+    NewRaycastParameter_Store_1(domain)
+JLD2.rconvert(::Type{NewRaycastParameter{P, T , TT, X1, X2, X3}},store::NewRaycastParameter_Store_1{P, T , TT, X1, X2, X3}) where {P, T, TT, X1, X2, X3} =
+    NewRaycastParameter(store)
+
+JLD2.writeas(::Type{RaycastParameter{P, T , TT, X1, X2}}) where {P, T, TT, X1, X2} = NewRaycastParameter_Store_1{P, T , TT, X1, X2, Nothing}
+JLD2.wconvert(::Type{NewRaycastParameter_Store_1{P, T , TT, X1, X2, X3}},domain::RaycastParameter{P, T , TT, X1, X2} ) where {P, T, TT, X1, X2, X3} = 
+    NewRaycastParameter_Store_1(NewRaycastParameter(domain))
+JLD2.rconvert(::Type{NewRaycastParameter{P, T , TT, X1, X2, Nothing}},store::RaycastParameter{P, T , TT, X1, X2}) where {P, T, TT, X1, X2} =
+    NewRaycastParameter(store)
+
+
+
 @inline variance_tol(::Type{Float64}) = 1.0E-15
 @inline break_tol(::Type{Float64}) = 1.0E-5
 @inline b_nodes_tol(::Type{Float64}) = 1.0E-7
@@ -165,10 +243,26 @@ end
 
 struct Raycast_Original end
 const RCOriginal = Raycast_Original()
+struct Raycast_Original_Safety end
+const RCOriginalSafety = Raycast_Original_Safety()
 struct Raycast_Non_General end
 const RCNonGeneral = Raycast_Non_General()
+struct Raycast_Non_General_Skip end 
+const RCNonGeneralSkip = Raycast_Non_General_Skip()
 struct Raycast_Combined end
 const RCCombined = Raycast_Combined()
+
+abstract type Raycast_HP end
+struct Raycast_Non_General_HP<:Raycast_HP end
+const RCNonGeneralHP = Raycast_Non_General_HP()
+struct Raycast_Original_HP<:Raycast_HP end
+const RCOriginalHP = Raycast_Original_HP()
+RaycastHP(::Raycast_Original) = RCOriginalHP
+RaycastHP(::Raycast_Non_General) = RCNonGeneralHP 
+RaycastHP(::T) where T = begin
+    println("hier")
+    RCNonGeneralHP 
+end
 const RCCopyNodes = statictrue
 const RCNoCopyNodes = staticfalse
 
@@ -203,36 +297,37 @@ RaycastParameter{FLOAT}(;variance_tol = variance_tol(FLOAT),
         ray_tol = ray_tol(FLOAT),
         nntree = VI_KD, method= RCStandard, 
         threading = SingleThread(), 
-        copynodes = RCCopyNodes, kwargs... ) where {FLOAT<:Real} = RaycastParameter{FLOAT,typeof(nntree),typeof(method),typeof(threading),typeof(copynodes)}(FLOAT(variance_tol),
+        copynodes = RCCopyNodes, locking_functions = nothing, kwargs... ) where {FLOAT<:Real} = NewRaycastParameter{FLOAT,typeof(nntree),typeof(method),typeof(threading),typeof(copynodes),typeof(locking_functions)}(
+                FLOAT(variance_tol),
                 FLOAT(break_tol),
                 FLOAT(b_nodes_tol),
                 FLOAT(plane_tolerance),
-                FLOAT(ray_tol), nntree, method, threading, copynodes )
+                FLOAT(ray_tol), nntree, method, threading, copynodes, locking_functions )
 
-RaycastParameter{FLOAT}(RP::RaycastParameter;variance_tol = FLOAT(RP.variance_tol),
+RaycastParameter{FLOAT}(RP::NewRaycastParameter;variance_tol = FLOAT(RP.variance_tol),
                 break_tol = FLOAT(RP.break_tol),
                 b_nodes_tol = FLOAT(RP.b_nodes_tol),
                 plane_tolerance = FLOAT(RP.plane_tolerance),
                 ray_tol = FLOAT(RP.ray_tol),
                 nntree = RP.nntree, method=RP.method, threading = RP.threading, 
-                copynodes = RP.copynodes, kwargs... ) where {FLOAT<:Real} = RaycastParameter{FLOAT,typeof(nntree),typeof(method),typeof(threading),typeof(copynodes)}(FLOAT(variance_tol),
+                copynodes = RP.copynodes, locking_functions = RP.locking_functions, kwargs... ) where {FLOAT<:Real} = NewRaycastParameter{FLOAT,typeof(nntree),typeof(method),typeof(threading),typeof(copynodes),typeof(locking_functions)}(FLOAT(variance_tol),
                         FLOAT(break_tol),
                         FLOAT(b_nodes_tol),
                         FLOAT(plane_tolerance),
-                        FLOAT(ray_tol), nntree, method, threading, copynodes )
+                        FLOAT(ray_tol), nntree, method, threading, copynodes, locking_functions )
 
 RaycastParameter(::Type{T};kwargs...) where T = RaycastParameter{T}(;kwargs...) 
-RaycastParameter(::Type{T},RP::RaycastParameter;kwargs...) where T = RaycastParameter{T}(RP;kwargs...) 
+RaycastParameter(::Type{T},RP::NewRaycastParameter;kwargs...) where T = RaycastParameter{T}(RP;kwargs...) 
 RaycastParameter(::Type{T},NT::NamedTuple;kwargs...) where T = RaycastParameter{T}(;NT...,kwargs...) 
-RaycastParameter(r1::RaycastParameter{FLOAT},RP::RaycastParameter) where FLOAT = RaycastParameter(FLOAT,r1,variance_tol = FLOAT(RP.variance_tol),
+RaycastParameter(r1::NewRaycastParameter{FLOAT},RP::NewRaycastParameter) where FLOAT = RaycastParameter(FLOAT,r1,variance_tol = FLOAT(RP.variance_tol),
             break_tol = FLOAT(RP.break_tol),
             b_nodes_tol = FLOAT(RP.b_nodes_tol),
             plane_tolerance = FLOAT(RP.plane_tolerance),
             ray_tol = FLOAT(RP.ray_tol),
-            nntree = RP.nntree, method=RP.method, threading=RP.threading, copynodes = RP.copynodes)
-RaycastParameter(r1::RaycastParameter{FLOAT},kwargs::NamedTuple) where FLOAT = RaycastParameter(FLOAT,r1;kwargs...)
-Base.merge(r1::RaycastParameter{FLOAT},RP::RaycastParameter) where FLOAT = RaycastParameter(r1,RP) 
-Base.merge(r1::RaycastParameter{FLOAT},tup::NamedTuple) where FLOAT = RaycastParameter(FLOAT,r1;tup...)  
+            nntree = RP.nntree, method=RP.method, threading=RP.threading, copynodes = RP.copynodes, locking_functions = RP.locking_functions)
+RaycastParameter(r1::NewRaycastParameter{FLOAT},kwargs::NamedTuple) where FLOAT = RaycastParameter(FLOAT,r1;kwargs...)
+Base.merge(r1::NewRaycastParameter{FLOAT},RP::NewRaycastParameter) where FLOAT = RaycastParameter(r1,RP) 
+Base.merge(r1::NewRaycastParameter{FLOAT},tup::NamedTuple) where FLOAT = RaycastParameter(FLOAT,r1;tup...)  
 
 struct MiniRaycast{T,B}
     tree::T
@@ -256,17 +351,17 @@ function getMultiThreadRaycasters(rc::RR,meshes::PP) where {RR,PP}
     return rcs
 end
 
-mutable struct RaycastIncircleSkip{T,TTT,TTTTT,TTTTTT,FEI,PA,FLOAT}
+mutable struct RaycastIncircleSkip{T,TTT,TTTTT,TTTTTT,FEI,PA,FLOAT,CORRECTOR_FLOAT,HP}
     tree::T
     lmesh::Int64
     lboundary::Int64
     visited::Vector{Int64}
     ts::Vector{FLOAT}
     positions::BitVector
-    vectors::Matrix{Float64}
-    symmetric::Matrix{FLOAT}
-    rhs::Vector{Float64}
-    rhs_cg::Vector{Float64}
+    vectors::Matrix{CORRECTOR_FLOAT}
+    symmetric::Matrix{CORRECTOR_FLOAT}
+    rhs::Vector{CORRECTOR_FLOAT}
+    rhs_cg::Vector{CORRECTOR_FLOAT}
     ddd::Vector{FLOAT}
     domain::Boundary
     rare_events::Vector{Int64}
@@ -278,17 +373,34 @@ mutable struct RaycastIncircleSkip{T,TTT,TTTTT,TTTTTT,FEI,PA,FLOAT}
     find_general_edgeiterator::TTTTTT
     FEIStorage_global::FEI
     parameters::PA
+    hp_vars::HP
 end
-function RaycastIncircleSkip(xs_::HN,dom,parameters::RaycastParameter{FLOAT,TREE}) where {P,HN<:HVNodes{P},FLOAT,TREE}
+
+struct HP_corrector_data{CORRECTOR_FLOAT}
+    vectors::Matrix{CORRECTOR_FLOAT}
+    symmetric::Matrix{CORRECTOR_FLOAT}
+    rhs::Vector{CORRECTOR_FLOAT}
+    rhs_cg::Vector{CORRECTOR_FLOAT}
+    function HP_corrector_data(dim,::Type{T}) where T
+        return new{T}(zeros(T,dim,dim),zeros(T,dim,dim),zeros(T,dim),zeros(T,dim))
+    end
+end
+HPCorrector(dim,::RCHP) where {RCHP<:Raycast_HP} = HP_corrector_data(dim,Double64)
+HPCorrector(dim,_) = nothing
+
+CORRECTOR_FLOAT(::RCHP) where {RCHP<:Raycast_HP} = Double64
+CORRECTOR_FLOAT(x) = Float64
+function RaycastIncircleSkip(xs_::HN,dom,parameters::NewRaycastParameter{FLOAT,TREE}) where {P,HN<:HVNodes{P},FLOAT,TREE}
     xs = copynodes(xs_,parameters.copynodes)
     lxs=length(xs)
+    CF = CORRECTOR_FLOAT(parameters.method)
     dim=size(eltype(xs))[1]#length(xs[1])
     z1d_1=zeros(FLOAT,lxs+length(dom))
-    z1d_2=zeros(Float64,dim)
-    z1d_3=zeros(Float64,dim)
+    z1d_2=zeros(Float64,dim) #CF
+    z1d_3=zeros(Float64,dim) #CF
     z1d_4=zeros(FLOAT,dim+1)
-    z2d_1=zeros(Float64,dim,dim)
-    z2d_2=zeros(FLOAT,dim,dim)
+    z2d_1=zeros(Float64,dim,dim) #CF
+    z2d_2=zeros(Float64,dim,dim) #CF
     tree = ExtendedTree(xs,dom,parameters.nntree)
     EI = FastEdgeIterator(zeros(P),1E-8)
     EI2 = FastEdgeIterator(zeros(P),1E-8)
@@ -296,7 +408,7 @@ function RaycastIncircleSkip(xs_::HN,dom,parameters::RaycastParameter{FLOAT,TREE
     #sizehint!(FEIStorage_global,length(xs)*2^(length(xs[1])-1))    
     return RaycastIncircleSkip( tree, lxs, length(dom), zeros(Int64,lxs+length(dom)+3), z1d_1, 
     BitVector(zeros(Int8,length(xs))), z2d_1, z2d_2, z1d_2, z1d_3, z1d_4, dom, 
-    zeros(Int64,SRI_max),dim,EI,EI2,xs,General_EdgeIterator(size(eltype(xs))[1]),General_EdgeIterator(size(eltype(xs))[1]),FEIStorage_global,parameters)
+    zeros(Int64,SRI_max),dim,EI,EI2,xs,General_EdgeIterator(size(eltype(xs))[1]),General_EdgeIterator(size(eltype(xs))[1]),FEIStorage_global,parameters,HPCorrector(dim,parameters.method))
 end
 
 function copy_RaycastIncircleSkip(original::RaycastIncircleSkip{T, TTT, TTTTT, TTTTTT, FEI, PA, FLOAT}) where {T, TTT, TTTTT, TTTTTT, FEI, PA, FLOAT}

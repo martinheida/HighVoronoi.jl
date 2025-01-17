@@ -155,12 +155,36 @@ function VoronoiGeometry(xs::Points,b=Boundary(); vertex_storage=DatabaseVertexS
             mmm = cast_mesh(vertex_storage,copy(xs))
             voronoi(mmm,searcher=Raycast(xs;domain=b,options=search),intro="",printsearcher=printevents, silence=silence)
             
+            #=
+            nod = nodes(mmm)
+            for i in 1:10
+                print("$i: ")
+                for (sig,r) in vertices_iterator(mmm,i)
+                    for s in sig
+                        s>length(nod) && break
+                        print("$(norm(r-nod[s])), ")
+                    end
+                    print(" || ")
+                end
+                println()
+            end
+            error() =#
+
             d2 = Create_Discrete_Domain(mmm,b,intro="",search_settings=search) # periodized version including all boundary data 
 
             improve_mesh(d2; improving..., printevents=printevents,search=search)
             
             lboundary = length(b)
-            integrate_geo(integrate,d2,myintegrator,integrand,mc_accurate,collect(1:public_length(d2)),collect(1:(length(mesh(d2))+lboundary)),silence)
+            relevant = collect(1:public_length(d2))
+            modified = collect(1:(length(mesh(d2))+lboundary))
+            #@descend integrate_geo(integrate,d2,myintegrator,integrand,mc_accurate,relevant,modified,silence)
+            #error()
+            integrate_geo(integrate,d2,myintegrator,integrand,mc_accurate,relevant,modified,silence)
+            #=m2,i2 = integrate_view(d2)
+            println(i2.neighbors)
+            for (sig,r) in vertices_iterator(m2,1)
+                print("$sig, ")
+            end=#
             result = VoronoiGeometry(myintegrator,d2,integrand,search,mc_accurate,nothing)#NoFile())
             end
     catch err
@@ -170,6 +194,7 @@ function VoronoiGeometry(xs::Points,b=Boundary(); vertex_storage=DatabaseVertexS
     redirect_stdout(oldstd)
     return result    
 end
+@inline internal_boundary(d2,myinte) = internal_boundary(d2)
 function integrate_geo(threading::MultiThread,d2,myintegrator,integrand,mc_accurate,relevant,modified,silence=false)
     integral = integrate_view(d2).integral
     ref_mesh = mesh(integral)
@@ -208,17 +233,28 @@ function integrate_geo(threading::MultiThread,d2,myintegrator,integrand,mc_accur
     progress = ThreadsafeProgressMeter(2*length(relevant),silence,intro)
     Threads.@threads for i in 1:length(parallel_integrals)
     #for i in 4:-1:1
-        HighVoronoi.integrate(myintes[i],domain=internal_boundary(d2),relevant=relevants[i],modified=modifieds[i],progress=progress)
+        HighVoronoi.integrate(myintes[i],internal_boundary(d2,myintes[i]),relevants[i],modifieds[i],progress)
     end
+    return 
 end
 parallelize_integrators(myintes2) = myintes2
 @inline integrate_geo(integrate::SingleThread,d2,myintegrator,integrand,mc_accurate,relevant,modified,silence=false) = integrate_geo(true,d2,myintegrator,integrand,mc_accurate,relevant,modified,silence)
 @inline function integrate_geo(integrate::Bool,d2,myintegrator,integrand,mc_accurate,relevant,modified,silence=false)
-    !integrate && return
+    !integrate && return 
     II2=Integrator(integrate_view(d2).integral,myintegrator,integrand=integrand,mc_accurate=mc_accurate)
+    
+    mmm = mesh(integrate_view(d2).integral)
+    nnn = nodes(mmm)
+    #println("START: Length=$(length(nnn)), $(nnn[81])")
+    #println(nnn)
+    #return
+
     myinte=backup_Integrator(II2,true)
     intro="$(Integrator_Name(myinte))-integration over $(length(relevant)) cells:"
-    HighVoronoi.integrate(myinte,domain=internal_boundary(d2),relevant=relevant,modified=modified,progress=ThreadsafeProgressMeter(2*length(relevant),false,intro))
+    #@descend HighVoronoi.integrate(myinte,internal_boundary(d2,myinte),relevant,modified,ThreadsafeProgressMeter(2*length(relevant),false,intro))
+    #error()
+    HighVoronoi.integrate(myinte,internal_boundary(d2,myinte),relevant,modified,ThreadsafeProgressMeter(2*length(relevant),false,intro))
+    return 
 end
 
 function VoronoiGeometry(file::String,proto=nothing; _myopen=jldopen, offset="", search_settings=(__useless=0,), integrate=false, volume=true,area=true,bulk=false,interface=false,integrator=VI_GEOMETRY,integrand=nothing,mc_accurate=(1000,100,20),periodic_grid=nothing,silence=false)

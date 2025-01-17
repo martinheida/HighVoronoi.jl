@@ -16,6 +16,7 @@ end
 
 @inline function transform(bonus::D,neighs,offset,simple=staticfalse) where {D<:DeepNeighborData}
     lneigh = length(neighs)
+    #println(typeof(neighs))
     vbuffer = simple==false ? _external_indeces(bonus.mesh,neighs,bonus.buffer) : _copy_indeces(bonus.mesh,neighs,bonus.buffer)
     VoronoiDataArray(vbuffer,offset,bonus.references;lsigma=lneigh,lreferences=offset)
     return vbuffer
@@ -206,10 +207,10 @@ struct Vertices_Vector{M,B} #<: AbstractArray{PublicIterator}
     offset::Int64
     bonus::B
     function Vertices_Vector(d::D,publicview=false) where {D<:AbstractDomain}
-        m = mesh(d)
         ref = references(d)
         i = integral(d)
-        b = DeepNeighborData(ref,mesh(i))    
+        m = mesh(i)#d)
+        b = DeepNeighborData(ref,m)    
         return new{typeof(m),typeof(b)}(m,publicview*length(ref),b)
     end
 end 
@@ -265,7 +266,7 @@ struct OrientationsVector{P,N<:HVNodes{P},AV,S<:StaticBool} <: AbstractVector{Or
     onboundary::S
     lmesh::Int64
     function OrientationsVector(d::AD,onboundary,publicview=staticfalse;sorting=nothing) where {P,AD<:AbstractDomain{P}}
-        m = mesh(d)
+        m = mesh(integral(d))
         n = nodes(m)
         _nei = DeepVectorNeighbor(d,false) # gets external representation of full neighbor matrix
         o = publicview==true ? length(references(d)) : 0
@@ -353,10 +354,10 @@ struct BNodesDictDict{P, S, onBoundary<:StaticBool, N,N2,M<:AbstractMesh{P}} <: 
     function BNodesDictDict(d::AD,onboundary=false,publicview=false) where {P,AD<:AbstractDomain{P}}
         x0 = zeros(P)
         n = DeepVectorNeighbor(d,false)
-        _nodes = nodes(mesh(d))
+        m = mesh(integral(d))
+        _nodes = nodes(m)#mesh(integral(d)))
         b = boundary(d)
         buf = MVector{length(b),Bool}(falses(length(b)))
-        m = mesh(d)
         lmesh = length(m)
         myob = StaticBool(onboundary)
         o = publicview==false ? 0 : length(references(d))
@@ -541,27 +542,32 @@ The call of `VoronoiData(VG)` provides the following options:
 - `sorted=true`: During the reduction of the internal pseudo periodic mesh to the fully periodic output, the neighbors (jointly with their respective properties) get sorted by their numbers. This is only possible if `getarea`,`getneighbors` and `getinterfaceintegral` are `true`. Otherwise it will be ignored
 """
 function VoronoiData(VG::PGeometry{P};reduce_to_periodic=true,view_only=true,copyall=!view_only,getboundary=copyall,getbulk_integral=copyall,getreferences=copyall,getreference_shifts=copyall,getinterface_integral=copyall,getvolume=copyall,getarea=copyall,getneighbors=copyall,getnodes=copyall,getboundary_vertices=copyall,getorientations=copyall,getvertices=copyall,getboundary_nodes=copyall,onboundary=false,sorted=false) where P
-    domain = VG.domain
+    domain = VDDomain(VG.domain)
+    this_integral = integral(domain)
+    #println(typeof(this_integral))
+    #println(length(this_integral.volumes))
+    #println(length(references(domain)))
     offset = reduce_to_periodic * length(references(domain))
     deepversion(::StaticTrue,a) = convert_to_vector(a)
     deepversion(::StaticFalse,a) = a
-    ___nodes = nodes(mesh(domain)) 
+    _mesh = mesh(this_integral)
+    ___nodes = nodes(_mesh) 
     _nodes = deepversion(StaticBool(getnodes),view(___nodes,(offset+1):length(___nodes)))
     _vertices = deepversion(StaticBool(getvertices),Vertices_Vector(domain,reduce_to_periodic))
-    _bv = deepversion(StaticBool(getboundary_vertices),Public_BV_Iterator(mesh(domain))) # referred to by boundary_verteces
+    _bv = deepversion(StaticBool(getboundary_vertices),Public_BV_Iterator(_mesh)) # referred to by boundary_verteces
     _bn = deepversion(StaticBool(getboundary_nodes),BNodesDictDict(domain,onboundary,reduce_to_periodic))
     #boundary_nodes_on_boundary = onboundary
     __neighbors = deepversion(StaticBool(getneighbors),DeepVectorNeighbor(domain,reduce_to_periodic))
     _neighbors, bonus = VoronoiData_neighbors(StaticBool(sorted),StaticBool(getneighbors),__neighbors)
     ori = deepversion(StaticBool(getorientations),OrientationsVector(domain,onboundary,StaticBool(reduce_to_periodic),sorting=bonus))
-    _volume = deepversion(StaticBool(getvolume),DeepVectorFloat64(integral(domain).volumes,offset))
-    _area = deepversion(StaticBool(getarea),DeepVector(integral(domain).area,offset,staticfalse,Val(:deep),bonus))
-    _bi = deepversion(StaticBool(getbulk_integral),DeepVectorFloat64Vector(integral(domain).bulk_integral,offset))
-    _ii = deepversion(StaticBool(getinterface_integral),DeepVector(integral(domain).interface_integral,offset,staticfalse,Val(:deep),bonus))
-    _boun = reduce_to_periodic ? boundary(VG.domain) : internal_boundary(VG.domain)
+    _volume = deepversion(StaticBool(getvolume),DeepVectorFloat64(this_integral.volumes,offset))
+    _area = deepversion(StaticBool(getarea),DeepVector(this_integral.area,offset,staticfalse,Val(:deep),bonus))
+    _bi = deepversion(StaticBool(getbulk_integral),DeepVectorFloat64Vector(this_integral.bulk_integral,offset))
+    _ii = deepversion(StaticBool(getinterface_integral),DeepVector(this_integral.interface_integral,offset,staticfalse,Val(:deep),bonus))
+    _boun = reduce_to_periodic ? boundary(domain) : internal_boundary(domain)
     boun = getboundary ? deepcopy(_boun) : _boun
-    _references = deepversion(StaticBool(getreferences),references(VG.domain))
-    _reference_shifts = deepversion(StaticBool(getreference_shifts),ShiftVector{P}(reference_shifts(VG.domain),shifts(VG.domain)))
+    _references = deepversion(StaticBool(getreferences),references(domain))
+    _reference_shifts = deepversion(StaticBool(getreference_shifts),ShiftVector{P}(reference_shifts(domain),shifts(domain)))
     return  VoronoiData(_nodes,_vertices,_bv,_bn,onboundary,_neighbors,ori,_volume,_area,_bi,_ii,length(references(domain)),_references,_reference_shifts,VG,boun)
 end
 function VoronoiData_neighbors(::StaticTrue,getneighbors::StaticBool,__neighbors)

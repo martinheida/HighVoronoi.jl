@@ -176,7 +176,7 @@ end
 @inline Base.getproperty(cd::SerialMesh, prop::Symbol) = dyncast_get(cd,Val(prop))
 @inline @generated dyncast_get(cd::SerialMesh, ::Val{:length}) =  :(getfield(cd,:data)[1])
 @inline @generated dyncast_get(cd::SerialMesh, d::Val{S}) where S = :( getfield(cd, S))
-@inline @generated dyncast_get(cd::SerialMesh, d::Val{:boundary_Vertices}) where S = :( getfield(cd, :meshes)[1].mesh.boundary_Vertices)
+@inline @generated dyncast_get(cd::SerialMesh, d::Val{:boundary_Vertices}) = :( getfield(cd, :meshes)[1].mesh.boundary_Vertices)
 
 
 @inline Base.setproperty!(cd::SerialMesh, prop::Symbol, val) = dyncast_set(cd,Val(prop),val)

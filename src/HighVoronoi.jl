@@ -17,6 +17,8 @@ using ProgressMeter
 #using Cthulhu
 using Base.Threads
 using Base.Threads: Atomic, atomic_cas!
+using DoubleFloats
+#using LoggingExtras
 
 
 #using Traceur
@@ -183,6 +185,9 @@ include("parallelintegral.jl")
 include("voronoidomain.jl")
 include("serialdomain.jl")
 include("geometry.jl") # VoronoiGeometry
+include("sphericalmeshview.jl")
+include("sphere.jl")
+include("sphericalpublicview.jl")
 include("voronoidata.jl")
 include("discretefunctions.jl")
 include("substitute.jl") # refinement by substitution
@@ -228,7 +233,7 @@ include("l1projection_new.jl")
 include("R-projection.jl")
 include("finitevolume.jl")
 include("statistics.jl")
-#include("chull.jl")
+include("chull.jl")
 # What will be exported:
 export DensityRange
 export VoronoiNodes
@@ -241,6 +246,8 @@ export Voronoi_Integral
 export VoronoiData
 export CompactVoronoiData
 export VoronoiFV
+export ConvexHull
+export VoronoiSphere
 
 export refine!
 export refine
@@ -292,6 +299,7 @@ export RaycastParameter
 export RCOriginal
 export RCCombined
 export RCNonGeneral
+export RCNonGeneralHP
 export MultiThread
 export SingleThread
 export AutoThread

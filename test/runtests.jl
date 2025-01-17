@@ -21,6 +21,8 @@ const global_silence = false
     end
     include("tools.jl")
     include("basics.jl")
+    include("convexhull.jl")
+    include("sphere.jl")
     include("voronoidata.jl")
     include("statistics.jl")
     include("fraud.jl")

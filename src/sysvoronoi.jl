@@ -338,18 +338,21 @@ function systematic_work_queue(xs,_Cell,mesh,edgecount,searcher,queue,vi_lock,no
         end
     end
 end=#
-
+ 
 function systematic_explore_vertex_multithread(xs::Points,sig,r,_Cell,edgecount,mesh,queue,boundary,searcher,edgeIterator,globallock)
     k=0
     dim = size(eltype(xs))[1]
-        typeof(edgeIterator)<:FastEdgeIterator && println("$(Threads.threadid())z")
+    #csig = copy(sig)
+        #typeof(edgeIterator)<:FastEdgeIterator && println("$(Threads.threadid())z")
     for (edge,skip) in edgeIterator
 #        print("1")
         b = pushedge!(edgecount,edge,_Cell)
         (edge[1]!=_Cell || b ) && continue
-        full_edge, u = get_full_edge(sig,r,edge,edgeIterator,xs)
+        #full_edge, u = [0],r
+        #csig!=sig && error("$sig vs. $csig")
+            full_edge, u = get_full_edge(sig,r,edge,edgeIterator,xs)
         sig2, r2, success = walkray(full_edge, r, xs, searcher, sig, u, edge ) # provide missing node "j" of new vertex and its coordinate "r" 
-#
+
         if sig2 == sig
                 pushray!(mesh,full_edge,r,u,_Cell)
             continue
@@ -439,6 +442,15 @@ function get_full_edge(sig,r,edge,::General_EdgeIterator,xs)
     u = u_default(sig, xs, i)
     return Vector{Int64}(edge), u
 end
+#=function get_full_edge_basis(sig,r,edge,::General_EdgeIterator,xs)
+    i = 0
+    while true
+        i+=1
+        !(sig[i] in edge) && break
+    end
+    u, base = u_with_base(sig, xs, i)
+    return Vector{Int64}(edge), u, base
+end=#
 @inline get_full_edge_indexing(sig,r,edge,::General_EdgeIterator,xs) = edge
 
 
@@ -479,7 +491,10 @@ function fraud_vertex(dim,sig,r,lsig2,searcher,xs)
         if !verify_vertex(sig,r,xs,searcher)
             return true
         end
-        max_dist = max(map(s->norm(r-xs[s]),sig))
+        #println()
+        #println(sig)
+        #println(r)
+        max_dist = maximum(map(s->norm(r-xs[s]),sig))
         distance = 0.0
         max_distance = 0.0
         lsig = length(sig)
