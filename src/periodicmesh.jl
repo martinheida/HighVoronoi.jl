@@ -477,7 +477,7 @@ function periodic_final_integration(Integral,MESH,xs,search,domain,myintegrator,
     bI = backup_Integrator(II2,true)
     l1 = public_length(d2)
     l_2 = (length(mesh(d2))+lboundary)
-    HighVoronoi.integrate(bI,domain=internal_boundary(domain),relevant=1:l1,modified=1:l_2,progress = ThreadsafeProgressMeter(l1,false,"$(Integrator_Name(bI))-integration over $(l1) cells:"))
+    HighVoronoi.integrate(bI, internal_boundary(domain), 1:l1, 1:l_2, ThreadsafeProgressMeter(l1,false,"$(Integrator_Name(bI))-integration over $(l1) cells:"))
     
 end
 

@@ -47,7 +47,7 @@ end=#
 ############################################################################################################################
 
 
-function add_virtual_points(domain::AD,new_xs::ReflectedNodes;search_settings::RP=RaycastParameter(Float64),do_refine=statictrue,kwargs...) where {AD<:AbstractDomain,RP<:RaycastParameter}
+function add_virtual_points(domain::AD,new_xs::ReflectedNodes;search_settings::RP=RaycastParameter(Float64),do_refine=statictrue,kwargs...) where {AD<:AbstractDomain,RP} # <: RaycastParameter}
     length(new_xs)==0 && return Int64[]
     expand_internal_boundary(domain,new_xs)
     prepend!(domain,new_xs)

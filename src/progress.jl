@@ -15,6 +15,11 @@ end
 function ThreadsafeProgressMeter(n::Int,silence::Bool,intro,::MultiThread) 
     return ThreadsafeProgressMeter(Progress(n,intro),silence,BusyFIFOLock())
 end
+
+function ThreadsafeProgressMeter(intro::String) 
+    return ThreadsafeProgressMeter(Progress(0;desc=intro,showspeed=true),false,BusyFIFOLock())
+end
+
  
 #import Progress
 @inline function next!(tpm::TPM) where {TPM<:ThreadsafeProgressMeter}

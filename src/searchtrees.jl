@@ -250,3 +250,7 @@ end
 function search_vertex(tree::UnstructuredTree, point::AbstractVector{T}, idx,dist,data) where {T <: Number}#<:Function}
     _knn(tree.tree, point, idx, dist, x->false, data) # sortres=false
 end
+
+function search_vertex_plane(tree::UnstructuredTree, point::AbstractVector{T}, idx,dist,data) where {T <: Number}#<:Function}
+    HVNearestNeighbors._knn_plane(tree.tree, point, idx, dist, data) # sortres=false
+end

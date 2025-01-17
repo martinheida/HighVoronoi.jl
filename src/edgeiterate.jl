@@ -110,6 +110,12 @@ function get_full_edge(sig,r,edge,NF_::FastEdgeIterator,xs)
     return Vector{Int64}(view(NF.sig, fullview[1:count])), convert_SVector( -1 .* ray(NF_) )
 end
 
+#=function get_full_edge_basis(sig,r,edge,NF_::FastEdgeIterator,xs)
+    NF=NF_.iterators[1]
+    fullview,count = get_full_edge(NF.rays,NF.local_cone,NF.new_node,NF.active_nodes[1],length(NF.sig),NF.dim,NF_.ray_tol)
+    return Vector{Int64}(view(NF.sig, fullview[1:count])), convert_SVector( -1 .* ray(NF_) ), [copy(NF.rays[i]) for i in 1:length(NF)]
+end=#
+
 #=function get_full_edge_indexing(sig,r,edge,NF_::FastEdgeIterator,xs)
     NF=NF_.iterators[1]
     fullview, count  = get_full_edge_indexing(NF.rays,NF.local_cone,NF.new_node,NF.active_nodes[1],length(NF.sig),NF.dim,NF_.ray_tol)
@@ -535,7 +541,7 @@ function update_edge(NF_::FastEdgeIterator)
             end
         end
         # adjust orthogonal basis 
-        nu[dim] .= my_cone[first_entry]
+        nu[dim] .= my_cone[first_entry] # take the random vector initially generated in this place
         b = true
 #        print("$(my_minimal)")
         for i in 1:(start_index-1)

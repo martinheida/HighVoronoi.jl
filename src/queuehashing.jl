@@ -22,7 +22,7 @@ mutable struct QueueHashTable{V<:AbstractVector{HashedQueue}, R}
 end
 
 # Method for inserting into the QueueHashTable
-function pushqueue!(ht::Q, key::K, write::Bool=true) where {Q<:QueueHashTable,K}
+function pushqueue!(ht::Q, key::K, write::Bool=true,level=0) where {Q<:QueueHashTable,K}
     value = fnv1a_hash(key, UInt128)
     value_ = UInt64(value & UInt128(0x7FFFFFFFFFFFFFFF))
     index1 = value_ & ht.mylength[1]
@@ -30,7 +30,9 @@ function pushqueue!(ht::Q, key::K, write::Bool=true) where {Q<:QueueHashTable,K}
 
     i = UInt64(0)
     ret = false
+    status(51+level*100)
     lock(ht.lock)
+    status(52+level*100)
     try
         while true
             idx = reinterpret(Int64, (index1 + i * index2) & ht.mylength[1] + 1) # try bitcast( ) instead
@@ -48,13 +50,15 @@ function pushqueue!(ht::Q, key::K, write::Bool=true) where {Q<:QueueHashTable,K}
                 break # return false
             elseif data.value == value && data.value2 == index2
                 ret = true
-                break # return false
+                break # return true
             end
             i += 1
             if i >= ht.mylength[1] 
                 if write
+                    status(53+level*100)
                     extend(ht)
-                    ret = pushqueue!(ht, key)
+                    status(54+level*100)
+                    ret = pushqueue!(ht, key,true,level+1)
                 end
                 break
             end
@@ -62,6 +66,7 @@ function pushqueue!(ht::Q, key::K, write::Bool=true) where {Q<:QueueHashTable,K}
     finally
         unlock(ht.lock)
     end
+    status(55+level*100)
     return ret
 end
 @inline Base.haskey(ht::Q, key::K) where {Q<:QueueHashTable,K} = pushqueue!(ht,key,false)
@@ -103,6 +108,7 @@ end
 
 # Function to extend the QueueHashTable
 function extend(ht::QueueHashTable)
+    #println("ex queue keys")
     len2 = 2 * (ht.mylength[1] + 1)
     V2 = similarqueuehash(HashedQueue, reinterpret(Int64, len2))
     new_occupied = falses(len2)

@@ -22,7 +22,7 @@ function improve_mesh(_domain; max_iterations=0, tolerance=1.0, printevents,sear
         modified = zeros(Bool,lmesh)
         modified_i = zeros(Bool,lmesh)
         buffer = zeros(Float64,dim)
-        integrate(Integrator,domain=b,relevant=1:plmesh,modified=1:plmesh)
+        integrate(Integrator,b,1:plmesh,1:plmesh)
         for i in 1:plmesh
             modified_i .= false
             buffer .= 0.0

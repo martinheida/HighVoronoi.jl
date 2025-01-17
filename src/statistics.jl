@@ -41,7 +41,7 @@ function VoronoiStatistics(dim,samples;periodic=nothing,points=1,my_generator=no
         I,_=voronoi(xs,searcher=Raycast(xs),intro="Run number: $S  ",compact=true, Iter=1:number)
         vp_line_up()
         I2=Integrator(I.Integral,geodata ? VI_POLYGON : VI_GEOMETRY,integrand=nothing)
-        _integrate( I2, intro="Run number: $S  ", calculate = 1:length(xs), iterate=1:number, compact=true)
+        _integrate( I2, Boundary(), 1:length(xs), 1:number, "Run number: $S  ")
         mesh = I.Integral.MESH
         for i in 1:number
             verteces[(S-1)*number+i] = length(I2.Integral.MESH.All_Vertices[i])+length(I2.Integral.MESH.Buffer_Vertices[i])

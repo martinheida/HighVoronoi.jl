@@ -781,4 +781,35 @@ function u_qr(sig, xs::HN, i) where {P, HN<:AbstractVector{P}}
     return eltype(xs)(u)
 end
 
+function u_qr_onb(onb,x0::P) where {P}
+    dimension = size(P)[1]
+    X = MMatrix{dimension, dimension, Float64}(undef)
+    for j in 1:dimension
+        X[:, j] .= onb[j]
+    end
+    X = SMatrix(X)
+    Q, R = qr(X)
+    u = -Q[:,end]  * sign(R[end,end])
+    return P(u)
+end
+
+function u_with_base(sig, xs::HN, i) where {P, HN<:AbstractVector{P}}
+    n = length(sig)
+    dimension = size(P)[1]
+    X = MMatrix{dimension, dimension, Float64}(undef)
+    for j in 1:i-1
+        X[:, j] = xs[sig[j]]
+    end
+    for j in i:n-1
+        X[:, j] = xs[sig[j+1]]
+    end
+    origin = X[:, end]
+    X[:, end] = xs[sig[i]]
+    X .-= origin
+    X = SMatrix(X)
+    Q, R = qr(X)
+    u = -Q[:,end]  * sign(R[end,end])
+    return eltype(xs)(u), [MVector(Q[:,i]) for i in 1:size(P)[1]]
+end
+
 

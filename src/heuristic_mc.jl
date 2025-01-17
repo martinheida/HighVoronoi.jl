@@ -31,8 +31,8 @@ function copy(I::HeuristicMCIntegrator)
     return HeuristicMCIntegrator{typeof(I.f)}(mc2.Integral,heu2,mc2,I.f)
 end
 
-function integrate(Integrator::HeuristicMCIntegrator; progress=ThreadsafeProgressMeter(0,true,""), domain=Boundary(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
-    _integrate(Integrator; domain=domain, calculate=modified, progress=progress, iterate=relevant) 
+function integrate(Integrator::HeuristicMCIntegrator,  domain, relevant, modified, progress) 
+    _integrate(Integrator, domain, modified, relevant, progress) 
 end
 
 

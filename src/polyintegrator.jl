@@ -30,8 +30,8 @@ function copy(I::Polygon_Integrator)
     return Polygon_Integrator{typeof(I._function),typeof(I.Integral)}(I._function,I.bulk,Inte, IterativeDimensionChecker(length(Inte.MESH.nodes[1])))
 end
 
-@inline function integrate(Integrator::Polygon_Integrator; progress=ThreadsafeProgressMeter(0,true,""),domain=Boundary(), relevant=1:(length(Integrator.Integral)+length(domain)), modified=1:(length(Integrator.Integral))) 
-    _integrate(Integrator; domain=domain, calculate=modified, iterate=relevant,progress=progress) 
+@inline function integrate(Integrator::Polygon_Integrator, domain, relevant, modified, progress) 
+    _integrate(Integrator, domain, modified, relevant, progress) 
 end
 
 

@@ -24,7 +24,9 @@ struct Fast_Polygon_Integrator{T,TT,IDC<:IterativeDimensionChecker,D}
     function Fast_Polygon_Integrator(Integ::HVIntegral,integrand=nothing, bulk_integral=false)
         b_int=(typeof(integrand)!=Nothing) ? bulk_integral : false
         enable(Integ,volume=true,integral=b_int)
-        idc = IterativeDimensionChecker(dimension(mesh(Integ)))
+        idc = IterativeDimensionChecker(mesh(Integ))
+        #@descend Fast_Polygon_Integrator{typeof(integrand),typeof(Integ),typeof(idc)}( integrand, b_int, Integ, idc )
+        #error()
         PI=Fast_Polygon_Integrator{typeof(integrand),typeof(Integ),typeof(idc)}( integrand, b_int, Integ, idc )
         return PI
     end
@@ -42,8 +44,8 @@ function copy(I::Fast_Polygon_Integrator)
     return Fast_Polygon_Integrator{typeof(I._function),typeof(I.Integral)}(I._function,I.bulk,copy(I.Integral))
 end
 
-@inline function integrate(Integrator::Fast_Polygon_Integrator; domain,  relevant, modified,progress)
-    _integrate(Integrator, domain=domain, calculate=modified, iterate=relevant,progress=progress) 
+@inline function integrate(Integrator::Fast_Polygon_Integrator, domain,  relevant, modified, progress)
+    _integrate(Integrator, domain, modified, relevant, progress) 
     
 end
 
