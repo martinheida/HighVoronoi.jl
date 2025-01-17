@@ -14,11 +14,14 @@ jobs:
   test:
     name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }} - ${{ github.event_name }}
     runs-on: ${{ matrix.os }}
+    # Für nightly-Tests Fehler nur als Warnung behandeln
+    continue-on-error: ${{ matrix.version == 'nightly' }}
     strategy:
       fail-fast: false
       matrix:
         version:
           - '1.7'
+          - '1.9'
           - 'nightly'
         os:
           - ubuntu-latest
