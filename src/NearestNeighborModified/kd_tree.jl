@@ -420,7 +420,7 @@ function peak_kernel!(tree::HVKDTree{V}, index, data::D,return_on_find) where {V
 end
 
 
-function search_node_direction(tree::H,
+#=function search_node_direction(tree::H,
     direction,
     c0,idx) where {A,B,C,H<:HVKDTree{A,B,C}}
     d = PeakData(c0,direction,tree.hyper_rec.maxes, tree.hyper_rec.mins)
@@ -471,7 +471,7 @@ function search_kernel!(tree::HVKDTree{V}, index, data::D,idx,level) where {V, D
 
     data.vertex[sd] = v_dim
     return false
-end
+end=#
 
 ###############################################################################################################################
 ###############################################################################################################################
