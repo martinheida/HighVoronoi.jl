@@ -1,5 +1,5 @@
 using Test
-using Revise
+#using Revise
 using HighVoronoi
 
 using SpecialFunctions
