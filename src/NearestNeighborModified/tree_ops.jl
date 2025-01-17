@@ -127,26 +127,51 @@ end
     return #!result # return true iff new_r has not changed
 end
 
+const global_i2 = MVector{1,Int64}([0])
+
 # Checks the distance function and add those points that are among the k best.
 # Uses a heap for fast insertion.
 @inline function add_points_knn!(best_dists::AbstractVector, best_idxs::AbstractVector{Int},
     tree::HVNNTree, index::Int, point::AbstractVector,
     do_end::Bool, skip::F) where {F}
-for z in get_leaf_range(tree.tree_data, index)
-idx = tree.reordered ? z : tree.indices[z]
-dist_d = myevaluate(tree.metric, tree.data[idx], point, do_end)
-if dist_d <= best_dists[1]
-if skip(tree.indices[z])
-continue
+    for z in get_leaf_range(tree.tree_data, index)
+        idx = tree.reordered ? z : tree.indices[z]
+        dist_d = myevaluate(tree.metric, tree.data[idx], point, do_end)
+        if dist_d <= best_dists[1]
+            tiz = tree.indices[z]
+            #if tiz==global_i2[1] 
+            #    print(tiz,",",skip(tiz),": ")
+            #end
+            if skip(tree.indices[z])
+                continue
+            end
+
+            best_dists[1] = dist_d
+            best_idxs[1] = idx
+            percolate_down!(best_dists, best_idxs, dist_d, idx)
+        end
+    end
 end
 
-best_dists[1] = dist_d
-best_idxs[1] = idx
-percolate_down!(best_dists, best_idxs, dist_d, idx)
+#=@inline function add_points_knn_plane!(best_dists::AbstractVector, best_idxs::AbstractVector{Int},
+    tree::HVNNTree, index::Int, point::AbstractVector,
+    do_end::Bool, data)
+    final_skip = true
+    for z in get_leaf_range(tree.tree_data, index)
+        idx = tree.reordered ? z : tree.indices[z]
+        dist_d = myevaluate(tree.metric, tree.data[idx], point, do_end)
+        tiz = tree.indices[z]
+        skip = dot(data.direction,data.xs[tiz]) < data.c0
+        final_skip &= skip
+        if dist_d <= best_dists[1] && !skip
+            best_dists[1] = dist_d
+            best_idxs[1] = idx
+            percolate_down!(best_dists, best_idxs, dist_d, idx)
+        end
+    end
+    return final_skip
 end
-end
-end
-
+=#
 
 
 # Add those points in the leaf node that are within range.
