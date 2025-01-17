@@ -19,7 +19,7 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
-        "Convex Hulls" => "convexhull.md",
+        "Convex Hulls" => "man/convexhull.md",
         "Manual Voronoi" => Any[
             "Examples Voronoi Generation" => "man/short.md",
             "man/workflowmesh.md",
