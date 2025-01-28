@@ -63,7 +63,10 @@ function descent(xs::Points, searcher::RaycastIncircleSkip, start)
         minimal_edge[1] = start
         my_vv = 1.0
         try
-            for k in 1:dim  # find an additional generator for each dimension
+            loop_counter = 0
+            k = 1
+            while k<=dim  # find an additional generator for each dimension
+                loop_counter += 1
                 #println("$k ---------------------------------------------------- ")
                 u = 0*r
                 u += randray(xs[minimal_edge[1:k]],map(i->view(searcher.vectors,:,i),1:(dim-1)),count,xs,start)
@@ -78,13 +81,18 @@ function descent(xs::Points, searcher::RaycastIncircleSkip, start)
                     generator, t, r2 = raycast_des(sig, r, u, xs, searcher,0,sig,sig,Raycast_By_Descend())
                 end
                 if t == Inf
+                    #println()
+                    #println(searcher.parameters.method)
+                    loop_counter <= 100 && continue
                     error("Could not find a vertex in both directions of current point." *
-                        "Consider increasing search range (tmax)")
+                        "Consider increasing search range (tmax)")# \n $xs \n $(searcher.parameters.method)")
                 end
                 r = r2
                 minimal_edge[k+1] = generator
                 my_vv = vertex_variance(view(minimal_edge,1:(k+1)),r,xs,k,view(searcher.ddd,1:(k+1)))
                 my_vv>searcher.variance_tol && error("$my_vv, $minimal_edge")
+                k += 1
+                loop_counter = 0
                 #identify_multivertex(searcher, sig, r, vertex_variance(view(minimal_edge,1:(k+1)),r,xs,k,view(searcher.ddd,1:(k+1))))
             end
         catch
@@ -114,7 +122,7 @@ end
 
 
 """ find the vertex connected to `v` by moving away from its `i`-th generator """
-function walkray(full_edge::Sigma, r::Point, xs::Points, searcher, sig, u, edge)
+function walkray(full_edge::Sigma, r::Point, xs::Points, searcher, sig, u, edge, du)
     searcher.rare_events[SRI_walkray] += 1
     success = true
     k=0
@@ -124,11 +132,21 @@ function walkray(full_edge::Sigma, r::Point, xs::Points, searcher, sig, u, edge)
         !(sig[k] in full_edge) && break
         if k==lsig 
             println("There is an odd situation")
-            error("")
+            error("$sig, $full_edge")
         end
     end
     Rest = sig[k]
-    generator, t, r2 = raycast_des(full_edge, r, u, xs, searcher, Rest,edge,sig,Raycast_By_Walkray())
+
+    #fe2 = copy(full_edge)
+    #_generator, _t, _r2 = raycast_des(fe2, r, u, xs, searcher, Rest,edge,sig,Raycast_By_Walkray(),RCNonGeneralFast,du)
+    
+    generator, t, r2 = raycast_des(full_edge, r, u, xs, searcher, Rest,edge,sig,Raycast_By_Walkray(),du)
+    #if fe2!=full_edge
+    #    for e in fe2
+    #        println("$e: $(norm(r2-xs[e]))") 
+    #    end
+    #    error("$sig, $fe2, $full_edge, $(norm(_r2-xs[sig[1]])), $(norm(r2-xs[sig[1]])), $(norm(_r2-r2))") 
+    #end
     (generator in sig) && error("hier")
     exception_raycast(t,r,sig,edge,u,searcher)
     if t==0.0 
@@ -406,16 +424,10 @@ function get_t_hp_sig(r,u,sig,x_new,xs)
 end
 
 function get_t_hp(r,u,x0::P,x_new) where P
-    #r = SVector{size(P)[1],Double64}(r_)
-    #u = SVector{size(P)[1],Double64}(u_)
-    #x0 = SVector{size(P)[1],Double64}(x0_)
-    #x_new = SVector{size(P)[1],Double64}(x_new_)
     Dx = x_new-x0
     xx = x0+x_new-2*r 
 
     return dot(Dx,xx) / (2 * u' * Dx)
-#    return Float64(dot(Dx,xx) / (2 * u' * Dx))
-    # r^2 - 2 r x_new + x_new^2 - r^2 + 2 r x0 -x0^2 = 2 r (x0 - x_new) + x_new^2 - x0^2
 end
 
 struct Raycast_By_Descend
@@ -488,7 +500,7 @@ function verify_vertex(sig,r,xs,searcher,output=StaticBool{false})
     return b
 end
 
-function raycast_des2(sig::Sigma, old_r, u, xs, searcher::RaycastIncircleSkip, old ,edge,origin,cast_type,::Raycast_Combined)
+function raycast_des2(sig::Sigma, old_r, u, xs, searcher::RaycastIncircleSkip, old ,edge,origin,cast_type,::Raycast_Combined,debug=false,du=0.0)
     data = searcher.tree.tree.data
     plane_tolerance = searcher.plane_tolerance
     x0 = xs[edge[1]]
@@ -521,7 +533,7 @@ function get_scale(sig, xs,r)
     return sqrt(dist/dot(xs[sig[1]]-r,xs[sig[1]]-r))
 end
 
-function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,edge,origin,cast_type,::RCType,debug=false) where {RCType<:Union{Raycast_Non_General,Raycast_Non_General_Skip}}
+function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,edge,origin,cast_type,::RCType,debug=false,du=0.0) where {RCType<:Union{Raycast_Non_General,Raycast_Non_General_Skip}}
     shortversion = RCType == Raycast_Non_General_Skip
     max_int = typemax(Int64)
     x0 = xs[edge[1]]
@@ -705,24 +717,28 @@ function    get__r(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,full_error,du,de
     _r = vvv
     ii = 1
     t2__buffer = first_t
+    my_dist = norm(x0-vvv)
     while running
         ii += 1
+        ii==4 && break
         ii>500 && (debug=true)
         ii>505 && error("")
     #    print(ii)
-        i, _ = _nn(searcher.tree, vvv, i_->skip(i_))# || ts_skip(i_,buffer,xs,edge,x0,r,u,du))
-        debug && print("d$i - ")
+        i, _ = _nn(searcher.tree, _r, i_->skip(i_))# || ts_skip(i_,buffer,xs,edge,x0,r,u,du))
+        debug && print("d: $i, $_r, $my_dist  --  ")
         i==_i0 && break
         if i!=0
+            #print("$i - ")
             _modified = true
             x = xs[i]
-            t2__= get_t_hp(r,u,x0,x) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
-            t2__buffer = t2__
-            t2__ += get_t_hp(r+t2__*u,u,x0,x)
-            if t2__>=t #-full_error
+            if norm(x-_r)>=my_dist #-full_error
+                #println("+")
                 running = false 
                 break 
             end
+            t2__= get_t_hp(r,u,x0,x) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
+            t2__buffer = t2__
+            t2__ += get_t_hp(r+t2__*u,u,x0,x)
             t = t2__
             #__r = r+t*u
             #t = t2 + get_t(__r,u,x0,x) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
@@ -730,16 +746,24 @@ function    get__r(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,full_error,du,de
             break
         end
         __r = r+t*u
+        _r = __r
         #full_mode && prepare_vertex_calculation(edge,xs,searcher)
         if full_mode && _modified 
             _r = vertex_calculation_hp(edge,xs,searcher.hp_vars,__r,u,i) 
         end
+        debug && println("$(norm(xs[i]-_r)) -- $(full_mode), $_modified ")
+        if norm(xs[i]-_r)>=my_dist #-full_error
+            #println("+")
+            running = false 
+            break 
+        end
+        my_dist = norm(xs[i]-_r)
         #running = false
     end 
     return _r,t2__buffer
 end
 
-function get__r_2(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,_,_,debug,first_t)
+#=function get__r_2(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,_,_,debug,first_t)
     i, _ = _nn(searcher.tree, vvv, skip)
     _modified = false
     if i!=0
@@ -755,7 +779,7 @@ function get__r_2(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,_,_,debug,first_t
     #full_mode && prepare_vertex_calculation(edge,xs,searcher)
     _r = full_mode && _modified ? vertex_calculation_hp(edge,xs,searcher.hp_vars,__r,u,i) : vvv
     return _r,t
-end
+end=#
 
 function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,edge,origin,cast_type,::Raycast_Non_General_HP,debug=false,du=1E-14)
     max_int = typemax(Int64)
@@ -785,66 +809,17 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     _vvv_tu = _vvv+t*u
     full_mode && prepare_vertex_calculation(sig,xs,searcher.hp_vars)
     vvv = full_mode ? vertex_calculation_hp(edge,xs,searcher.hp_vars,_vvv_tu,u,i) : _vvv_tu
-    if full_mode 
-        #print("!")
-        #=if (norm(_vvv_tu-vvv)/(norm(_vvv_tu)+norm(_vvv_tu))>1E-6)
-            print("!")
-        elseif (norm(_vvv_tu-vvv)/(norm(_vvv_tu)+norm(_vvv_tu))>1E-8)
-            print("-")
-        elseif (norm(_vvv_tu-vvv)/(norm(_vvv_tu)+norm(_vvv_tu))>1E-10)
-            #print("#$(abs(dot(u,x0-x)/__t2))  -  ")
-            u2 = normalize(vvv-r)
-            print("#$(__t2), $(norm(r)), $error1  -  ")
-            #print("#$(__t2), $(norm(r)), $(abs((dot(u,x0-x))/__t2)), $error1  -  ")
-        elseif (norm(_vvv_tu-vvv)/(norm(_vvv_tu)+norm(_vvv_tu))<1E-10) && (error1>1E-8)# || __t2>1000) #(norm(vvv)>200 || __t2>200)
-            print("*")
-            #            print("#$(__t2)  -  ")
-            #print("*$(abs(dot(u,x0-x)/__t2))  -  ")
-        end=#
-    end
-    #vvv_2 = vertex_calculation_hp(edge,xs,searcher,vvv,u,i)
     debug && println(vvv,t)
     _r,t = get__r(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,full_error,du,debug,first_t)
     #_r,t = get__r_2(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,full_error,du,debug,first_t)
     debug && println(_r,t)
-    # #=
 
-    # =#
-     #=
-     =#
-    
-    #=debug && println(full_mode)
-    if full_mode && _modified && (norm(_r-__r)/(norm(_r)+norm(__r))>1E-6)
-        println()
-        println(norm(_r-__r)/(norm(_r)+norm(__r)),", ",norm(_r),", ",norm(__r),", ",dot(_r-__r,u),", ",norm(_r-__r))
-        for j in vcat(edge,[i])
-            print("$(norm(__r-xs[j])), ")
-        end
-        println()
-        for j in vcat(edge,[i])
-            print("$(norm(_r-xs[j])), ")
-        end
-        println()
-        for j in edge
-            print("$(norm(xs[edge[1]]-xs[j])), ")
-        end
-        print("$(norm(xs[edge[1]]-xs[i])), ")
-        println()
-        println(_inrange(searcher.tree,__r,norm(__r-xs[edge[1]])*1.00000000001))
-        println(_inrange(searcher.tree,_r,norm(_r-xs[edge[1]])*1.00000000001))
-        println(dot(u,__r-_r))
-        println(typeof(searcher.rhs_cg))
-        println(edge)
-        u2 = normalize(_r-r)
-        u1 = normalize(__r-r)
-        println(norm(u2-u1))
-        error(norm(_r-__r),", $i, $(norm(vvv-__r)), vv1=$(vertex_variance(vcat(edge,[i]),__r,xs)), vv2=$(vertex_variance(vcat(edge,[i]),_r,xs))")
-    end=#
     measure = maximum(norm(xs[s]-_r) for s in edge)
     old_measure = measure
     #debug && println(vvv-_r)
     upper_t = t*1.0000000001 #+2*measure
     idss = _inrange(searcher.tree,_r,(1+max(1E-12,searcher.b_nodes_tol*100*scale))*measure)
+    #println(idss)
     lidss = length(idss)
     debug && println(idss)
     #lidss==0 && error("")
@@ -852,36 +827,22 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     lidss==0 && (return 0, Inf64, r)
     ts = view(searcher.ts,1:lidss)
     map!(ii-> ii∈origin ? 0.0 : get_t_hp(r,u,x0,xs[ii]) ,ts, idss)
-    if lidss>100  
-        #print("*")
-        #=println("*$scale, $measure, $(norm(_r)), $((1+max(1E-12,searcher.b_nodes_tol*scale))*measure)")
-        for s in edge 
-            print("$s: $(norm(xs[s]-_r)), ")
-        end
-        println()
-        for i in 1:lidss
-            if ts[i]<=t 
-                print("$i: $(ts[i]) - ")
-            end
-        end
-        #println(idss)
-        #println(ts)
-        #println(map(s->norm(xs[s]-_r),idss))
-        println(t)
-        error("")=#
-    end
     k=0
     while k<lidss
         k += 1
         #ts[k] += get_t_hp(r+ts[k]*u,u,x0,xs[idss[k]])
+        if idss[k] in origin 
+            idss[k]=max_int 
+            continue 
+        end
         if ts[k]<searcher.plane_tolerance || ts[k]>upper_t
-            idss[k]=max_int
+            #idss[k]=max_int
             ts[k] = 0.0
         elseif ts[k]<upper_t
             upper_t = ts[k] 
         end
     end
-    
+    #println(idss)
     debug && println(ts,", ",t)
     debug && println(idss)
     max_dist = 0.0
@@ -894,7 +855,7 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
             if ts[k]>upper_t
                 ts[k] = 0.0
                 #idss[k] = max_int
-            elseif idss[k]<max_int
+            elseif ts[k]>0.0 #idss[k]<max_int
                 ts[k] = dot(u,xs[idss[k]]-x0)
                 if ts[k]>max_dist
                     max_dist = ts[k] 
@@ -907,47 +868,23 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     debug && println(ts)
     debug && println(idss)
     generator==0 && (return 0, Inf64, r)
-#    println("   ->   ->   ->   ->   -> ",dot(u,xs[generator]-xs[edge[1]]))
+
     t = get_t_hp(r,u,x0,xs[generator])# (sum(abs2, r - xs[generator]) - sum(abs2, r - x0)) / (2 * u' * (xs[generator]-x0))
-    #println(generator,", ",r2)
     r2 = correct_cast_hp(edge,xs,searcher.hp_vars,r+t*u,u,generator,cast_type,full_mode)
-    #=_r = r+t*u
-    __r = r2
-    if full_mode && (norm(_r-__r)/(norm(_r)+norm(__r))>1E-6)
-        println()
-        for j in vcat(edge,[generator])
-            print("$(norm(__r-xs[j])), ")
-        end
-        println()
-        for j in vcat(edge,[generator])
-            print("$(norm(_r-xs[j])), ")
-        end
-        println()
-        for j in edge
-            print("$(norm(xs[edge[1]]-xs[j])), ")
-        end
-        print("$(norm(xs[edge[1]]-xs[generator])), ")
-        println()
-        println(_inrange(searcher.tree,__r,norm(__r-xs[edge[1]])*1.00000000001))
-        println(_inrange(searcher.tree,_r,norm(_r-xs[edge[1]])*1.00000000001))
-        println(dot(u,__r-_r))
-        println(typeof(searcher.rhs_cg))
-        println(edge)
-        error(norm(_r-__r),", $i, $(norm(vvv-__r)), vv1=$(vertex_variance(vcat(edge,[i]),__r,xs)), vv2=$(vertex_variance(vcat(edge,[i]),_r,xs))")
-    end=#
-    #r2 = correct_cast(r,r+t*u,u,edge,generator,origin,searcher,cast_type)
-    #if typeof(cast_type)==Raycast_By_Walkray
     measure2 = maximum(norm(xs[s]-r2) for s in sig)
-    measure2 = max(measure2, norm(xs[generator]-r2)) * (1+scale*searcher.b_nodes_tol+1E-16)
+    measure2 = max(measure2, norm(xs[generator]-r2)) * (1+scale*searcher.b_nodes_tol)#+1E-16)
     k=0
     while k<lidss
         k += 1
-        if idss[k]<max_int && norm(xs[idss[k]]-r2)>measure2
+        if (idss[k]<max_int && norm(xs[idss[k]]-r2)>measure2) #|| ts[k]==0.0
             idss[k] = max_int
         elseif idss[k]<max_int 
             debug && println(idss[k],": ",norm(xs[idss[k]]-r2),", ",measure2,", ",scale) 
         end
     end
+    #println(idss)
+    #println("---------------------------------------------")
+
     debug && norm(xs[edge[1]]-r2)
     append!(sig,filter!(i->i<max_int,idss))
     sort!(sig)
@@ -956,9 +893,49 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     return generator, t, r2
 end
 
+function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,edge,origin,cast_type,::Raycast_Original,debug=false,du=0.0)
+    x0 = xs[edge[1]]
+    c1 = maximum(dot(xs[g], u) for g in sig)
+    c2 = abs(c1) 
+    c = c1 + c2*searcher.plane_tolerance
+    skip = _i->myskips(xs,_i,c,u,edge[1],sig)
+    
+    current_t = dot(u , (x0-r))
+    vvv = r + u * current_t
+    i, t = _nn(searcher.tree, vvv, skip)
+    t == Inf && return 0, Inf, r
+    i2 = i
 
+    first_t, full_error = get_t_hp_(r,u,x0,xs[i],du) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
+    current_t = Inf64
+    _vvv = r+first_t*u
+    scale = get_scale(sig,xs,_vvv)
+    relative_error = full_error / norm(_vvv)
 
-function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,edge,origin,cast_type,::Union{Raycast_Original,Raycast_Original_HP},maxiter=2^length(r))
+    full_mode = (relative_error>1E-10 || full_error>1E-8/max(scale,1E-4))
+    
+    
+    while i!=0
+        x = xs[i]
+        t = get_t_hp(r,u,x0,x) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
+        t>=current_t && break 
+        current_t = t
+        vvv = full_mode ? correct_cast(r,r+t*u,u,edge,i,origin,searcher,cast_type) : r+t*u
+        i, t = _nn(searcher.tree, vvv)
+        (i==i2 || (i in sig)) && (i=0)
+        i!=0 && (i2 = i)
+    end
+    x2 = xs[i2]
+    t = get_t_hp(r,u,x0,x2) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
+    _r = full_mode ? correct_cast(r,r+t*u,u,edge,i2,origin,searcher,cast_type) : r+t*u
+
+    append!(sig,i2)
+    sort!(sig)
+
+    return i2, t, _r
+end
+
+function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,edge,origin,cast_type,cc::Union{Raycast_Original_HP},debug=false,du=0.0,maxiter=2^length(r))
     x0 = xs[edge[1]]
     c1 = maximum(dot(xs[g], u) for g in origin)
     c2 = abs(c1) 
@@ -967,17 +944,10 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     offset = sqrt(norm(r-x0)) #10.0#norm(r)>100.0 ? 25.0 : 5.0
     vvv = r + u * (offset +dot(u , (x0-r)))
     i, t = _nn(searcher.tree, vvv, skip) 
-    #println(i," ",dot(u,xs[i]),", ",c)
     t == Inf && return 0, Inf, r
     i2 = i
-    #if i2 in origin
-    #    HVNearestNeighbors.global_i2[1] = i2
-    #    i, t = _nn(searcher.tree, vvv, skip)
-    #end
-    #i2==195 && print("!")
     sk = skip(i2)
-    #HVNearestNeighbors.global_i2[1] = 0
-    (i2 in origin) && error("????????? $i2, $(dot(xs[i2],u)) $c $(sk) $(typeof(searcher.tree.tree))")
+    #(i2 in origin) && error("????????? $i2, $(dot(xs[i2],u)) $c $(sk) $(typeof(searcher.tree.tree))")
     count = 0
     while i!=0
         count==maxiter && (break)
@@ -986,12 +956,8 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
         t = get_t(r,u,x0,x) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
         vvv = r+t*u
         i, t = _nn(searcher.tree, vvv)
-        if (i==i2 || (i in origin)) 
-            i=0
-        end
-        if i!=0 
-            i2 = i
-        end
+        (i==i2 || (i in origin)) && (i=0)
+        i!=0 && (i2 = i)
     end
     x2 = xs[i2]
     t = get_t(r,u,x0,x2) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
@@ -1002,137 +968,8 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
 
     return i2, (count==maxiter && i!=0) ? Inf : t, _r
 end
-@inline raycast_des(sig, r, u, xs, searcher, old ,edge,origin,cast_type) = raycast_des(sig, r, u, xs, searcher, old ,edge,origin,cast_type,searcher.parameters.method)
-@inline raycast_des(sig, r, u, xs, searcher, old ,edge,origin,cast_type,method) = raycast_des2(sig, r, u, xs, searcher, old ,edge,origin,cast_type,method)
+@inline raycast_des(sig, r, u, xs, searcher, old ,edge,origin,cast_type) = raycast_des2(sig, r, u, xs, searcher, old ,edge,origin,cast_type,searcher.parameters.method)
+@inline raycast_des(sig, r, u, xs, searcher, old ,edge,origin,cast_type,du) = raycast_des(sig, r, u, xs, searcher, old ,edge,origin,cast_type,searcher.parameters.method,du)
+@inline raycast_des(sig, r, u, xs, searcher, old ,edge,origin,cast_type,method,du) = raycast_des2(sig, r, u, xs, searcher, old ,edge,origin,cast_type,method,false,du)
 
-
-
-
-
-
-
-########################################################################################################################################
-########################################################################################################################################
-########################################################################################################################################
-
-## Raycast Hull Search
-
-########################################################################################################################################
-########################################################################################################################################
-########################################################################################################################################
-#=
-function raycast_hull(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,edge,origin,cast_type,)
-    max_int = typemax(Int64)
-    println("---------------------------------------------------------------")
-    x0 = xs[edge[1]]
-    c1 = maximum(dot(xs[g], u) for g in sig)
-    c2 = abs(c1)
-    c = c1 + c2*searcher.plane_tolerance
-    skip = _i->myskips(xs,_i,c,u,edge[1],sig)
-    vvv = r + u * dot(u , (x0-r))
-    i, t = _nn(searcher.tree, vvv, skip)
-    println(i,",",t)
-    t == Inf && return 0, Inf, r
-
-    x = xs[i]
-    t = get_t(r,u,x0,x) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
-    vvv = r+t*u
-    i, t = _nn(searcher.tree, vvv, skip)
-    println(i,",",t)
-    if i!=0
-        x = xs[i]
-        t = get_t(r,u,x0,x) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
-    end
-    _r = r+t*u
-    measure = maximum(norm(xs[s]-_r) for s in sig)
-    old_measure = measure
-
-    upper_t = t+2*measure
-    idss = _inrange(searcher.tree,_r,(1+searcher.b_nodes_tol*100)*measure)
-    lidss = length(idss)
-#    println("1: ",map(k->k<max_int ? k : 0,idss))
-    
-    println(lidss)
-    
-    lidss==0 && (return 0, Inf64, r)
-    ts = view(searcher.ts,1:lidss)
-    map!(i-> i∈origin ? 0.0 : get_t(r,u,x0,xs[i]) ,ts, idss)
-    k=0
-    while k<lidss
-        k += 1
-        if ts[k]<searcher.plane_tolerance
-            idss[k]=max_int
-            ts[k] = 0.0
-        elseif ts[k]<upper_t
-            upper_t = ts[k] 
-        end
-    end
-    println(idss,upper_t)
-    println(ts[1:lidss],searcher.plane_tolerance)
-    max_dist = 0.0
-    generator = 0
-    
-        upper_t += 10E-8#searcher.plane_tolerance
-        k=0
-        while k<lidss
-            k += 1
-            if ts[k]>upper_t
-                ts[k] = 0.0
-            elseif idss[k]<max_int
-                ts[k] = dot(u,xs[idss[k]]-x0)
-                if ts[k]>max_dist
-                    max_dist = ts[k] 
-                    generator = idss[k]
-                end
-            end
-        end
-        #println("3: ",map(k->k<max_int ? k : 0,idss))
-    #end
-    
-    println("generator: ",generator)
-    
-    generator==0 && (return 0, Inf64, r)
-#    println("   ->   ->   ->   ->   -> ",dot(u,xs[generator]-xs[edge[1]]))
-    t = get_t(r,u,x0,xs[generator])# (sum(abs2, r - xs[generator]) - sum(abs2, r - x0)) / (2 * u' * (xs[generator]-x0))
-    #println(generator,", ",r2)
-    r2 = correct_cast(r,r+t*u,u,edge,generator,origin,searcher,cast_type)
-    #if typeof(cast_type)==Raycast_By_Walkray
-    measure2 = maximum(norm(xs[s]-r2) for s in sig)
-    measure2 = max(measure2, norm(xs[generator]-r2)) * (1+0.1*searcher.b_nodes_tol)
-    k=0
-    while k<lidss
-        k += 1
-        if idss[k]<max_int && norm(xs[idss[k]]-r2)>measure2
-            idss[k] = max_int
-        end
-    end
-    append!(sig,filter!(i->i<max_int,idss))
-    sort!(sig)
-
-    return generator, t, r2
-end
-=#
-
-
-#=function add_multi_vert_inds(r,sig,idx,searcher,measure,vv)
-    xs = searcher.tree.extended_xs
-    buffer = searcher.visited
-    count = 1
-    #searcher.rare_events[9]+=1
-    for i in idx
-        i in sig && continue
-        if (abs2(sum(abs2,r-xs[i])-measure^2)<vv)
-            buffer[count] = i
-            count += 1
-        end
-    end
-    if count>1
-        newidx = view(buffer,1:(count-1))
-        sort!(append!(sig,newidx))
-        searcher.rare_events[SRI_irregular_node_calculated] += length(sig)>searcher.dimension+1
-        length(sig)>searcher.dimension+1 && println(sig)
-    end    
-end
-
-=#
 

@@ -110,6 +110,10 @@ function get_full_edge(sig,r,edge,NF_::FastEdgeIterator,xs)
     return Vector{Int64}(view(NF.sig, fullview[1:count])), convert_SVector( -1 .* ray(NF_) )
 end
 
+@inline delta_u(NF_::FastEdgeIterator{T},_) where {T} = begin 
+    delta_u(NF_.iterators[1].rays,NF_.iterators[1].dim)
+end
+
 #=function get_full_edge_basis(sig,r,edge,NF_::FastEdgeIterator,xs)
     NF=NF_.iterators[1]
     fullview,count = get_full_edge(NF.rays,NF.local_cone,NF.new_node,NF.active_nodes[1],length(NF.sig),NF.dim,NF_.ray_tol)
@@ -506,6 +510,7 @@ function update_edge(NF_::FastEdgeIterator)
     NF = NF_.iterators[1]
 
     dim = NF.dim
+    length(NF.sig)==0 && return false,NF.proto,0
     first_entry = NF.active_nodes[1]
     my_cone = NF.local_cone
     my_valid_nodes = NF.valid_nodes

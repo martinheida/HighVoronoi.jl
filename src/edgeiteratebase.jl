@@ -1,11 +1,12 @@
 
 
 
-struct General_EdgeIterator{S}
-    sig::MVector{S,Int64}
+struct General_EdgeIterator{S2,MM}
+    sig::MVector{S2,Int64}
     a::Int64
     b::Int64
-    proto::SVector{S,Int64}
+    proto::SVector{S2,Int64}
+    onb::MM#atrix{size(S2)[1]-1,size(S2)[1]-1,Float64}
 end
 #=
 function General_EdgeIterator(_sig,_Cell)
@@ -40,23 +41,37 @@ function General_EdgeIterator(_sig,r,_Cell,EI::General_EdgeIterator{S}) where {S
         for i in 1:S
             @inbounds sig[i] = _sig[i]
         end
-        return General_EdgeIterator{S}(sig,1,S,EI.proto)
+        return General_EdgeIterator(sig,1,S,EI.proto,EI.onb)
     elseif _sig[2]==_Cell
         for i in 1:S
             @inbounds sig[i] = _sig[i]
         end
-        return General_EdgeIterator{S}(sig,1,1,EI.proto)
+        return General_EdgeIterator(sig,1,1,EI.proto,EI.onb)
     else
         return EI
     end
 end
 
-@inline General_EdgeIterator(dim::INT) where {INT<:Integer} = General_EdgeIterator(MVector{dim+1,Int64}(zeros(Int64,dim+1)),dim+1,0,SVector{dim+1,Int64}(zeros(Int64,dim+1)))
-
-function General_EdgeIterator(x::Point)
-    return General_EdgeIterator(MVector{length(x)+1,Int64}(zeros(Int64,length(x)+1)),length(x)+1,0,SVector{length(x)+1,Int64}(zeros(Int64,length(x)+1)))
+@inline function General_EdgeIterator(::Type{P}) where {P} 
+    proto_0 = Int64.(round.(zeros(P)))
+    General_EdgeIterator(vcat(MVector(proto_0),1),size(P)[1]+1,0,vcat(proto_0,1),MMatrix(zeros(P)*zeros(P)'))
 end
 
+#function General_EdgeIterator(x::Point)
+#    return General_EdgeIterator(MVector{size(x)[1]+1,Int64}(zeros(Int64,length(x)+1)),length(x)+1,0,SVector{length(x)+1,Int64}(zeros(Int64,length(x)+1)))
+#end
+
+function delta_u(ei::General_EdgeIterator,u)
+    onb = ei.onb 
+    dim = size(onb)[1]
+    normalize(onb[:,1]) 
+    du = 0.0
+    for i in 1:(dim-1)
+        du += abs(dot(normalize(onb[:,i]),u))
+    end
+    #print("+")
+    return du
+end
 
 function Base.iterate(itr::General_EdgeIterator, state=itr.a)
     if state>itr.b

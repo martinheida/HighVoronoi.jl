@@ -11,7 +11,8 @@ creates a list of points (as static vectors) from a matrix.
     data = rand(3,100)
     points = VoronoiNodes(data)
 """
-VoronoiNodes(x::Matrix) = map(SVector{size(x,1),eltype(x)}, eachcol(x))
+VoronoiNodes(x::MM) where {MM<:Matrix} = map(SVector{size(x,1),eltype(x)}, eachcol(x))
+VoronoiNodes(x::MM) where {MM<:AbstractMatrix} = map(SVector{size(x,1),eltype(x)}, eachcol(x))
 VoronoiNodes(x::Matrix,hint::Int64) = map(SVector{hint,eltype(x)}, eachcol(x))
 VoronoiNodes(x::Vector{<:Vector}) = map(SVector{length(x[1])}, x)
 VoronoiNodes(x::Vector{<:SVector};perturbation=0.0) = perturbation==0.0 ? x : perturbNodes(x,perturbation)

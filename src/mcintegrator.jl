@@ -80,11 +80,13 @@ end
 
 """calculates NMC_interface new i.i.d. random directions and stores them to the dirvec variabel"""
 function new_directions!(dirvec,dim)
+    v = randn(dim) 
+    abs = 2.0
     for i in 1:(length(dirvec))
-        v=randn(dim)
-        abs=sum(abs2,v)
         while abs>1 
-            v=randn(dim)
+            for k in 1:dim
+                v[k] = randn()
+            end
             abs=sum(abs2,v)
         end        
         dirvec[i]=mystaticversion(v/sqrt(abs),dirvec[i]) 
@@ -107,12 +109,12 @@ function integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Montecar
     x = xs[_Cell]
     d = data.dimension
     lneigh = length(neighbors)
-    if _Cell==1 
+    #=if _Cell==1 
         println(x)
         for n in neighbors 
             println("$n: $(xs[n])")
         end
-    end
+    end=#
 
     # Bulk computations: V stores volumes y stores function values in a vector format
     V = 0.0
@@ -136,7 +138,7 @@ function integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Montecar
             for _ in 1:(I.NMC_bulk)
                 r = t * rand()
                 x′ = x + u * r
-                bulk_inte .+= I.bulk(x′) * r^(d-1) * t
+                bulk_inte .+= I.bulk(x′) .* r^(d-1) .* t
             end
         end
 
