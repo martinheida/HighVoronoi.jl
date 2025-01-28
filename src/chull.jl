@@ -49,7 +49,7 @@ function Base.getindex(pv::PV, i::Int) where {T<:Int,PV<:PrependedVector{T}}
     return pv.first
 end
 
-function Base.setindex!(pv::PV, value, i::Int) where {T<:Int,PV<:PrependedVector{T}}
+#=function Base.setindex!(pv::PV, value, i::Int) where {T<:Int,PV<:PrependedVector{T}}
     if i == 1
         pv.first = value - 1
     elseif i > 1 && i <= length(pv)
@@ -60,7 +60,7 @@ function Base.setindex!(pv::PV, value, i::Int) where {T<:Int,PV<:PrependedVector
     end
     return pv
 end
-
+=#
 # Unterstützung für Iteration
 Base.iterate(pv::PrependedVector) = (pv.first, 2)
 
@@ -1076,7 +1076,7 @@ function walkray_right_direction(sig,r,u,searcher,direction,xs,full_edge,edge)
         direction .= u
         (return r, true)
     end
-    sig2, r2, _ = walkray(full_edge, r, xs, searcher, sig, u, edge ) # provide missing node "j" of new vertex and its coordinate "r" 
+    sig2, r2, _ = walkray(full_edge, r, xs, searcher, sig, u, edge, 0.0 ) # provide missing node "j" of new vertex and its coordinate "r" 
     resize!(sig,length(sig2))
     sig .= sig2
     direction .= u

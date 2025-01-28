@@ -350,8 +350,11 @@ function systematic_explore_vertex_multithread(xs::Points,sig,r,_Cell,edgecount,
         (edge[1]!=_Cell || b ) && continue
         #full_edge, u = [0],r
         #csig!=sig && error("$sig vs. $csig")
-            full_edge, u = get_full_edge(sig,r,edge,edgeIterator,xs)
-        sig2, r2, success = walkray(full_edge, r, xs, searcher, sig, u, edge ) # provide missing node "j" of new vertex and its coordinate "r" 
+            full_edge, u2 = get_full_edge(sig,r,edge,edgeIterator,xs)
+            du2 = delta_u(searcher,searcher.parameters.method,edgeIterator,u2)
+            u, du = correct_du(u2,du2,edgeIterator,searcher.parameters.method,searcher)
+    
+        sig2, r2, success = walkray(full_edge, r, xs, searcher, sig, u, edge, du ) # provide missing node "j" of new vertex and its coordinate "r" 
 
         if sig2 == sig
                 pushray!(mesh,full_edge,r,u,_Cell)
@@ -417,6 +420,10 @@ function systematic_explore_cell(xs::Points,_Cell,mesh::AM,edgecount,searcher::R
         new_vertices += 1
         push!(queue, sig2=>r2)
         push!(mesh, sig2 => r2)
+        #for s in sig2 
+        #    print("$s: $(norm(r2-xs[s])), ")
+        #end
+        #println()
         queue_edges_OnFind(sig2,r2,searcher,_Cell,xs,edgecount)
     end
     while length(queue) > 0
@@ -433,13 +440,13 @@ function systematic_explore_cell(xs::Points,_Cell,mesh::AM,edgecount,searcher::R
     return new_vertices
 end
 
-function get_full_edge(sig,r,edge,::General_EdgeIterator,xs)
+function get_full_edge(sig,r,edge,ei::General_EdgeIterator,xs)
     i = 0
     while true
         i+=1
         !(sig[i] in edge) && break
     end
-    u = u_default(sig, xs, i)
+    u = u_default(sig, xs, i, ei.onb)
     return Vector{Int64}(edge), u
 end
 #=function get_full_edge_basis(sig,r,edge,::General_EdgeIterator,xs)
@@ -453,6 +460,31 @@ end
 end=#
 @inline get_full_edge_indexing(sig,r,edge,::General_EdgeIterator,xs) = edge
 
+@inline delta_u(searcher,method::Raycast_Non_General_HP,edgeIterator,u2) = delta_u(edgeIterator,u2)
+@inline delta_u(a,b,c,u2) = 0.0
+@inline correct_du(u2,du,edgeIterator,method,searcher) = u2, du
+
+correct_du(u2,du,edgeIterator::General_EdgeIterator,method::Raycast_Non_General_HP,searcher) = u2, du
+function correct_du(u2,du2,NF_::FastEdgeIterator,method::Raycast_Non_General_HP,searcher)
+    u = u2
+    if du2>1E-13
+        onb = NF_.iterators[1].rays
+        dim = length(onb)
+        try 
+            u_qr_onb(onb,u2) 
+        catch 
+            println(u2)
+            rethrow()
+        end
+        u1 = u_qr_onb(onb,u2)#u_qr(sig,xs,1)
+        u3 = dot(u2,u1)>0 ? u1 : -1.0*u1
+        onb[dim] .= u3
+        du = delta_u(onb,dim)
+        return u3, du
+    end
+
+    return u2, du2
+end
 
 function systematic_explore_vertex(xs::Points,sig,r,_Cell,edgecount,mesh,queue,boundary,searcher,edgeIterator)
     k=0
@@ -461,8 +493,13 @@ function systematic_explore_vertex(xs::Points,sig,r,_Cell,edgecount,mesh,queue,b
     for (edge,skip) in edgeIterator
         b = pushedge!(edgecount,edge,_Cell)
         (edge[1]!=_Cell || b ) && continue
-        full_edge, u = get_full_edge(sig,r,edge,edgeIterator,xs)
-        sig2, r2, success = walkray(full_edge, r, xs, searcher, sig, u, edge ) # provide missing node "j" of new vertex and its coordinate "r" 
+        full_edge, u2 = get_full_edge(sig,r,edge,edgeIterator,xs)
+        du2 = delta_u(searcher,searcher.parameters.method,edgeIterator,u2)
+        #du2 = delta_u(searcher,Raycast_Non_General_HP(),edgeIterator,u2)
+        #du2>1E-10 && error(du2)
+        #typeof(u2)==Int64 && error("")
+        u, du = correct_du(u2,du2,edgeIterator,searcher.parameters.method,searcher)
+        sig2, r2, success = walkray(full_edge, r, xs, searcher, sig, u, edge, du ) # provide missing node "j" of new vertex and its coordinate "r" 
         if sig2 == sig
             try
                 pushray!(mesh,full_edge,r,u,_Cell)

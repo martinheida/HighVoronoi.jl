@@ -17,7 +17,7 @@ struct HasKeyLock
     function HasKeyLock(nthreads::Int64)
         lock = BusyFIFOLock()
         hashes = Vector{HashedQueue}(undef, nthreads)
-        blocked = falses(nthreads) # Initialisiert mit `false` für alle Threads
+        blocked = falses(Threads.nthreads()) # Initialisiert mit `false` für alle Threads
         return new(lock, hashes, blocked)
     end
 end

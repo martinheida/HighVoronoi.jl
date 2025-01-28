@@ -374,10 +374,10 @@ end
 end
 
 # Forward setindex! to the internal index determined by mesh
-@inline function Base.setindex!(v::MeshViewVector{T, AV, M}, value, index) where {T, AV <: AbstractVector{T}, M}
-    internal_idx = internal_index(v.mesh, index)
-    setindex!(v.data, value, internal_idx)
-end
+@inline Base.setindex!(v::MeshViewVector{T, AV, M}, value, index) where {T, AV <: AbstractVector{T}, M} = setindex!(v.data, value, internal_index(v.mesh, index))
+#    internal_idx = 
+#end
+
 @inline Base.size(mvv::MeshViewVector) = (length(mvv.mesh),)
 
 
@@ -421,9 +421,9 @@ struct HVViewVector{P, D<:AbstractVector{P}} <: AbstractVector{P}
 end
 HVViewVector(d::AbstractVector{P}, s::Int64, e::Int64) where P = HVViewVector{P, typeof(d)}(d, s, e)
 
-@inline function Base.setindex!(v::HVViewVector, val, i::Int)
-    v.data[i + v.start] = val
-end
+@inline Base.setindex!(v::HVViewVector, val, i::Int) = (v.data[i + v.start] = val)
+#end
+
 
 @inline function Base.getindex(v::HVViewVector, i::Int) 
     v.data[i + v.start]
@@ -431,13 +431,13 @@ end
 
 @inline Base.size(v::HVViewVector) = (v.length,)
 
-function Base.show(io::IO, v::HVViewVector{P}) where P
+#=function Base.show(io::IO, v::HVViewVector{P}) where P
     # Extract the elements from v[1] to v[length] as a vector
     print(io,"[")
     for i in 1:v.length 
         print(io,v[i], i<v.length ? "," : "]")
     end 
-end
+end=#
 
 ################################################################################################################
 
@@ -470,7 +470,7 @@ end
 ## ShortVector 
 
 ################################################################################################################
-
+#=
 mutable struct ShortVector{T} <: AbstractVector{T}
     data::T
 end
@@ -483,7 +483,7 @@ Base.getindex(v::ShortVector{T}, i::Int) where {T} = (i == 1) ? v.data : throw(B
 Base.setindex!(v::ShortVector{T}, value::T, i::Int) where {T} = (i == 1) ? (v.data = value) : throw(BoundsError(v, i))
 Base.iterate(v::ShortVector{T}, state=1) where {T} = state == 1 ? (v.data, 2) : nothing
 Base.show(io::IO, v::ShortVector{T}) where {T} = print(io, "ShortVector(", v.data, ")")
-
+=#
 
 ################################################################################################################
 
@@ -499,23 +499,23 @@ struct CombinedSortedVector{T, V1<:AbstractVector{T}, V2<:AbstractVector{T}} <: 
 end
 
 # Implement the length function
-function Base.length(v::CombinedSortedVector)
-    return length(v.first) + length(v.second)
-end
+@inline Base.length(v::CombinedSortedVector) = length(v.first) + length(v.second)
+#end
+
 
 # Implement the size function
-function Base.size(v::CombinedSortedVector)
-    return (length(v),)
-end
+@inline Base.size(v::CombinedSortedVector) = (length(v),)
+#end
+
 
 # Implement the getindex function
-function Base.getindex(v::CombinedSortedVector, i::Int)
-    if i <= length(v.first)
-        return v.first[i]
-    else
-        return v.second[i - length(v.first)]
-    end
-end
+@inline Base.getindex(v::CombinedSortedVector, i::Int) = i <= length(v.first) ? v.first[i] : v.second[i - length(v.first)]
+
+
+
+
+
+
 
 # Implement the "in" function for optimized search
 function Base.:(in)(element, v::CombinedSortedVector)
@@ -533,13 +533,13 @@ function Base.:(in)(element, v::CombinedSortedVector)
 end
 
 # Optional: Implement the iterate function to allow iteration over the combined vector
-function Base.iterate(v::CombinedSortedVector, state=1)
-    if state <= length(v)
-        return (v[state], state + 1)
-    else
-        return nothing
-    end
-end
+@inline Base.iterate(v::CombinedSortedVector, state=1) = state <= length(v) ? (v[state], state + 1) : nothing
+
+
+
+
+
+
 
 
 
@@ -761,11 +761,12 @@ end
 
 
 u_default(a,b,c) = u_qr(a,b,c)
+u_default(a,b,c,d) = u_qr(a,b,c,d)
 # From VoronoiGraph.jl
-function u_qr(sig, xs::HN, i) where {P, HN<:AbstractVector{P}}
+function u_qr(sig, xs::HN, i, X = MMatrix{size(P)[1], size(P)[1], Float64}(undef)) where {P, HN<:AbstractVector{P}}
     n = length(sig)
     dimension = size(P)[1]
-    X = MMatrix{dimension, dimension, Float64}(undef)
+    #X = MMatrix{dimension, dimension, Float64}(undef)
     for j in 1:i-1
         X[:, j] = xs[sig[j]]
     end
@@ -775,8 +776,8 @@ function u_qr(sig, xs::HN, i) where {P, HN<:AbstractVector{P}}
     origin = X[:, end]
     X[:, end] = xs[sig[i]]
     X .-= origin
-    X = SMatrix(X)
-    Q, R = qr(X)
+    X2 = SMatrix(X)
+    Q, R = qr(X2)
     u = -Q[:,end]  * sign(R[end,end])
     return eltype(xs)(u)
 end
@@ -793,6 +794,7 @@ function u_qr_onb(onb,x0::P) where {P}
     return P(u)
 end
 
+#=
 function u_with_base(sig, xs::HN, i) where {P, HN<:AbstractVector{P}}
     n = length(sig)
     dimension = size(P)[1]
@@ -811,5 +813,6 @@ function u_with_base(sig, xs::HN, i) where {P, HN<:AbstractVector{P}}
     u = -Q[:,end]  * sign(R[end,end])
     return eltype(xs)(u), [MVector(Q[:,i]) for i in 1:size(P)[1]]
 end
+=#
 
 

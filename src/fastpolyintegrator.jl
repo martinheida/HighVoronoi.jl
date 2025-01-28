@@ -21,7 +21,7 @@ struct Fast_Polygon_Integrator{T,TT,IDC<:IterativeDimensionChecker,D}
         PI=Fast_Polygon_Integrator{typeof(integrand),typeof(Integ),typeof(idc)}( integrand, b_int, Integ, idc )
         return PI
     end=#
-    function Fast_Polygon_Integrator(Integ::HVIntegral,integrand=nothing, bulk_integral=false)
+    function Fast_Polygon_Integrator(Integ::HVIntegral,integrand, bulk_integral=false)
         b_int=(typeof(integrand)!=Nothing) ? bulk_integral : false
         enable(Integ,volume=true,integral=b_int)
         idc = IterativeDimensionChecker(mesh(Integ))
@@ -116,7 +116,7 @@ struct ThreadsafeDictHierarchy{D<:Union{AbstractDict,MultiKeyDict},S}
     dict::D
     sub::S
 end
-ThreadsafeDictHierarchy(x::P) where {P<:Point} = ThreadsafeDictHierarchy(x,StaticArrays.deleteat(x,1))
+#=ThreadsafeDictHierarchy(x::P) where {P<:Point} = ThreadsafeDictHierarchy(x,StaticArrays.deleteat(x,1))
 ThreadsafeDictHierarchy(x::SV2) where {R<:Real,SV2<:SVector{2,R}} = ThreadsafeDictHierarchy(x,x)
 function ThreadsafeDictHierarchy(x::P,dim_vec) where {P<:Point}
     proto = SVector{length(x)-length(dim_vec)+2,Int64}(zeros(Int64,length(x)-length(dim_vec)+2))
@@ -129,7 +129,7 @@ function ThreadsafeDictHierarchy(x,dim_vec::SV2) where {R<:Real,SV2<:SVector{2,R
     facets = ThreadsafeDict(Dict{typeof(proto),PolyBufferData}())
     return ThreadsafeDictHierarchy{typeof(facets),Nothing}(facets,nothing)
 end
-
+=#
 ThreadsafeMeshDictHierarchy(meshes,x::P) where {P<:Point} = ThreadsafeMeshDictHierarchy(meshes,x,StaticArrays.deleteat(x,1))
 function ThreadsafeMeshDictHierarchy(meshes,x,dim_vec)
     proto = SVector{length(x)-length(dim_vec)+2,Int64}(zeros(Int64,length(x)-length(dim_vec)+2))
@@ -171,10 +171,10 @@ function PolyBuffer(x,dim_vec::SV2,data) where {R<:Real,SV2<:SVector{2,R}}
     return PolyBuffer(facets,NoPolyBuffer(),Float64[],proto,MVector{length(x)}(x),current,falses(2^length(x)),falses(2^length(x)))
 end
 PolyBuffer(_,::SV1,d) where {R<:Real,SV1<:SVector{1,R}} = NoPolyBuffer()
-get_Edge_Level(pb::PolyBuffer) = get_Edge_Level(pb,pb.sub)
-get_Edge_Level(pb::PolyBuffer,sub::PolyBuffer) = get_Edge_Level(sub,sub.sub)
-get_Edge_Level(pb::PolyBuffer,sub) = pb
-get_Edge_Level(pb::NoPolyBuffer) = pb
+#get_Edge_Level(pb::PolyBuffer) = get_Edge_Level(pb,pb.sub)
+#get_Edge_Level(pb::PolyBuffer,sub::PolyBuffer) = get_Edge_Level(sub,sub.sub)
+#get_Edge_Level(pb::PolyBuffer,sub) = pb
+#get_Edge_Level(pb::NoPolyBuffer) = pb
 
 function reset(pb::PolyBuffer,lneigh)
     if lneigh>length(pb.generators)
@@ -485,11 +485,11 @@ function projected_distance(dc,center,empty_vector,plane,dim)
     return sqrt(dist)
 end
 
-function joint_neighs(vertices)
-    v1 = copy(first(vertices)[1])
-    intersect!(v1,keys(vertices)...)
-    return v1
-end
+#function joint_neighs(vertices)
+#    v1 = copy(first(vertices)[1])
+#    intersect!(v1,keys(vertices)...)
+#    return v1
+#end
 
 function clear_double_lists_iterative_vol(::PolyBuffer,dd,_count,data,_my_neigh)
     length(dd[_count])==0 && return

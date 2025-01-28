@@ -14,7 +14,6 @@ using GLPK
 using Plots
 using Distances
 using ProgressMeter
-#using Cthulhu
 using Base.Threads
 using Base.Threads: Atomic, atomic_cas!
 using DoubleFloats
@@ -299,6 +298,7 @@ export RaycastParameter
 export RCOriginal
 export RCCombined
 export RCNonGeneral
+export RCNonGeneralFast
 export RCNonGeneralHP
 export MultiThread
 export SingleThread

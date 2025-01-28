@@ -10,7 +10,7 @@ Base.islocked(::Nothing) = false
 end
 
 
-
+#=
 struct BusyLock
     locked::Atomic{Bool}
 
@@ -43,7 +43,7 @@ end
 @inline function Base.islocked(bl::BusyLock)
     return bl.locked[]
 end
-
+=#
 struct BusyFIFOLock
     head::Atomic{Int64}
     tail::Atomic{Int64}
@@ -71,7 +71,7 @@ end
     #unlock(bfl.lock)
 end
 
-@inline function Base.trylock(bfl::BusyFIFOLock)
+#=@inline function Base.trylock(bfl::BusyFIFOLock)
     #speedlock(bfl.lock)
     if bfl.tail[] == bfl.head[]
         tail = atomic_add!(bfl.tail, 1)
@@ -84,7 +84,7 @@ end
     #    unlock(bfl.lock)
         return false
     end
-end
+end=#
 
 @inline function Base.islocked(bfl::BusyFIFOLock)
     return bfl.head[]<bfl.tail[]

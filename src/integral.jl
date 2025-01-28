@@ -33,7 +33,7 @@ Voronoi_Integral(visc::Voronoi_Integral_Store_Container_1,mesh::T) where {P<:Poi
 pack_integral(I::VI) where VI<:Voronoi_Integral = Voronoi_Integral_Store_Container_1(I)
 unpack_integral(I::VI,m) where VI<:Voronoi_Integral_Store_Container_1 = Voronoi_Integral(I,m)
 
-function Voronoi_Integral(mesh; get_volume=true, get_area=true, integrate_bulk=false, integrate_interface=false,get_neighbors=true)
+#=function Voronoi_Integral(mesh; get_volume=true, get_area=true, integrate_bulk=false, integrate_interface=false,get_neighbors=true)
     l=length(nodes(mesh))
     l_volume=get_volume*l
     l_area=get_area*l
@@ -49,7 +49,7 @@ function Voronoi_Integral(mesh; get_volume=true, get_area=true, integrate_bulk=f
 #    emptyint=Int64[]
 #    for i in 1:l VI.neighbors[i]=copy(emptyint) end
     return VI
-end
+end=#
 function Voronoi_Integral(mesh::T, neigh::Vector{Vector{Int64}}) where T
     # Initialize the other vectors with zero length
     volumes = Float64[]
@@ -218,9 +218,7 @@ function length(Integral::Voronoi_Integral)
     return length(Integral.MESH)
 end
 
-function dimension(Integral::VI) where {P,VI<:Voronoi_Integral{P}}
-    return length(zeros(P))
-end
+@inline dimension(Integral::VI) where {P,VI<:Voronoi_Integral{P}} = length(zeros(P))
 
 add_virtual_points(Integral::Voronoi_Integral, xs) = prepend!(Integral,xs)
 @doc raw"""
@@ -330,7 +328,7 @@ end
     copy(Integral::Voronoi_Integral)
     returns a autonomous copy of the 'Integral'
 """
-function copy(Integral::Voronoi_Integral,new_mesh = copy(Integral.MESH);volumes=true,area=true,bulk_integral=true,interface_integral=true,neighbors=true,kwargs...)
+#=function copy(Integral::Voronoi_Integral,new_mesh = copy(Integral.MESH);volumes=true,area=true,bulk_integral=true,interface_integral=true,neighbors=true,kwargs...)
     g_v=volumes && length(Integral.volumes)>0
     g_a=neighbors && area && length(Integral.area)>0
     i_b=bulk_integral && length(Integral.bulk_integral)>0
@@ -359,7 +357,7 @@ function copy(Integral::Voronoi_Integral,new_mesh = copy(Integral.MESH);volumes=
     end
     return new_Integral
 end
-
+=#
 
 @inline get_neighbors(I::Voronoi_Integral,_Cell,::StaticFalse) = I.neighbors[_Cell]
 

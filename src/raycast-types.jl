@@ -246,7 +246,7 @@ const RCOriginal = Raycast_Original()
 struct Raycast_Original_Safety end
 const RCOriginalSafety = Raycast_Original_Safety()
 struct Raycast_Non_General end
-const RCNonGeneral = Raycast_Non_General()
+const RCNonGeneralFast = Raycast_Non_General()
 struct Raycast_Non_General_Skip end 
 const RCNonGeneralSkip = Raycast_Non_General_Skip()
 struct Raycast_Combined end
@@ -255,6 +255,7 @@ const RCCombined = Raycast_Combined()
 abstract type Raycast_HP end
 struct Raycast_Non_General_HP<:Raycast_HP end
 const RCNonGeneralHP = Raycast_Non_General_HP()
+const RCNonGeneral = RCNonGeneralHP
 struct Raycast_Original_HP<:Raycast_HP end
 const RCOriginalHP = Raycast_Original_HP()
 RaycastHP(::Raycast_Original) = RCOriginalHP
@@ -408,7 +409,7 @@ function RaycastIncircleSkip(xs_::HN,dom,parameters::NewRaycastParameter{FLOAT,T
     #sizehint!(FEIStorage_global,length(xs)*2^(length(xs[1])-1))    
     return RaycastIncircleSkip( tree, lxs, length(dom), zeros(Int64,lxs+length(dom)+3), z1d_1, 
     BitVector(zeros(Int8,length(xs))), z2d_1, z2d_2, z1d_2, z1d_3, z1d_4, dom, 
-    zeros(Int64,SRI_max),dim,EI,EI2,xs,General_EdgeIterator(size(eltype(xs))[1]),General_EdgeIterator(size(eltype(xs))[1]),FEIStorage_global,parameters,HPCorrector(dim,parameters.method))
+    zeros(Int64,SRI_max),dim,EI,EI2,xs,General_EdgeIterator(P),General_EdgeIterator(P),FEIStorage_global,parameters,HPCorrector(dim,parameters.method))
 end
 
 function copy_RaycastIncircleSkip(original::RaycastIncircleSkip{T, TTT, TTTTT, TTTTTT, FEI, PA, FLOAT}) where {T, TTT, TTTTT, TTTTTT, FEI, PA, FLOAT}
