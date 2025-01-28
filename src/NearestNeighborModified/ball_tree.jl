@@ -11,7 +11,7 @@ struct HVBallTree{V <: AbstractVector,N,T,M <: Metric} <: HVNNTree{V,M}
     tree_data::TreeData                   # Some constants needed
     reordered::Bool                       # If the data has been reordered
 end
-
+#=
 # When we create the bounding spheres we need some temporary arrays.
 # We create a type to hold them to not allocate these arrays at every
 # function call and to reduce the number of parameters in the tree builder.
@@ -235,3 +235,4 @@ function inrange_kernel!(tree::HVBallTree,
     end
     return count
 end
+=#
