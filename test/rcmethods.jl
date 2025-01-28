@@ -9,6 +9,7 @@
     end
     @test test(RCCombined)
     @test test(RCOriginal)
-    @test test(RCCombined)
+    @test test(RCNonGeneralFast)
+    @test test(RCNonGeneral)
 end
 
