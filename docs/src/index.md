@@ -2,13 +2,17 @@
 CurrentModule = HighVoronoi
 ```
 
-# HighVoronoi 1.4.0: $N\log N$ complexity Parallel Computed Voronoi Grids in $\mathbb{R}^d$ and on $\mathbb{S}^d$
+# HighVoronoi 1.4.1: $N\log N$ complexity Parallel Computed Voronoi Grids in $\mathbb{R}^d$ and on $\mathbb{S}^d$
 
 Documentation for [HighVoronoi](https://github.com/martinheida/HighVoronoi.jl). Voronoi mesh generation in arbitrary dimensions + Finite Volume setup, also for vertices with $d+k$, $k>1$ generators.
 
 - [QUICK START on VORONOI generation: Click here](@ref quickVG) / [The ABSTRACT WORKFLOW is here](@ref workflowgeometry) 
 - [QUICK START on FINITE VOLUME methods: Click here](@ref QuickFV) / [The ABSTRACT WORKFLOW is here](@ref workflowfv)  
 - [Toy file for testing numerical solver](@ref toyfile)
+
+### News to version 1.4.1:
+
+- Patches for increased performance and improved stability on unbounded domains. New parameter `RCNonGeneralFast` (See [here](@ref boostedraycast)). 
 
 ### News to version 1.4.0:
 
