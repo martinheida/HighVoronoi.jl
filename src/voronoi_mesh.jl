@@ -364,7 +364,7 @@ end
     changes in 'mesh' will not affect 'new_mesh' and vice versa.
 
 """
-function copy(mesh::VM;kwargs...) where VM<:Voronoi_MESH
+#=function copy(mesh::VM;kwargs...) where VM<:Voronoi_MESH
     bv_type = typeof(mesh.boundary_Vertices)
     bv = bv_type()
     xs = copy(mesh._nodes)
@@ -385,7 +385,7 @@ function copy(mesh::VM;kwargs...) where VM<:Voronoi_MESH
         error("3")
     end
     return VM(xs,copy(mesh.vertices;kwargs...),bv,c_rt(mesh.references),copy(mesh.length_ref),mesh.initial_length,Int64[],mesh.parameters)
-end
+end=#
 
 function keepat!(mesh::ClassicMesh,entries)
     keepat!(mesh._nodes,entries)
