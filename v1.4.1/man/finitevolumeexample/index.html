@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Finite Volume Examples · HighVoronoi.jl</title><script data-outdated-warner src="../../assets/warner.js"></script><link rel="canonical" href="https://martinheida.github.io/HighVoronoi.jl/man/finitevolumeexample/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">HighVoronoi.jl</a></span></div><form class="docs-search" action="../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../convexhull/">Convex Hulls</a></li><li><span class="tocitem">Manual Voronoi</span><ul><li><a class="tocitem" href="../short/">Examples Voronoi Generation</a></li><li><a class="tocitem" href="../workflowmesh/">Workflow</a></li><li><a class="tocitem" href="../geometry/">Voronoi: Nodes and Geometry, Integrators</a></li><li><a class="tocitem" href="../sphere/">Voronoi diagrams on spheres</a></li><li><a class="tocitem" href="../raycast/">Voronoi: Raycast methods</a></li><li><a class="tocitem" href="../multithread/">Multithreading</a></li><li><a class="tocitem" href="../database/">Voronoi: Database Structure</a></li><li><a class="tocitem" href="../improving/">Improving Voronoi meshes for FV </a></li><li><a class="tocitem" href="../boundaries/">Boundaries</a></li><li><a class="tocitem" href="../advanced/">Advanced Options</a></li><li><a class="tocitem" href="../periodic/">Highspeed periodic geometries</a></li><li><a class="tocitem" href="../refine/">Refinement and Substitution of Subdomains</a></li><li><a class="tocitem" href="../projection/">Projection operators</a></li><li><a class="tocitem" href="../metapost/">Graphical Output in 2D and 3D</a></li><li><a class="tocitem" href="../errors/">Sources of errors and loss in performance</a></li></ul></li><li><span class="tocitem">Manual Finite Volume</span><ul><li class="is-active"><a class="tocitem" href>Finite Volume Examples</a><ul class="internal"><li><a class="tocitem" href="#Setting-up-a-FV-Problem"><span>Setting up a FV Problem</span></a></li><li><a class="tocitem" href="#Plotting-the-Result"><span>Plotting the Result</span></a></li><li><a class="tocitem" href="#Other-Simulation-Examples"><span>Other Simulation Examples</span></a></li></ul></li><li><a class="tocitem" href="../workflowfv/">Workflow in FV</a></li><li><a class="tocitem" href="../finitevolume/">Finite Volume Tutorial</a></li><li><a class="tocitem" href="../functions/">Functions</a></li><li><a class="tocitem" href="../integrals/">(More) Integrals</a></li><li><a class="tocitem" href="../toyfvfile/">Some code to test and play around</a></li></ul></li><li><a class="tocitem" href="../../showcase/">Intentions of use (EXAMPLES)</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Manual Finite Volume</a></li><li class="is-active"><a href>Finite Volume Examples</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Finite Volume Examples</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/martinheida/HighVoronoi.jl/blob/main/docs/src/man/finitevolumeexample.md#" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="QuickFV"><a class="docs-heading-anchor" href="#QuickFV">Quick Introduction to Finite Volume Problems</a><a id="QuickFV-1"></a><a class="docs-heading-anchor-permalink" href="#QuickFV" title="Permalink"></a></h1><p>In what follows we give a short introduction on how to use the Finite Volume functionality of <code>HighVoronoi.jl</code> in 2d.</p><h2 id="Setting-up-a-FV-Problem"><a class="docs-heading-anchor" href="#Setting-up-a-FV-Problem">Setting up a FV Problem</a><a id="Setting-up-a-FV-Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Setting-up-a-FV-Problem" title="Permalink"></a></h2><h3 id="parameters"><a class="docs-heading-anchor" href="#parameters">parameters</a><a id="parameters-1"></a><a class="docs-heading-anchor-permalink" href="#parameters" title="Permalink"></a></h3><p>Since we want to reuse our code below, we define a set of parameters of the following form that will be passed to the FV code:</p><pre><code class="language-julia hljs">set = ( # only dirichlet boundary
+    u_exact = u,# expected exact solution
+    κ = k,# parameter field
+    RHS = rhs, # expected -[∇⋅(κ∇u)](x),
+    domain = d, # of form cuboid(2,periodic=[???]),
+    dirichlet_boundary = db, # indeces of Dirichlet boundaries of `domain` 
+    neumann_boundary = nb, # indeces of Neumann boundaries of `domain`
+    neumann = n, # The Neumann condition for -(κ∇u)⋅ν = n on the neumann boundary
+)</code></pre><p>a simple example is the following one:</p><pre><code class="language-julia hljs">set1 = ( # only dirichlet boundary
+    u_exact = x-&gt;sin(x[1]*π) * sin(x[2]*π)+1,
+    κ = x-&gt;1.0,
+    RHS = x-&gt;2*π^2 * sin(x[1]*π) * sin(x[2]*π),
+    domain = cuboid(dimension,periodic=[]), # no periodic boundaries
+    dirichlet_boundary = collect(1:4), # all four boundaries are Dirichlet
+    neumann_boundary = nothing # no Neumann condition
+)</code></pre><h3 id="simulation-code"><a class="docs-heading-anchor" href="#simulation-code">simulation code</a><a id="simulation-code-1"></a><a class="docs-heading-anchor-permalink" href="#simulation-code" title="Permalink"></a></h3><p>The numerical calculations are done by the following code. It does the following:</p><ul><li>generate the Voronoi geometry</li><li>integrate <span>$\kappa$</span> and <span>$RHS$</span> over cells and interfaces and calculates the interface areas and cell volumes</li><li>it uses the subsequently defined <code>SQRA_flux</code> and <code>myRHS</code> do set up the structure of the flux <span>$j=-\kappa\nabla u$</span> and the right hand side from <code>RHS</code>.</li><li>it defines the dirichlet boundary condition <code>compatibility</code> from the expected exact solution</li><li>it defines the Neumann boundary condition <code>neumann</code></li><li>it calculates the matrix <code>A</code> and the right hand side <code>f</code> that describe the problem <span>$-\nabla\cdot(\kappa\nabla u)=RHS$</span> as a finite dimensional linear problem</li><li>it uses the <code>IterativeSolvers</code> library to solve <code>A*solution_u = f</code></li><li>it calculates the <span>$L^2$</span>-error between the exact and the numerical solution</li><li>it returns the nodes and values of the discrete solution.</li></ul><pre><code class="language-julia hljs">function SQRA_flux(;para_i,para_j,mass_ij,normal,kwargs...) 
+    # kwargs... collects all additional parameters which are not used in the current function.
+    weight = norm(normal)^(-1) * mass_ij * sqrt(para_i[:κ]*para_j[:κ])
+    return weight, weight
+end
+
+myRHS(;para_i,mass_i,kwargs...) = mass_i * para_i[:f] 
+
+function simulation(set)
+    # account for periodicity in the right hand side
+    new_RHS = HighVoronoi.PeriodicFunction(set.RHS,set.domain)
+    # modify original parameter set 
+        # replace RHS by periodic version,
+        # set density distribution of points to x-&gt;1.0 in case nothing else is provided by user
+        # set neumann condition to zero if nothing else is provided by user 
+    set = (density=x-&gt;1.0, neumann = x-&gt;0.0, dirichlet_boundary=nothing, neumann_boundary=nothing, set..., RHS=new_RHS)
+    # generate approximately 400 points distributed according to set.density
+    nodes = VoronoiNodes(1000;density=set.density,domain=cuboid(2,periodic=[]))
+    # calculate Voronoi tessellation
+    VG_basis = VoronoiGeometry(nodes,set.domain,integrator=HighVoronoi.VI_GEOMETRY)
+    # integrate parameters
+    VG_κ = VoronoiGeometry(VG_basis, integrator=HighVoronoi.VI_POLYGON, integrand=x-&gt;[set.κ(x),set.RHS(x)])
+    #retrieve total volume of domain to verify volume integration works properly
+    vd = VoronoiData(VG_κ)
+    println(&quot;vol: $(sum(vd.volume))&quot;)
+
+    # set up fluxes and RHS
+    vfvp = VoronoiFVProblem(VG_κ,  
+                              integralfunctions = (κ = set.κ, f = set.RHS, ), 
+                              fluxes = ( j1 = SQRA_flux, ),
+                              rhs_functions = (F = myRHS,) )
+    # define functions that can be applied as boundary conditions
+    compatibility = FVevaluate_boundary(x-&gt;set.u_exact(x))
+    neumann = FVevaluate_boundary(x-&gt;set.neumann(x))
+    # construct linear system from fluxes, RHS and boundary conditions
+    r,c,v,f = linearVoronoiFVProblem(vfvp, flux = :j1, rhs = :F, 
+            Dirichlet = set.dirichlet_boundary!=nothing ? (set.dirichlet_boundary,compatibility) : nothing, 
+            Neumann = set.neumann_boundary!=nothing ? (set.neumann_boundary,neumann) : nothing)
+    A = sparse(r,c,v) # a sparse matrix with rows `r`, coloumns `c` and values `v`
+    # solve linear system using IterativeSolvers-Package
+    solution_u = cg(A,f) # conjugate gradients
+    # print out approximate L²-error between exact and numerical solutions 
+    println(&quot;Approximate L²-error: &quot;,sqrt(sum(map(k-&gt;abs2(solution_u[k]-set.u_exact(nodes[k]))*VG_κ.Integrator.Integral.volumes[k],1:length(nodes)))))
+    
+    return nodes, solution_u  # return nodes and values for plotting...
+
+end
+
+
+nodes, values = simulation(set1)
+</code></pre><h2 id="Plotting-the-Result"><a class="docs-heading-anchor" href="#Plotting-the-Result">Plotting the Result</a><a id="Plotting-the-Result-1"></a><a class="docs-heading-anchor-permalink" href="#Plotting-the-Result" title="Permalink"></a></h2><p>We may use the data obtained above for a plot of <code>values</code> against <code>nodes</code>:</p><pre><code class="language-julia hljs">using Plots
+
+function plot_2d_surface(nodes, values)
+    # The following two lines are necessary in order for the plot to look nicely
+    func = StepFunction(nodes,values) # some minor HighVoronoi tool
+    new_nodes = vcat([VoronoiNode([k/10,j*1.0]) for k in 0:10, j in 0:1], [VoronoiNode([j*1.0,k/10]) for k in 1:9, j in 0:1])
+    append!(nodes,new_nodes)
+    append!(values,[func(n) for n in new_nodes])
+    
+    x = [node[1] for node in nodes]
+    y = [node[2] for node in nodes]
+    
+    p = surface(x, y, values, legend=false)
+    xlabel!(&quot;X&quot;)
+    ylabel!(&quot;Y&quot;)
+    zlabel!(&quot;Values&quot;)
+    title!(&quot;2D Surface Graph&quot;)
+    
+    display(p)
+end
+
+plot_2d_surface(nodes, values)
+</code></pre><h2 id="Other-Simulation-Examples"><a class="docs-heading-anchor" href="#Other-Simulation-Examples">Other Simulation Examples</a><a id="Other-Simulation-Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Other-Simulation-Examples" title="Permalink"></a></h2><p>Instead of <code>set1</code> from above, try out the following examples.</p><div class="admonition is-warning"><header class="admonition-header">Mind the regularity</header><div class="admonition-body"><p>If you want to verify the algorithm with known examples, keep in mind that the expected solution should be <span>$C^2$</span> accross the periodic boundary or you may find unexpected behavior...</p></div></div><pre><code class="language-julia hljs">set2 = ( # dirichlet boundary and periodic in 1st dim
+    u_exact = x-&gt;sin(x[1]*2*π) * sin(x[2]*π),
+    κ = x-&gt;1.0,
+    RHS = x-&gt;5*π^2 * sin(x[1]*2*π) * sin(x[2]*π),
+    domain = cuboid(dimension,periodic=[1]), # periodic in x[1]
+    dirichlet_boundary = collect(3:4),
+    neumann_boundary = nothing, # no neumann
+    neumann = x-&gt; π* sin(x[2]*π)# 0#-π*cos(x[1]*π) * sin(x[2]*π)
+)
+
+set3 = ( # only dirichlet boundary
+    u_exact = x-&gt;x[1]^2,
+    κ = x-&gt;1.0,
+    RHS = x-&gt;-2,
+    domain = cuboid(dimension,periodic=[]),
+    dirichlet_boundary = collect(1:4),
+    neumann_boundary = nothing,
+    neumann = x-&gt;0.0
+)
+
+set4 = ( # Neumann on 1 and Dirichlet on 2-4 boundary
+    u_exact = x-&gt;x[1]^2,
+    κ = x-&gt;1.0,
+    RHS = x-&gt;-2.0,
+    domain = cuboid(dimension,periodic=[]),
+    dirichlet_boundary = collect(2:4),
+    neumann_boundary = 1,
+    neumann = x-&gt;-2.0
+)
+
+set5 = ( # periodic in x[1] and dirichlet in x[2] boundary
+    u_exact = x-&gt;sin(x[1]*π)^2 * sin(2*x[2]*π),
+    κ = x-&gt;1.0,
+    RHS = x-&gt;2*π^2 * (1-2*cos(2*π*x[1]))*sin(2*π*x[2]),
+    domain = cuboid(dimension,periodic=[1]),
+    dirichlet_boundary = collect(3:4),
+)
+
+set6 = ( # only dirichlet boundary
+    u_exact = x-&gt;sin(x[1]*2*π)^2 * sin(2*x[2]*π),
+    κ = x-&gt;1.0,
+    RHS = x-&gt;π^2 * (1-5*cos(4*π*x[1]))*sin(2*π*x[2]),
+    domain = cuboid(dimension,periodic=[]),
+    dirichlet_boundary = collect(1:4)
+)
+</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../errors/">« Sources of errors and loss in performance</a><a class="docs-footer-nextpage" href="../workflowfv/">Workflow in FV »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Tuesday 28 January 2025 13:29">Tuesday 28 January 2025</span>. Using Julia version 1.11.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
