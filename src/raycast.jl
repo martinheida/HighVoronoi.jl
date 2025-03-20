@@ -131,8 +131,9 @@ function walkray(full_edge::Sigma, r::Point, xs::Points, searcher, sig, u, edge,
         k+=1
         !(sig[k] in full_edge) && break
         if k==lsig 
-            println("There is an odd situation")
-            error("$sig, $full_edge")
+            println("There is an odd situation at $sig, $r with ede $full_edge")
+            return sig, r, false
+            #error("$sig, $full_edge")
         end
     end
     Rest = sig[k]
