@@ -284,13 +284,13 @@ function _integrate(Integrator, domain, calculate, iterate,progress; # =1:(lengt
         #print("$(TODO[k]), ")
         V = 0.0 
         err = false
-        try
+        #try
             V=integrate_cell(vol,ar,bulk,inter,TODO[k],iterate, calculate, data,Integrator)
-        catch
-            err = true
-            println(TODO[k])
-        end
-        err && error()
+        #catch
+        #    err = true
+        #    println(TODO[k])
+        #end
+        #err && error()
         #print(Threads.threadid())
         if vol
             vol_sum+=V #Integral.volumes[TODO[k]]

@@ -68,8 +68,8 @@ function descent(xs::Points, searcher::RaycastIncircleSkip, start)
             while k<=dim  # find an additional generator for each dimension
                 loop_counter += 1
                 #println("$k ---------------------------------------------------- ")
-                u = 0*r
-                u += randray(xs[minimal_edge[1:k]],map(i->view(searcher.vectors,:,i),1:(dim-1)),count,xs,start)
+                u2 = 0*r
+                u = u2 + randray(xs[minimal_edge[1:k]],map(i->view(searcher.vectors,:,i),1:(dim-1)),count,xs,start)
                 #=if k==1
                     u = -r
                     u = normalize(u)
@@ -104,8 +104,8 @@ function descent(xs::Points, searcher::RaycastIncircleSkip, start)
     end
     sort!(sig)
     r = project(r,searcher.domain)
-    r,_ = walkray_correct_vertex(r, sig, searcher, minimal_edge,minimal_edge[dim+1])
-    return (sig, r)
+    r_final,_ = walkray_correct_vertex(r, sig, searcher, minimal_edge,minimal_edge[dim+1])
+    return (sig, r_final)
 end
 
 ####################################################################################################################################
@@ -207,7 +207,7 @@ end=#
     return ret
 end=#
 
-function randray(xs::Points,v,count::Int64=0,base=xs,start=1)
+function randray(xs::HVN,v,count::Int64=0,base=xs,start=1) where {P,HVN<:HVNodes{P}}
     k = length(xs)
     d = length(xs[1])
 #    println(typeof(xs),xs)
@@ -234,7 +234,7 @@ function randray(xs::Points,v,count::Int64=0,base=xs,start=1)
         u .-= dot(u, v[i]) .* v[i]
     end
     normalize!(u)
-    return u
+    return P(u)
 end
 
 
@@ -526,11 +526,16 @@ function raycast_des2(sig::Sigma, old_r, u, xs, searcher::RaycastIncircleSkip, o
 
 end
 
-function get_scale(sig, xs,r)
-    lsig = length(sig)
+function get_scale(u, x0,_r)
+    delta = _r-x0 
+    ref = sum(abs2,delta)
+    vert = dot(u,delta)^2
+    hori = vert>ref ? 0*ref : ref-vert 
+    return sqrt(hori/ref)
+#=    lsig = length(sig)
     mid = sum(i->xs[i],sig)/lsig
     dist = sum(i->dot(xs[i]-mid,xs[i]-mid),sig)/lsig
-    return sqrt(dist/dot(xs[sig[1]]-r,xs[sig[1]]-r))
+    return sqrt(dist/dot(xs[sig[1]]-r,xs[sig[1]]-r))=#
 end
 
 function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,edge,origin,cast_type,::RCType,debug=false,du=0.0) where {RCType<:Union{Raycast_Non_General,Raycast_Non_General_Skip}}
@@ -564,7 +569,7 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     old_measure = measure
 
     upper_t = t+2*measure
-    scale = get_scale(sig,xs,_r)
+    scale = get_scale(u, x0,_r)
     idss = _inrange(searcher.tree,_r,(1+max(1E-12,searcher.b_nodes_tol*100*scale))*measure)
     lidss = length(idss)
 #    println("1: ",map(k->k<max_int ? k : 0,idss))
@@ -619,6 +624,7 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     end
     append!(sig,filter!(i->i<max_int,idss))
     sort!(sig)
+    length(sig)>7 && error("$sig, $r2, $r")
     #println(r2)
     return generator, t, r2
 end
@@ -709,7 +715,7 @@ function ts_skip(i,buffer,xs,edge,x0,r,u,du)
     return t2__>t
 end
 
-function    get__r(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,full_error,du,debug,first_t)
+function get__r(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,full_error,du,debug,first_t)
     _i0 = edge[1]
     buffer = MVector{1,Float64}(first_t)
     running = true
@@ -718,15 +724,17 @@ function    get__r(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,full_error,du,de
     ii = 1
     t2__buffer = first_t
     my_dist = norm(x0-vvv)
+    ret_i = 0
     while running
         ii += 1
         ii==4 && break
-        ii>500 && (debug=true)
-        ii>505 && error("")
+        #ii>500 && (debug=true)
+        #ii>505 && error("")
     #    print(ii)
         i, _ = _nn(searcher.tree, _r, i_->skip(i_))# || ts_skip(i_,buffer,xs,edge,x0,r,u,du))
         debug && print("d: $i, $_r, $my_dist  --  ")
         i==_i0 && break
+        ret_i = i
         if i!=0
             #print("$i - ")
             _modified = true
@@ -760,7 +768,7 @@ function    get__r(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,full_error,du,de
         my_dist = norm(xs[i]-_r)
         #running = false
     end 
-    return _r,t2__buffer
+    return _r, t2__buffer, ret_i
 end
 
 #=function get__r_2(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,_,_,debug,first_t)
@@ -781,8 +789,11 @@ end
     return _r,t
 end=#
 
-function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,edge,origin,cast_type,::Raycast_Non_General_HP,debug=false,du=1E-14)
+@inline debugprint(a) = nothing
+function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,edge,origin,cast_type,method::HPUnion,debug=false,du=1E-14)
     max_int = typemax(Int64)
+    #println(sig)
+    #csig = copy(sig)
     x0 = xs[edge[1]]
     
     full_mode = typeof(cast_type)==Raycast_By_Walkray
@@ -795,30 +806,67 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     i, t = _nn(searcher.tree, vvv, skip)
     #t==inf && error("")
     t == Inf && return 0, Inf, r
+    debugprint("a")
 
     x = xs[i]
     t,full_error = get_t_hp_(r,u,x0,x,du) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
     #__t2 = t
     first_t = t
     _vvv = r+t*u
-    scale = get_scale(sig,xs,_vvv)
-    relative_error = full_error / norm(_vvv)
+    scale = get_scale(u, x0,_vvv)
+    relative_error = full_error / norm(_vvv-r)
 
+    debugprint("b")
     full_mode &= (relative_error>1E-10 || full_error>1E-8/max(scale,1E-4))
     t += get_t_hp_(_vvv,u,x0,x,du)[1]
     _vvv_tu = _vvv+t*u
     full_mode && prepare_vertex_calculation(sig,xs,searcher.hp_vars)
     vvv = full_mode ? vertex_calculation_hp(edge,xs,searcher.hp_vars,_vvv_tu,u,i) : _vvv_tu
     debug && println(vvv,t)
-    _r,t = get__r(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,full_error,du,debug,first_t)
+    _r, t, new_i = get__r(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,full_error,du,debug,first_t)
     #_r,t = get__r_2(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,full_error,du,debug,first_t)
+    new_i==0 && (return 0, Inf, r)
+    debugprint("c")
+    new_method = false
+    if test_for_Raycast_Non_General_Asymptotic_General_HP(method,u,_r,x0)
+        print("hier ")
+        # the following is copied from RC_General_HP
+        new_method = true
+        i2 = i = new_i
+        #i, t = _nn(searcher.tree, _r)
+        #(i==i2 || (i in sig)) && (i=0)
+        #i!=0 && (i2 = i)
+        count = 1
+        current_t = t
+        while i!=0
+            count += 1
+            count > 100 && error("")
+            x = xs[i]
+            t = get_t_hp(r,u,x0,x) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
+            t>=current_t && break 
+            current_t = t
+            #vvv = full_mode ? correct_cast(r,r+t*u,u,edge,i,origin,searcher,cast_type) : r+t*u
+            vvv = correct_cast_hp(edge,xs,searcher.hp_vars,r+t*u,u,i,cast_type,full_mode)
+            i, t = _nn(searcher.tree, vvv)
+            (i==i2 || (i in sig)) && (i=0)
+            i!=0 && (i2 = i)
+        end
+        x2 = xs[i2]
+        t = get_t_hp(r,u,x0,x2) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
+
+        append!(sig,i2)
+        sort!(sig)
+    
+        return i2, t, correct_cast_hp(edge,xs,searcher.hp_vars,r+t*u,u,i2,cast_type,full_mode) 
+    end
+
     debug && println(_r,t)
 
     measure = maximum(norm(xs[s]-_r) for s in edge)
     old_measure = measure
     #debug && println(vvv-_r)
     upper_t = t*1.0000000001 #+2*measure
-    idss = _inrange(searcher.tree,_r,(1+max(1E-12,searcher.b_nodes_tol*100*scale))*measure)
+    idss = _inrange(searcher.tree,_r,(1+max(relative_error,searcher.b_nodes_tol*10*scale))*measure)
     #println(idss)
     lidss = length(idss)
     debug && println(idss)
@@ -828,6 +876,8 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     ts = view(searcher.ts,1:lidss)
     map!(ii-> ii∈origin ? 0.0 : get_t_hp(r,u,x0,xs[ii]) ,ts, idss)
     k=0
+    debugprint("d")
+
     while k<lidss
         k += 1
         #ts[k] += get_t_hp(r+ts[k]*u,u,x0,xs[idss[k]])
@@ -848,7 +898,7 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     max_dist = 0.0
     generator = 0
     
-        upper_t += 10E-8#searcher.plane_tolerance
+        upper_t += min(10E-8,(10+size(x0)[1])*full_error)#searcher.plane_tolerance
         k=0
         while k<lidss
             k += 1
@@ -868,11 +918,20 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     debug && println(ts)
     debug && println(idss)
     generator==0 && (return 0, Inf64, r)
+    debugprint("e")
 
     t = get_t_hp(r,u,x0,xs[generator])# (sum(abs2, r - xs[generator]) - sum(abs2, r - x0)) / (2 * u' * (xs[generator]-x0))
     r2 = correct_cast_hp(edge,xs,searcher.hp_vars,r+t*u,u,generator,cast_type,full_mode)
-    measure2 = maximum(norm(xs[s]-r2) for s in sig)
-    measure2 = max(measure2, norm(xs[generator]-r2)) * (1+scale*searcher.b_nodes_tol)#+1E-16)
+    minmeas = maxmeas = norm(xs[generator]-r2)
+    for s in sig 
+        n2 = norm(xs[s]-r2) 
+        minmeas = min(minmeas,n2)
+        maxmeas = max(maxmeas,n2)
+    end
+    #measure2 = max(maximum(norm(xs[s]-r2) for s in sig),norm(xs[generator]-r2))
+    #max_delta = max(maximum(abs(norm(xs[s]-r2)-measure2) for s in sig),abs(norm(xs[generator]-r2)-measure2))
+    measure2 = maxmeas+scale*(maxmeas-minmeas)
+#    measure2 = max(measure2, norm(xs[generator]-r2)) * (1+scale*searcher.b_nodes_tol)#+1E-16)
     k=0
     while k<lidss
         k += 1
@@ -888,6 +947,22 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     debug && norm(xs[edge[1]]-r2)
     append!(sig,filter!(i->i<max_int,idss))
     sort!(sig)
+    #=if length(sig)>7 
+        println()
+#        println(csig)
+        println("$sig, $r2, $r")
+        println(measure2)
+#        println(maximum(norm(xs[s]-r2) for s in csig))
+        println(norm(xs[generator]-r2))
+        println("scale: ",scale)
+        println(origin)
+        map!(ii-> ii∈origin ? 0.0 : get_t_hp(r,u,x0,xs[ii]) ,ts, sig)
+        for iii in 1:length(sig) 
+            s = sig[iii] 
+            println("$s: $(norm(r2-xs[s])), $(ts[iii])")
+        end
+        error()
+    end=#
     #test = abs(abs(dot(r2-r,u)/norm(r2-r))-1)
     #test>1E-6 && error(test,", ",dot(r2-r,u),", ",norm(r2-r))
     return generator, t, r2
@@ -909,7 +984,7 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     first_t, full_error = get_t_hp_(r,u,x0,xs[i],du) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
     current_t = Inf64
     _vvv = r+first_t*u
-    scale = get_scale(sig,xs,_vvv)
+    scale = get_scale(u, x0,_vvv)
     relative_error = full_error / norm(_vvv)
 
     full_mode = (relative_error>1E-10 || full_error>1E-8/max(scale,1E-4))

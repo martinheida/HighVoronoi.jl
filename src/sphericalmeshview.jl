@@ -34,6 +34,24 @@ Base.eltype(::Type{StretchNodesView{P, HVN}}) where {P, HVN<:HVNodes{P}} = eltyp
 
 
 # Define the custom iterator type
+struct ConeIteratorData{I, P}
+    iterator::I
+    scale::Float64
+    radius::Float64
+    center::P
+    center_id::Int64
+    boundary::Int64
+end
+
+@inline function VertexIterator(m::AM,i::II,index::Int64, s::S=statictrue) where {T,AM<:AbstractMesh{T},II<:ConeIteratorData,S<:StaticBool} 
+    vi = DatabaseIndexIterator(i.iterator,ReadWriteLock(m))
+    ci = ConeIterator(i,vi)
+    return VertexIterator(m,ci,index,s)
+end
+
+
+
+# Define the custom iterator type
 mutable struct ConeIterator{I, P}
     iterator::I
     scale::Float64
@@ -46,6 +64,7 @@ mutable struct ConeIterator{I, P}
     r::P
     stretch::Float64
 end
+@inline ConeIterator(cid::ConeIteratorData{I, P},it::II) where {I,P,II} = ConeIterator(it,cid.scale,cid.radius,cid.center,cid.center_id,cid.boundary)
 function ConeIterator(a,b,c,d,e,f)  
     center = d
     rad = 0.0 
@@ -203,7 +222,8 @@ end
 @inline nodes(mv::SphericalMeshView)= StretchNodesView(nodes(mv.data), mv.center, mv.scale)
 
 @inline function vertices_iterator(mv::MV, index::Int64, internal::StaticTrue) where MV<:SphericalMeshView  
-    return ConeIterator(vertices_iterator(mv.data,index,statictrue), mv.scale, mv.radius, mv.center, mv.center_id, mv.boundary_id)
+    #println(typeof(mv.data))
+    return ConeIteratorData(vertices_iterator(mv.data,index,statictrue), mv.scale, mv.radius, mv.center, mv.center_id, mv.boundary_id)
 end
 
 

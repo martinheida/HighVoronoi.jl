@@ -119,9 +119,16 @@ struct RWLTrace
     thread::Int64
     OP::Int64
     all::Int64
+    point_id::Int64
 end
-Base.show(io::IO, trace::RWLTrace) = print(io, "(", trace.thread, ",", trace.OP, ",", trace.all, ")")
+Base.show(io::IO, trace::RWLTrace) = print(io, "(", trace.thread, ",", trace.OP, ",", trace.all,",", trace.point_id, ")")
 
+@inline readlock(::Nothing) = nothing
+@inline readunlock(::Nothing) = nothing
+@inline writelock(::Nothing) = nothing
+@inline writeunlock(::Nothing) = nothing
+
+# #=
 struct ReadWriteLock
     head::Threads.Atomic{Int64}
     tail::Threads.Atomic{Int64}
@@ -132,11 +139,8 @@ struct ReadWriteLock
     #lock::SpinLock
 end
 
-@inline readlock(::Nothing) = nothing
-@inline readunlock(::Nothing) = nothing
-@inline writelock(::Nothing) = nothing
-@inline writeunlock(::Nothing) = nothing
 @inline ReadWriteLock(::T) where T = nothing
+
 
 function ReadWriteLock()
     return ReadWriteLock(Threads.Atomic{Int64}(0),Threads.Atomic{Int64}(0),Threads.Atomic{Int64}(0))#,Threads.Atomic{Int64}(0),atomic_add!(HighVoronoi.RWLCounter,1),Vector{RWLTrace}(undef,100),SpinLock())#,cr,cw,ReentrantLock())
@@ -178,8 +182,121 @@ end
 
 @inline Base.lock(rwl::ReadWriteLock) = writelock(rwl)
 @inline Base.unlock(rwl::ReadWriteLock) = writeunlock(rwl)
+# =#
+#=
+struct ReadWriteLockDebug
+    head::Threads.Atomic{Int64}
+    tail::Threads.Atomic{Int64}
+    reads_count::Threads.Atomic{Int64}
+    all::Threads.Atomic{Int64}
+    index::Int64
+    trace::Vector{RWLTrace}
+    lock::SpinLock
+    timelag::Int64
+    ltrace::Int64
+    function ReadWriteLockDebug(;traces::Int64=100,timelag::Int64=1000000000,print::Bool=false,location="")
+        rwl = new(Threads.Atomic{Int64}(0),Threads.Atomic{Int64}(0),Threads.Atomic{Int64}(0),Threads.Atomic{Int64}(0),atomic_add!(HighVoronoi.RWLCounter,1),Vector{RWLTrace}(undef,traces),SpinLock(),timelag,traces)#,cr,cw,ReentrantLock())
+        if print
+            println("Initialize ReadWriteLock $(rwl.index) at location: $location")
+        end
+        return rwl
+    end
+end
+
+export ReadWriteLockDebug
+
+@inline ReadWriteLockDebug(::T) where T = nothing
 
 
+@inline function readlock(rwl::ReadWriteLockDebug,id=0)
+    lock(rwl.lock)
+    ti = time_ns()
+    this_tail = atomic_add!(rwl.tail,1) 
+    a = atomic_add!(rwl.all,1)
+    rwl.trace[mod(a,rwl.ltrace)+1] = RWLTrace(Threads.threadid(),1,a,id)
+    unlock(rwl.lock)
+    ii = 0
+    while atomic_add!(rwl.head,0)<this_tail
+        active_wait(100)
+        ii += 1
+        mod(ii,100)==0 && yield()
+        if time_ns()-ti>rwl.timelag 
+            #lock(rwl.lock)
+            a = atomic_add!(rwl.all,1)
+            rwl.trace[mod(a,rwl.ltrace)+1] = RWLTrace(Threads.threadid(),-1,a,id)
+            ltrace = length(rwl.trace)
+            last_index = mod(a,rwl.ltrace)+1
+            tr = Vector{RWLTrace}(undef,min(ltrace,a+1))
+            if length(tr)==ltrace
+                tr[1:(ltrace-last_index)] .= rwl.trace[(last_index+1):ltrace]
+                tr[(ltrace-last_index+1):ltrace] .= rwl.trace[1:last_index]
+            else
+                tr .= rwl.trace[1:(a+1)]
+            end
+            #unlock(rwl.lock)
+            throw(RWLDebugError(rwl.index, atomic_add!(rwl.head, 0), this_tail, atomic_add!(rwl.reads_count, 0), tr))
+        end
+    end
+    #println(time_ns()-ti)
+    atomic_add!(rwl.reads_count,1)
+    atomic_add!(rwl.head,1)
+end
+
+@inline function writelock(rwl::ReadWriteLockDebug,id=0)
+    lock(rwl.lock)
+    ti = time_ns()
+    this_tail = atomic_add!(rwl.tail,1) 
+    #print("$this_tail, $(rwl.head[]), $(rwl.reads_count[])")
+    a = atomic_add!(rwl.all,1)
+    rwl.trace[mod(a,rwl.ltrace)+1] = RWLTrace(Threads.threadid(),3,a,id)
+    unlock(rwl.lock)
+    ii = 0
+    while atomic_add!(rwl.head,0)<this_tail || atomic_add!(rwl.reads_count,0)>0
+        active_wait(100)
+        ii += 1
+        mod(ii,100)==0 && yield()
+        if time_ns()-ti>rwl.timelag 
+            #lock(rwl.lock)
+            a = atomic_add!(rwl.all,1)
+            rwl.trace[mod(a,rwl.ltrace)+1] = RWLTrace(Threads.threadid(),-3,a,id)
+            ltrace = length(rwl.trace)
+            last_index = mod(a,rwl.ltrace)+1
+            tr = Vector{RWLTrace}(undef,min(ltrace,a+1))
+            if length(tr)==ltrace
+                    tr[1:(ltrace-last_index)] .= rwl.trace[(last_index+1):ltrace]
+                    tr[(ltrace-last_index+1):ltrace] .= rwl.trace[1:last_index]
+            else
+                tr .= rwl.trace[1:(a+1)]
+            end
+            #unlock(rwl.lock)
+            throw(RWLDebugError(rwl.index, atomic_add!(rwl.head, 0), this_tail, atomic_add!(rwl.reads_count, 0), tr))
+        end
+    end
+    #println(time_ns()-ti)
+end
+
+@inline function readunlock(rwl::ReadWriteLockDebug,id=0)
+    lock(rwl.lock)
+    atomic_sub!(rwl.reads_count,1)
+    a = atomic_add!(rwl.all,1)
+    rwl.trace[mod(a,rwl.ltrace)+1] = RWLTrace(Threads.threadid(),2,a,id)
+    unlock(rwl.lock)
+
+end
+
+@inline function writeunlock(rwl::ReadWriteLockDebug,id=0)
+    lock(rwl.lock)
+    atomic_add!(rwl.head,1)
+    a = atomic_add!(rwl.all,1)
+    rwl.trace[mod(a,rwl.ltrace)+1] = RWLTrace(Threads.threadid(),4,a,id)
+    unlock(rwl.lock)
+end
+
+@inline Base.lock(rwl::ReadWriteLockDebug,id=0) = writelock(rwl,id)
+@inline Base.unlock(rwl::ReadWriteLockDebug,id=0) = writeunlock(rwl,id)
+
+const ReadWriteLock = ReadWriteLockDebug
+=#
 #=
 @inline function check(rwl::ReadWriteLock)
     cw = rwl.counts_write[Threads.threadid()][]

@@ -17,14 +17,13 @@ after initialization the struct contains the following information:
 - `projection_up` : Not advised to be accessed by user
 - `parameters` : Not advised to be accessed by user
 """
-struct VoronoiFVProblem{TC,TP,TPA,TDI,TDJ,VG<:VoronoiGeometry,VD<:VoronoiData}
+struct VoronoiFVProblem{TC,TP,TPA,TDI,VG<:VoronoiGeometry,VD<:VoronoiData}
     Geometry::VG
     Coefficients::TC
     Parent::TP
     parameters::TPA
     voronoidata::VD
-    my_data_i::TDI 
-    my_data_j::TDJ
+    my_data::TDI 
 end
 
 function VoronoiFVProblem_validate(;discretefunctions=NamedTuple(), integralfunctions=NamedTuple(), fluxes=NamedTuple(), rhs_functions=NamedTuple())
@@ -41,6 +40,149 @@ function VoronoiFVProblem_validate(;discretefunctions=NamedTuple(), integralfunc
     typeof(discretefunctions)!=Nothing && !(typeof(discretefunctions)<:NamedTuple) && error("The field 'discretefunctions' must be given as a NamedTuple")
 end
 
+struct Discrete_IntegralFunctions{F,VD,V}
+    composer::F 
+    data::VD 
+    l::Int64 
+    buffer_bulk::V
+    buffer_bulk2::V
+    buffer_interface::V
+    function Discrete_IntegralFunctions(comp::FF,d::VDD) where {FF,VDD} 
+        buf = copy(comp.reference_value)
+        buf2 = copy(comp.reference_value)
+        buf3 = copy(comp.reference_value)
+        new{FF,VDD,typeof(buf)}(comp,d,length(d.nodes),buf,buf2,buf3)
+    end
+end
+@inline Base.getproperty(df::Discrete_IntegralFunctions, sym::Symbol) = nothing
+@inline Base.setproperty!(df::Discrete_IntegralFunctions, sym::Symbol,val) = nothing
+@inline Base.haskey(df::Discrete_IntegralFunctions,index) = haskey(getfield(df,composer),index)
+
+@inline getbuffer_Discrete_IntegralFunctions(df,s::StaticTrue) = getfield(df, :buffer_bulk)
+@inline getbuffer_Discrete_IntegralFunctions(df,s::StaticFalse) = getfield(df, :buffer_bulk2)
+@inline function (df::Discrete_IntegralFunctions)(i::Int64) 
+    return df(i,statictrue)
+end
+function (df::Discrete_IntegralFunctions)(i::Int64,s::S) where {S<:StaticBool}
+    composer = getfield(df, :composer)
+    buffer = getbuffer_Discrete_IntegralFunctions(df, s)
+    data = getfield(df, :data)
+    bi = data.bulk_integral[i]
+    vol = data.volume[i]
+    buffer .= bi
+    #buffer ./= vol
+    return decompose(composer,buffer,statictrue)
+    #return map(f -> f(data.nodes[i]), values(functions))
+end
+
+function (df::Discrete_IntegralFunctions)(i::Int64, j::Int64)
+    composer = getfield(df, :composer)
+    buffer = getfield(df, :buffer_interface)
+    data = getfield(df, :data)
+    ii = data.interface_integral[i][j] 
+    buffer .= ii 
+    area = data.area[i][j]
+    #buffer ./= area
+    return decompose(composer,buffer,statictrue)
+end
+
+struct FVFunctionSet{F1,F2}
+    discrete::F1 
+    integral::F2 
+end
+@inline function (df::FVFunctionSet)(i::Int64,s::S) where {S<:StaticBool}
+    return FVFunctionSet(df.discrete(i),df.integral(i,s)) 
+end
+@inline function (df::FVFunctionSet)(i::Int64,j::Int64)
+    return FVFunctionSet(df.discrete(i,j),df.integral(i,j)) 
+end
+@inline Base.haskey(df::FVFunctionSet,key) = haskey(df.discrete,key) || haskey(df.integral,key)
+@inline Base.getindex(fs::FVFunctionSet{F1,F2}, key::Symbol) where {F1, F2} = getindex(fs,Val(key))
+@generated function Base.getindex(fs::FVFunctionSet{F1,F2}, ::Val{key}) where {F1, F2,key}
+    # Sicherstellen, dass F2 tatsächlich ein NamedTuple-Typ ist
+    if !(F2 <: NamedTuple)
+        error("Das Feld 'integral' muss ein NamedTuple sein.")
+    end
+    # Auslesen der Schlüsselnamen aus dem Typparameter von F2
+    keys = F2.parameters[1]  # keys ist ein Tuple, z.B. (:kappa, :eta)
+    
+    # Wichtig: Diese Überladung funktioniert nur, wenn key ein Literal ist.
+    if key in keys
+        return :( getindex(fs.integral, key) )
+    else
+        return :( getindex(fs.discrete, key) )
+    end
+end
+
+struct Cell_i_Data{F,N,NN,O,BN,A,V,P}
+    functions::F
+    neighbors::N 
+    nodes::NN 
+    orientations::O
+    boundary_nodes::BN 
+    area::A 
+    volume::V 
+    planes::P 
+    i::Int64
+    on_b::Bool
+end
+function Cell_i_Data(functions,i)
+    data = getfield(functions.integral,:data)
+    #ori = 1#data.boundary_nodes[i]
+    return Cell_i_Data(functions,data.neighbors[i],data.nodes,data.orientations[i], data.boundary_nodes[i], data.area[i], data.volume, data.geometry.domain.boundary.planes, i, data.boundary_nodes_on_boundary)
+end
+
+function get_data_j(data::Cell_i_Data,n)
+    j=data.neighbors[n]
+    i=data.i
+    nodes = data.nodes
+    planes = data.planes
+    lmesh = length(data.nodes)
+    bf_j =  data.functions(j<=lmesh ? j : i,staticfalse) 
+    bf_ij = data.functions(i,n)  ## not clear if n or j is the correct choice. j fails....
+    b = j>lmesh 
+    on_b = data.on_b
+    #=nnn = nnn2 = nodes[1]
+    err1 = err2 = false
+    try 
+        nnn = data.boundary_nodes[j] 
+    catch 
+        err1 = b ? true : false 
+    end 
+    try 
+        nnn = data.nodes[j] 
+    catch 
+        err2 = b ? false : true
+    end 
+    if err1 || err2 
+        println("$err1, $err2: $j, $lmesh")
+        error()
+    end=#
+    xj = b ? data.boundary_nodes[j] : nodes[j]
+    vj = b ? data.volume[i] : data.volume[j]
+    ori = data.orientations[n]
+    _bc = j>lmesh ? Int64(planes[j-lmesh].BC) : 1
+    result = (x_j=xj, para_j=bf_j, para_ij=bf_ij,  
+                mass_j=vj, mass_ij=data.area[n],normal=ori, 
+                points_onboundary=on_b, onboundary=b,neighbor=j, bc=_bc)
+    return result
+end
+
+mutable struct Full_FV_Data_Function{F}
+    functions::F
+end
+@inline cell_data_i(ff::Full_FV_Data_Function,i) = Cell_i_Data(ff.functions,i)
+
+function get_data_i(f::FF,i::Int64) where {FF<:Full_FV_Data_Function}
+    functions = f.functions
+    bf_i = functions(i,statictrue)
+    data = getfield(functions.integral,:data)
+    result = (x_i=data.nodes[i], para_i=bf_i, mass_i=data.volume[i],cell=i)
+    return result
+end
+
+
+
 function VoronoiFVProblem(Geo::VoronoiGeometry; discretefunctions=NamedTuple(), integralfunctions=NamedTuple(), fluxes=NamedTuple(), rhs_functions=NamedTuple(), parent=nothing, integrator=Integrator_Type(Geo.Integrator), flux_integrals=NamedTuple(), bulk_integrals=NamedTuple(), kwargs...)
     VoronoiFVProblem_validate(discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions)
     if !(Geo.Integrator in [VI_HEURISTIC,VI_MONTECARLO,VI_POLYGON,VI_FAST_POLYGON,VI_HEURISTIC_MC])
@@ -54,14 +196,18 @@ function VoronoiFVProblem(Geo::VoronoiGeometry; discretefunctions=NamedTuple(), 
 
     ref_function_length = 0
     if typeof(integralfunctions)!=Nothing=#
-        i_composer = FunctionComposer(;(integralfunctions...,reference_argument= points[1],super_type=Float64)...)
+        #println(integralfunctions)
+        i_composer = FunctionComposer(points[1],integralfunctions,Float64)
+        #i_composer = FunctionComposer_old(Float64;(integralfunctions...,reference_argument= points[1])...)
         i_functions = i_composer.functions
         ref_function_length = i_composer.total #length(i_functions(points[1]))
   #  end
 
 
-    data=VoronoiData(Geo,copyall=true)
-
+    #data=FVVoronoiData(Geo,statictrue)
+    copymode = statictrue
+    data = VoronoiData(Geo,statictrue,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode)
+        #println(data)
     # adjust data from mean to "pointwise":
     if length(data.bulk_integral)>0
         for i in 1:length(data.nodes)
@@ -101,41 +247,99 @@ function VoronoiFVProblem(Geo::VoronoiGeometry; discretefunctions=NamedTuple(), 
 
     #@descend HighVoronoi.extract_discretefunctions(data,i_composer)
 #    i_func =  HighVoronoi.extract_discretefunctions(data,i_composer) 
-
     d_func =  HighVoronoi.extract_discretefunctions(data;discretefunctions...) 
 
     _bb = length(data.bulk_integral)>0
     _bbb = length(data.interface_integral)>0 && length(data.interface_integral[1])>0
+    #println(i_composer.reference_value)
+    #println(_bb)
+    #println(__simplify_discrete)
+    #println(decompose(i_composer,_bb ? data.bulk_integral[1] : i_composer.reference_value))
+    #println(map(__simplify_discrete,decompose(i_composer,_bb ? data.bulk_integral[1] : i_composer.reference_value)))
+    #return
+    #@descend decompose(i_composer,_bb ? data.bulk_integral[1] : i_composer.reference_value,statictrue)
+    #error()
+    
 
-    b_funcs = i->Base.merge(d_func[:bulk](i),   map(__simplify_discrete,decompose(i_composer,_bb ? data.bulk_integral[i] : i_composer.reference_value)))
-    i_funcs = (i,j)->Base.merge(d_func[:interface](i,j),map(__simplify_discrete,decompose(i_composer,_bbb ? data.interface_integral[i][j] : i_composer.reference_value)) )
-##=#
-#    b_funcs = i->merge(i_func[:bulk](i),d_func[:bulk](i)) 
-#    i_funcs = (i,j)->merge(i_func[:interface](i,j),d_func[:interface](i,j))
+    #b_funcs = i->Base.merge(d_func[:bulk](i),   decompose(i_composer,_bb ? data.bulk_integral[i] : i_composer.reference_value,statictrue))
+    #i_funcs = (i,j)->Base.merge(d_func[:interface](i,j),decompose(i_composer,_bbb ? data.interface_integral[i][j] : i_composer.reference_value,statictrue))
+
+    df = Discrete_Functions(discretefunctions,data)
+    di = Discrete_IntegralFunctions(i_composer,data)
+    fvf = FVFunctionSet(df,di)
+    ff = Full_FV_Data_Function(fvf)
+    #dat = get_data_i(ff,1)
+    #=
+    cell_i = cell_data_i(ff,1)
 
     my_data_i(i) = get_data_i(b_funcs,i_funcs,data,i)
     my_data_j(i,n) = get_data_j(b_funcs,i_funcs,data,i,n,Geo.domain.boundary.planes)
-    VoronoiFVProblemCoefficients(data, Geo.domain.boundary, my_data_i, my_data_j, fluxes=fluxes, functions=rhs_functions, flux_integrals=flux_integrals, bulk_integrals=bulk_integrals)
-    coefficients = VoronoiFVProblemCoefficients(data, Geo.domain.boundary, my_data_i, my_data_j, fluxes=fluxes, functions=rhs_functions, flux_integrals=flux_integrals, bulk_integrals=bulk_integrals)
 
+    # (x_i=data.nodes[i], para_i=bf_i, mass_i=data.volume[i],cell=i)
+    dat1 = get_data_i(ff,181)
+    dat1_ = my_data_i(181)
+    println()
+    println(dat1[:x_i],", ",dat1[:mass_i],", ",dat1[:cell],", ",dat1[:para_i][:kappa],", ",dat1[:para_i][:gg])
+    println(dat1_[:x_i],", ",dat1_[:mass_i],", ",dat1_[:cell],", ",dat1_[:para_i][:kappa],", ",dat1_[:para_i][:gg])
+    cell_data = cell_data_i(ff,181)
+    dat1b = get_data_j(cell_data,4)
+    dat1b_= my_data_j(181,4)
+    # x_j=xj, para_j=bf_j, para_ij=bf_ij,  
+    #    mass_j=vj, mass_ij=data.area[n],normal=ori, 
+    #    points_onboundary=on_b, onboundary=b,neighbor=j, bc=_bc)
+    println(dat1b[:x_j],", ",dat1b[:mass_j],", ",dat1b[:mass_ij],", ",dat1b[:normal],", ",)
+    println(dat1b_[:x_j],", ",dat1b_[:mass_j],", ",dat1b_[:mass_ij],", ",dat1b_[:normal],", ",)
+    println(dat1b[:points_onboundary],", ",dat1b[:onboundary],", ",dat1b[:neighbor],", ",dat1b[:bc],", ")
+    println(dat1b_[:points_onboundary],", ",dat1b_[:onboundary],", ",dat1b_[:neighbor],", ",dat1b_[:bc],", ")
+    println(dat1b_[:para_j])
+    println(dat1b_[:para_ij])
+    println(dat1b[:para_j][:kappa],", ",dat1b[:para_j][:eta],", ",dat1b[:para_j][:gg],", ")
+    println(dat1b[:para_ij][:kappa],", ",dat1b[:para_ij][:eta],", ",dat1b[:para_ij][:gg],", ")
+    #VoronoiFVProblemCoefficients(data, Geo.domain.boundary, my_data_i, my_data_j, fluxes=fluxes, functions=rhs_functions, flux_integrals=flux_integrals, bulk_integrals=bulk_integrals)
+=#
+    #for i in 1:200
+    #    print("$i - ")
+    #    cell_data_i(ff,i)
+    #end
+    #@descend VoronoiFVProblemCoefficients(data, Geo.domain.boundary, ff, fluxes=fluxes, functions=rhs_functions, flux_integrals=flux_integrals, bulk_integrals=bulk_integrals)
+    coefficients = VoronoiFVProblemCoefficients(data, Geo.domain.boundary, ff, fluxes=fluxes, functions=rhs_functions, flux_integrals=flux_integrals, bulk_integrals=bulk_integrals)
+    #println(coefficients)
+    #return
     parameters = (; kwargs..., discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions, integrator=integrator)
 
-    return VoronoiFVProblem(Geo,coefficients,parent,parameters,data,my_data_i,my_data_j)
+    vfvp = VoronoiFVProblem(Geo,coefficients,parent,parameters,data,ff)
+    return vfvp 
+end
+
+FV_functions(::Nothing,_) = begin 
+    return nothing, undef
+end 
+FV_functions(integralfunctions,points) = begin 
+    i_composer = FunctionComposer(points[1],integralfunctions,Float64)
+    i_functions = i_composer.functions
+    return i_functions, i_composer
 end
 
 function VoronoiFVProblem(points, boundary=Boundary(); discretefunctions=nothing, integralfunctions=nothing, fluxes=nothing, rhs_functions=nothing, flux_integrals=nothing, bulk_integrals=nothing, integrator=VI_POLYGON, integrand=nothing, kwargs...)
     VoronoiFVProblem_validate(discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions)
-    !(integrator in [VI_POLYGON,VI_MONTECARLO]) && error("Calculating area or volume is not provided by $(Integrator_Name(integrator)).")
-    i_functions = nothing
-    i_composer = undef
-
-    if typeof(integralfunctions)!=Nothing
-        i_composer = FunctionComposer(;(integralfunctions...,reference_argument=points[1],super_type=Float64)...)
-        i_functions = i_composer.functions
+    replace_integrator(integrator::Union{Call_HEURISTIC,Call_GEO,Call_NO}) = begin 
+        println("Calculating area or volume is not provided by $(Integrator_Name(integrator)). Switching to $(Integrator_Name(VI_MONTECARLO)) instead.")
+        VI_MONTECARLO 
     end
-
-    Geo = VoronoiGeometry(points,boundary; kwargs..., integrand=i_functions, integrator=integrator)
-
+    replace_integrator(x) = x
+        integrator2 = replace_integrator(integrator)
+    #!(integrator in [VI_POLYGON,VI_MONTECARLO]) && error("Calculating area or volume is not provided by $(Integrator_Name(integrator)).")
+    i_functions, i_composer = FV_functions(integralfunctions,points)
+    #@descend FV_functions(integralfunctions,points)
+    #error()
+    Geo = VoronoiGeometry(points,boundary; kwargs..., integrand=i_functions, integrator=integrator2)
+    #copymode = statictrue
+    #VD = VoronoiData(Geo,statictrue,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode)
+    #return VD
+    #    error()
+#    @descend VoronoiData(Geo,statictrue,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode)
+    #@descend VoronoiFVProblem(Geo,discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions ; kwargs..., integrand=i_functions, integrator=integrator, flux_integrals=flux_integrals, bulk_integrals=bulk_integrals)
+    #error()
     return VoronoiFVProblem(Geo,discretefunctions=discretefunctions, integralfunctions=integralfunctions, fluxes=fluxes, rhs_functions=rhs_functions ; kwargs..., integrand=i_functions, integrator=integrator, flux_integrals=flux_integrals, bulk_integrals=bulk_integrals)
 end
 
@@ -198,7 +402,40 @@ struct VoronoiFVProblemCoefficients{TF,TFU,TFI,BFI,TI}
     index::TI
 end
 
-function VoronoiFVProblemCoefficients(data::VoronoiData, boundary, my_data_i, my_data_j; fluxes=NamedTuple(), functions=NamedTuple, flux_integrals=NamedTuple(), bulk_integrals=NamedTuple())
+@generated function run_conservative_flux(nt::NamedTuple{K, T}, args...) where {K, T}
+    exs = []
+    for key in K
+        push!(exs, :( $(key) = conservative_flux(nt.$(key), args...) ))
+    end
+    return :( (; $(exs...) ) )
+end
+
+@generated function run_right_hand_side(nt::NamedTuple{K, T}, args...) where {K, T}
+    exs = []
+    for key in K
+        push!(exs, :( $(key) = right_hand_side(nt.$(key), args...) ))
+    end
+    return :( (; $(exs...) ) )
+end
+
+@generated function run_flux_integral(nt::NamedTuple{K, T}, args...) where {K, T}
+    exs = []
+    for key in K
+        push!(exs, :( $(key) = flux_integral(nt.$(key), args...) ))
+    end
+    return :( (; $(exs...) ) )
+end
+
+@generated function run_bulk_integral(nt::NamedTuple{K, T}, args...) where {K, T}
+    exs = []
+    for key in K
+        push!(exs, :( $(key) = bulk_integral(nt.$(key), args...) ))
+    end
+    return :( (; $(exs...) ) )
+end
+
+
+function VoronoiFVProblemCoefficients(data::VoronoiData, boundary, my_data; fluxes=NamedTuple(), functions=NamedTuple(), flux_integrals=NamedTuple(), bulk_integrals=NamedTuple())
     nodes = data.nodes
     neighbors = data.neighbors
     
@@ -211,6 +448,7 @@ function VoronoiFVProblemCoefficients(data::VoronoiData, boundary, my_data_i, my
     for i in 1:lboundary
         neighbors_of_boundary[i] = sparsevec(Int64[],Int64[],lnodes)
     end
+    #println(my_data)
     _f=1
     for i in 1:lnodes
         f[i] = _f
@@ -233,15 +471,44 @@ function VoronoiFVProblemCoefficients(data::VoronoiData, boundary, my_data_i, my
     #println(r)
 
     index(i,j) = get_data_index(r,c,f,i,j,lnodes,lboundary)
-
     #_neumann_planes = split_boundary_indeces(boundary)[2]
-    myfluxes =  map(f->conservative_flux(f,data,boundary,index,length(r),my_data_i,my_data_j),fluxes) 
+    #conservative_flux(fluxes[:j1],data,boundary,index,length(r),my_data)
+    #rest = map(f->Vector{Float64}(),fluxes) 
+    #println(fluxes)
 
-    myrhs = map(f->right_hand_side(f,length(nodes),my_data_i),functions) 
+    #for key in keys(fluxes)
+    #@descend conservative_flux(getfield(fluxes,:j1),data,boundary,index,length(r),my_data)
+    #@descend flux_integral(getfield(flux_integrals,:fi),data,boundary,index,length(r),my_data)
+    #error()
+    #end
 
-    myfluxint = map(f->flux_integral(f,data,boundary,index,length(r),my_data_i,my_data_j),flux_integrals) 
+    tupi = get_data_i(my_data,1)
+    data_1 = cell_data_i(my_data,1)
+    tupj = get_data_j(data_1,2)
 
-    mybulkint =  map(f->bulk_integral(f,length(nodes),my_data_i),bulk_integrals) 
+    splatted_fluxes = map(f->(f,[f(;tupi...,tupj...)]),fluxes)
+
+    myfluxes = run_conservative_flux(splatted_fluxes,data,boundary,index,length(r),my_data)
+    #myfluxes =  map(f->conservative_flux(f,data,boundary,index,length(r),my_data),fluxes) 
+
+    #mrhs = right_hand_side(functions[:F],length(nodes),my_data)
+    #println(mrhs)
+    splatted_rhs = map(f->(f,[f(;tupi...)]),functions)
+
+    run_right_hand_side(splatted_rhs,length(nodes),my_data)
+    myrhs = map(s->s[2],splatted_rhs)
+    #myrhs = map(f->right_hand_side(f,length(nodes),my_data_i),functions) 
+
+    splatted_flux_integral = map(f->(f,[f(;tupi...,tupj...)]),flux_integrals)
+
+    run_flux_integral(splatted_flux_integral,data,boundary,index,length(r),my_data)
+    myfluxint = map(s->s[2][1],splatted_flux_integral)
+     #myfluxint = map(f->flux_integral(f,data,boundary,index,length(r),my_data_i,my_data_j),flux_integrals) 
+
+    splatted_bulk_integral = map(f->(f,[f(;tupi...)]),bulk_integrals)
+    run_bulk_integral(splatted_bulk_integral,length(nodes),my_data)
+    mybulkint = map(s->s[2][1],splatted_bulk_integral)
+    #mybulkint =  map(f->bulk_integral(f,length(nodes),my_data_i),bulk_integrals) 
 
     return VoronoiFVProblemCoefficients{typeof(myfluxes),typeof(myrhs),typeof(myfluxint),typeof(mybulkint),typeof(index)}(r,c,f,myfluxes,myrhs,myfluxint,mybulkint,index)
 end
@@ -258,6 +525,7 @@ end
 
 function get_data_i(bulkfunctions,interfacefunctions,data,i,j=0)
     hasbulk = typeof(bulkfunctions)!=Nothing
+    #println(i)
     bf_i = bulkfunctions(i)
     result = (x_i=data.nodes[i], para_i=bf_i, mass_i=data.volume[i],cell=i)
     return result
@@ -270,6 +538,8 @@ function get_data_j(bulkfunctions,interfacefunctions,data,i,n,planes)
     hasbulk = typeof(bulkfunctions)!=Nothing
     hasinterface = typeof(interfacefunctions)!=Nothing
     bf_j =  bulkfunctions(j<=lmesh ? j : i) 
+    #@descend bulkfunctions(j<=lmesh ? j : i) 
+    #error()
     bf_ij = interfacefunctions(i,n)  ## not clear if n or j is the correct choice. j fails....
     b = j>lmesh 
     on_b = data.boundary_nodes_on_boundary
@@ -301,63 +571,88 @@ function get_Int_Array(list,preset)
     return typeof(list)<:Vector{Int} ? list : (typeof(list)<:Int ? [list] : Int64[])
 end
 
-function conservative_flux(my_flux,data::VoronoiData,boundary,index,size,my_data_i,my_data_j,_NEUMANN=Int64[])
+function conservative_flux(my_flux,data::VoronoiData,boundary,index,size,my_data,_NEUMANN=Int64[])
     nodes = data.nodes
     lmesh = length(nodes)
-    flux = my_flux
+    flux = my_flux[1]
     
     values=zeros(Float64,size)
 
     for i in 1:lmesh
         neigh=data.neighbors[i]
-        _para_i = my_data_i(i)
+        #=err = false
+        try
+            cell_data_i(my_data,i)
+        catch
+            println(i)
+            err=true 
+        end
+        err && error()=#
+        data_i = cell_data_i(my_data,i)
+        _para_i = get_data_i(my_data,i)
         for n in 1:length(neigh)
             j=neigh[n]
             if j<i continue end
-            _para_j = my_data_j(i,n)
-            part_i, part_j = flux(;_para_i...,_para_j...) 
+            _para_j = get_data_j(data_i,n)
+            #@descend flux(;_para_i...,_para_j...) 
+            #error()
+            flux_data = flux(;_para_i...,_para_j...) 
             #values[index(i,i)]+=part_i
-            values[index(i,j)]+=(-1)*part_j
-            values[index(j,i)]+=(-1)*part_i
+            values[index(i,j)]+=(-1)*flux_data[2] #part_j
+            values[index(j,i)]+=(-1)*flux_data[1] #part_i
         end
     end
     return values
 end
 
-function flux_integral(my_flux,data::VoronoiData,boundary,index,size,my_data_i,my_data_j,_NEUMANN=Int64[])
+@inline flux_integral_add(a::Vector{R},x) where {R<:Real} = ( a .+= x )
+@inline flux_integral_add(a::Vector{V},x) where {V<:AbstractVector} = ( a[1] .+= x )
+#flux_integral_zero(a::Vector{R}) where {R<:Real} = 0*a
+#flux_integral_zero(a::Vector{v}) where {v<:AbstractVector} = begin
+#    a .*= 0
+#    return a
+#end
+function flux_integral(my_flux,data,boundary,index,size,my_data,_NEUMANN=Int64[])
     nodes = data.nodes
     lmesh = length(nodes)
-    flux = my_flux
+    flux = my_flux[1]
     
-    integral = 0.0
-    
+    integral = my_flux[2]
+    integral .*= 0
+
     for i in 1:lmesh
         neigh=data.neighbors[i]
-        _para_i = my_data_i(i)
+        data_i = cell_data_i(my_data,i)
+        _para_i = get_data_i(my_data,i)
         for n in 1:length(neigh)
             j=neigh[n]
             if j<i continue end
-            _para_j = my_data_j(i,n)
-            integral += flux(;_para_i...,_para_j...) 
+            _para_j = get_data_j(data_i,n)
+            flux_integral_add(integral, flux(;_para_i...,_para_j...))
         end
     end
-    return integral
+    return nothing
 end
 
-function right_hand_side(f,size,my_data_i)
-    rhs(i) = f(;my_data_i(i)...)
-    values=Vector{typeof(rhs(1))}(undef,size)
-    for i in 1:size
-        values[i]=rhs(i)
+rhs_vector(t::T,size) where T = Vector{T}(undef,size)
+function right_hand_side(ftup::Tuple{A,B},size,my_data) where {A,B}
+    f = ftup[1]
+    #firstvalue = f(;get_data_i(my_data,1)...)
+    values=ftup[2]
+    resize!(values,size)
+    #values[1] = firstvalue
+    for i in 2:size
+        values[i]=f(;get_data_i(my_data,i)...)
     end
     return values
 end
 
-function bulk_integral(f,size,my_data_i)
-    rhs(i) = f(;my_data_i(i)...)
-    integral = 0.0 *rhs(1)
+function bulk_integral(f_,size,my_data)
+    f = f_[1]
+    rhs(i) = f(;get_data_i(my_data,i)...)
+    integral = f_[2]
     for i in 1:size
-        integral += rhs(i)
+        flux_integral_add(integral, rhs(i))
     end
     return integral
 end
@@ -470,7 +765,8 @@ function linearVoronoiFVProblem(vd::VoronoiFVProblem;flux,rhs=nothing,Neumann=no
 
     for i in 1:length(vd.voronoidata.nodes)
         neighbors = vd.voronoidata.neighbors[i]
-        my_i = vd.my_data_i(i)
+        my_i = get_data_i(vd.my_data,i)
+        cell_data = cell_data_i(vd.my_data,i)
         index_ii = index(i,i)
         for j in 1:length(neighbors)
             n = neighbors[j]
@@ -480,7 +776,7 @@ function linearVoronoiFVProblem(vd::VoronoiFVProblem;flux,rhs=nothing,Neumann=no
                 myvalues[index_ii] += (-1)*values[index(n,i)] 
                 continue
             end
-            my_j = vd.my_data_j(i,j)
+            my_j = get_data_j(cell_data,j)
             u = (-1)*(bc_functions[n])(;my_i...,my_j...)
             if bc_conditions[n]<0 # Neumann case
                 myrhs[i] += u * my_j[:mass_ij]

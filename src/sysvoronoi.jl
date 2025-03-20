@@ -277,6 +277,7 @@ try
             #plock(globallock,"$(Threads.threadid())E")
                 #print("+")
                 (sig,r) = pop!(queue)
+                #sig = copy(sig2)
                 if isempty_entry(queue,sig=>r)
                     break
                 else
@@ -460,12 +461,12 @@ end
 end=#
 @inline get_full_edge_indexing(sig,r,edge,::General_EdgeIterator,xs) = edge
 
-@inline delta_u(searcher,method::Raycast_Non_General_HP,edgeIterator,u2) = delta_u(edgeIterator,u2)
+@inline delta_u(searcher,method::HPUnion,edgeIterator,u2) = delta_u(edgeIterator,u2)
 @inline delta_u(a,b,c,u2) = 0.0
 @inline correct_du(u2,du,edgeIterator,method,searcher) = u2, du
 
-correct_du(u2,du,edgeIterator::General_EdgeIterator,method::Raycast_Non_General_HP,searcher) = u2, du
-function correct_du(u2,du2,NF_::FastEdgeIterator,method::Raycast_Non_General_HP,searcher)
+correct_du(u2,du,edgeIterator::General_EdgeIterator,method::HPUnion,searcher) = u2, du
+function correct_du(u2,du2,NF_::FastEdgeIterator,method::HPUnion,searcher)
     u = u2
     if du2>1E-13
         onb = NF_.iterators[1].rays

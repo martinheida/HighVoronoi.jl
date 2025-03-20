@@ -111,6 +111,7 @@ end
 @inline @generated dyncast_set(cd::VDB, ::Val{:offset},val) where {VDB<:VDBVertexCentral} =  :(getfield(cd,:_offset)[1]=val)
 @inline set_offset(vdb::VDB,i) where {VDB<:VDBVertexCentral} = (vdb.offset = i)
 
+#@inline vertices_iterator(m::VDB, i::Int64,::StaticTrue) where {VDB<:VDBVertexCentral} = BufferVertexData(VDBVR_vertices_iterator(m,i),VDBVR_references_iterator(m,i))
 @inline vertices_iterator(m::VDB, i::Int64,::StaticTrue) where {VDB<:VDBVertexCentral} = DatabaseIndexIteratorData(m.indices[i],m.database,true) #BufferVertexData(VDBVR_vertices_iterator(m,i),VDBVR_references_iterator(m,i))
 @inline all_vertices_iterator(m::VDB, i::Int64,::StaticTrue) where {VDB<:VDBVertexCentral} = DatabaseIndexIterator(DatabaseIndexIteratorData(m.indices[i],m.database,false),nothing) #BufferVertexData(VDBVR_vertices_iterator(m,i),VDBVR_references_iterator(m,i))
 @inline number_of_vertices(vdb::VDB, i::Int64,::StaticTrue) where {VDB<:VDBVertexCentral} = vdb.data[i][2]#length(m.indices[i])

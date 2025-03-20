@@ -155,6 +155,11 @@ function VoronoiGeometry(xs::Points,b=Boundary(); vertex_storage=DatabaseVertexS
             mmm = cast_mesh(vertex_storage,copy(xs))
             voronoi(mmm,searcher=Raycast(xs;domain=b,options=search),intro="",printsearcher=printevents, silence=silence)
             
+            #mmm2 = cast_mesh(vertex_storage,copy(xs))
+            #search2=RaycastParameter(eltype(eltype(xs));method=RCCombined,threading=SingleThread())
+            #voronoi(mmm2,searcher=Raycast(xs;domain=b,options=search2),intro="",printsearcher=printevents, silence=silence)
+
+            #error(compare(mmm,mmm2))
             #=
             nod = nodes(mmm)
             for i in 1:10
@@ -421,7 +426,12 @@ function refine!(VG::VoronoiGeometry,xs::Points,update=true;silence=false,search
         end
     catch
         redirect_stdout(oldstd)
-        rethrow()
+        non_integratable = false
+        if typeof(mesh(integral(domain)))<:ClassicMesh
+            @warn "Refining the Integral for the classic data structure is no more supported by refine. It collapsed this time."
+        else
+            rethrow()
+        end
     end
     redirect_stdout(oldstd)
     return VG

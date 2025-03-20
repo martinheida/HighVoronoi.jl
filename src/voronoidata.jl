@@ -68,15 +68,34 @@ struct ReadOnlyVector{T,AV<:AbstractVector{T},BONUS} <: AbstractVector{T}
 end
 @inline Base.size(A::ReadOnlyVector) = size(A.data)
 @inline Base.getindex(A::ReadOnlyVector, index) = getindex(A.data, shiftbonus(A.bonus,index))
+@inline Base.eltype(::ROV) where {T,ROV<:ReadOnlyVector{T}} = T
+@inline Base.eltype(::Type{ROV}) where {T,ROV<:ReadOnlyVector{T}} = T
+#level = 1
 
-struct DeepVector{P,T<:AbstractVector{P},WRITE,SUB,BONUS} <: AbstractVector{P}
+function DeepVectorConstructorSampleGenerator(data::T, offset::Int64, w::WRITE, s::SUB ,bonus::B) where {P, T<:AbstractVector{P},WRITE,SUB,B} 
+    getsubvector(data,shiftbonus(bonus,1 + offset),s,w,subbonus(bonus,1),P,Nothing,offset,bonus)
+end
+
+struct DeepVector{P,T<:AbstractVector{P},WRITE,SUB,BONUS,PP} <: AbstractVector{PP}
     data::T
     offset::Int64
     bonus::BONUS
-    function DeepVector(data::T, offset::Int64 = 0, w::WRITE = staticfalse, s::SUB = Val(:deep),bonus::B=nothing) where {P, T<:AbstractVector{P},WRITE,SUB,B} 
-        new{P, T, WRITE, SUB,B}(data, offset,bonus)
+end
+function DeepVector(data::T, offset::Int64, w::WRITE, s::SUB, bonus::B,::StaticTrue) where {P, T<:AbstractVector{P},WRITE,SUB,B} 
+    sub = DeepVectorConstructorSampleGenerator(data,offset,w,s,bonus)
+    DeepVector{P, T, WRITE, SUB,B, typeof(sub)}(data, offset,bonus)
+end
+@generated function DeepVector(data::T, offset::Int64, w::WRITE, s::SUB ,bonus::B) where {P, T<:AbstractVector{P},WRITE,SUB,B} 
+    #sub = DeepVectorConstructorSampleGenerator(data,offset,w,s,bonus)
+    T2 = Core.Compiler.return_type(DeepVectorConstructorSampleGenerator,Tuple{T,Int64,WRITE,SUB,B})#[1]
+    @assert isconcretetype(T) "Not a concrete type here"
+    quote
+        n1 = DeepVector{P, T, WRITE, SUB,B,$T2}(data, offset,bonus)
+        return n1
     end
 end
+Base.eltype(::Type{DV}) where {P,T,W,S,B,PP, DV<:DeepVector{P,T,W,S,B,PP}} = PP
+Base.eltype(::DV) where {P,T,W,S,B,PP, DV<:DeepVector{P,T,W,S,B,PP}} = PP
 
 const DeepVectorNeighbor{P,T<:AbstractVector{P},WRITE,BONUS} = DeepVector{P,T,WRITE,Val{:neighbors},BONUS}
 #const DeepVectorFloat64{T<:AbstractVector{Float64},WRITE} = DeepVector{Float64,T,WRITE,Val{:deep},Nothing}
@@ -89,10 +108,18 @@ const DeepVectorNeighbor{P,T<:AbstractVector{P},WRITE,BONUS} = DeepVector{P,T,WR
 @inline DeepVectorFloat64VectorVector(data,offset=0, A::StaticBool{write} = staticfalse;sorting=nothing) where {write} = 
             DeepVector(data,offset,StaticBool{write}(),Val(:deep),sorting)
 
-function DeepVectorNeighbor(d2::AD,publicview::Bool) where {AD<:AbstractDomain}
+function DeepVectorNeighbor(d2::AD,publicview) where {AD<:AbstractDomain}
     ref = references(d2)
     i = integral(d2)
-    return DeepVector(i.neighbors,publicview*length(ref),staticfalse,Val(:neighbors),DeepNeighborData(ref,mesh(i)))
+    #println(typeof(i.neighbors))
+    #println("start here ----------------------------------------------------------")
+    #dv =  
+    mm = mesh(i)
+    dnd = DeepNeighborData(ref,mm)
+    return DeepVector(i.neighbors,(publicview==true)*length(ref),staticfalse,Val(:neighbors),dnd)
+    #println(typeof(dv))
+    #println("end here -------------------------------------------------")
+    #return dv
 end
 
 @inline subbonus(_,i) = nothing
@@ -113,10 +140,27 @@ end
 
 # Define the getindex method
 #@inline Base.getindex(v::DeepVector{P,T,W,SUB,BONUS}, i::Int) where {P,T,W,SUB,BONUS} = getsubvector(v.data,i + v.offset,v.bonus,v.offset,Val(SUB),EmptyDeepVector(v))
-@inline Base.getindex(v::DeepVector{P,T,W,SUB,BONUS}, i::Int) where {P<:AbstractVector,T,W,SUB,BONUS} = getsubvector(v,shiftbonus(v.bonus,i + v.offset),SUB(),subbonus(v.bonus,i))
-@inline @generated getsubvector(v::DeepVector{P,T,WRITE,SUB,BONUS},i,::Val{:deep},subbonus) where {P,T,WRITE,SUB,BONUS}= :(DeepVector(v.data[i],0,WRITE(),Val(:deep),subbonus))
-@inline @generated getsubvector(v::DeepVector{P,T,WRITE,SUB,BONUS},i,::Val{:neighbors},_) where {P<:AbstractVector{Int},T,WRITE,SUB,BONUS}= :(get_neighbors(v,i))
-@inline Base.getindex(v::DeepVector{P,T,W,SUB,BONUS}, i::Int) where {P,T,W,SUB,BONUS} = v.data[shiftbonus(v.bonus,i + v.offset)]
+
+@inline Base.getindex(v::DeepVector{P,T,W,SUB,BONUS,PP}, i::Int) where {P<:AbstractVector,T,W,SUB,BONUS,PP} = getsubvector(v.data,shiftbonus(v.bonus,i + v.offset),SUB(),W(),subbonus(v.bonus,i),P,PP,v.offset,v.bonus)
+@inline getsubvector(data::T,i,::Val{:deep},w,subbonus,::Type{PP2},::Type{PP},o,b) where {F,P<:AbstractVector{F},T<:AbstractVector{P},PP,PP2<:AbstractVector}= DeepVector(data[i],0,w,Val(:deep),subbonus,statictrue)
+#@inline getsubvector(data::T,i,::Val{:deep},w,subbonus,::Type{PP2},A::Type{PP},o,b) where {F,P<:AbstractVector{F},T<:AbstractVector{P},PP,PP2<:AbstractVector}= DeepVector(data[i],0,w,Val(:deep),subbonus,eltype(A))
+@inline getsubvector(data::T,i,::Val{:neighbors},w,_,::Type{PP2},::Type{PP},offset,bonus) where {P<:AbstractVector{Int},T<:AbstractVector{P},PP,PP2<:AbstractVector} = get_neighbors(data,offset,bonus,i)
+@inline getsubvector(data::T,i,::Val{:neighbors},w,_,::Type{PP2},::Type{PP},offset,bonus) where {P<:AbstractVector{Int},T<:AbstractVector{P},PP<:Nothing,PP2<:AbstractVector} = get_neighbors(data,offset,bonus,i)
+
+@inline Base.getindex(v::DeepVector{P,T,W,SUB,BONUS,PP}, i::Int) where {P,T,W,SUB,BONUS,PP} = getsubvector(v.data,shiftbonus(v.bonus,i + v.offset),SUB(),W(),0,P,PP,v.offset,v.bonus) #v.data[shiftbonus(v.bonus,i + v.offset)]
+#getsubvector(v.data,shiftbonus(v.bonus,i + v.offset),SUB(),W(),subbonus(v.bonus,i),P,PP,v.offset,v.bonus)
+@inline getsubvector(data::T,i,::Val{:deep},w,subbonus,::Type{PP2},::Type{PP},_,__) where {P,T<:AbstractVector{P},PP,PP2} = data[i]
+#=
+@inline Base.getindex(v::DeepVector{P,T,W,SUB,BONUS,PP}, i::Int) where {P<:AbstractVector,T,W,SUB,BONUS,PP} = getsubvector(v.data,shiftbonus(v.bonus,i + v.offset),SUB(),W(),subbonus(v.bonus,i),P,PP,v.offset,v.bonus)
+@inline getsubvector(data::T,i,::Val{:deep},w,subbonus,::Type{PP2},::Type{PP},o,b) where {F,P<:AbstractVector{F},T<:AbstractVector{P},PP<:Nothing,PP2<:AbstractVector}= DeepVector(data[i],0,w,Val(:deep),subbonus)
+@inline getsubvector(data::T,i,::Val{:deep},w,subbonus,::Type{PP2},A::Type{PP},o,b) where {F,P<:AbstractVector{F},T<:AbstractVector{P},PP,PP2<:AbstractVector}= DeepVector(data[i],0,w,Val(:deep),subbonus,eltype(A))
+@inline getsubvector(data::T,i,::Val{:neighbors},w,_,::Type{PP2},::Type{PP},offset,bonus) where {P<:AbstractVector{Int},T<:AbstractVector{P},PP,PP2<:AbstractVector} = get_neighbors(data,offset,bonus,i)
+@inline getsubvector(data::T,i,::Val{:neighbors},w,_,::Type{PP2},::Type{PP},offset,bonus) where {P<:AbstractVector{Int},T<:AbstractVector{P},PP<:Nothing,PP2<:AbstractVector} = get_neighbors(data,offset,bonus,i)
+
+@inline Base.getindex(v::DeepVector{P,T,W,SUB,BONUS,PP}, i::Int) where {P,T,W,SUB,BONUS,PP} = getsubvector(v.data,shiftbonus(v.bonus,i + v.offset),SUB(),W(),0,P,PP,v.offset,v.bonus) #v.data[shiftbonus(v.bonus,i + v.offset)]
+#getsubvector(v.data,shiftbonus(v.bonus,i + v.offset),SUB(),W(),subbonus(v.bonus,i),P,PP,v.offset,v.bonus)
+@inline getsubvector(data::T,i,::Val{:deep},w,subbonus,::Type{PP2},::Type{PP},_,__) where {P,T<:AbstractVector{P},PP,PP2} = data[i]
+=#
 
 # Define the setindex! method, ensuring it checks the WRITE parameter
 @inline Base.setindex!(v::DeepVector{P,T,true,SUB,BONUS}, val, i::Int) where {P,T,SUB,BONUS} = v.data[shiftbonus(v.bonus,i + v.offset)] = val
@@ -125,10 +169,10 @@ end
 @inline Base.setindex!(v::DeepVector{P,T,false,SUB,BONUS}, val, i::Int) where {P,T,SUB,BONUS} = @warn "Cannot write to a DeepVector with WRITE == false"
 
 
-function get_neighbors(dv::DeepVector{P,T,W,SUB,BONUS}, i::Int) where {P,T,W,SUB,BONUS}
-    neighs = dv.data[i]
+function get_neighbors(data,offset,bonus, i::Int64)
+    neighs = data[i]
     #println(neighs)
-    return ReadOnlyVector(transform(dv.bonus,dv.data[i],dv.offset),subbonus(dv.bonus,i))
+    return ReadOnlyVector(transform(bonus,data[i],offset),subbonus(bonus,i))
 end
 
 Base.deepcopy(v::DeepVector{P,T,W,Union{Val{:deep},Val{:neighbors}}}) where {P<:AbstractVector,T,W} = [deepcopy(v[i]) for i in 1:length(v.data)]
@@ -144,23 +188,6 @@ function Base.deepcopy(v::DeepVector{P,T,W,Val{:neighbors}}) where {P<:AbstractV
 end
 
 
-#=function test_deep()
-    t = [[[1,2,3],[4,5,6]],[[1]]]
-dv = DeepVector(t)
-println(dv[2])
-println(typeof(dv[2]))
-println(dv[2][1])
-println(typeof(dv[2][1]))
-
-t = [[[1.0,2.0,3.0],[4.0,5.0,6.0]],[[1.0]]]
-dv = DeepVector(t)
-println(typeof(dv)<:DeepVectorFloat64VectorVector)
-dv2 = DeepVector(t[1])
-println(typeof(dv2))
-println(typeof(dv2)<:DeepVectorFloat64Vector)
-
-end
-=#
 ###############################################################################################################################
 
 ## Vertices_Vector
@@ -206,12 +233,12 @@ struct Vertices_Vector{M,B} #<: AbstractArray{PublicIterator}
     mesh::M
     offset::Int64
     bonus::B
-    function Vertices_Vector(d::D,publicview=false) where {D<:AbstractDomain}
+    function Vertices_Vector(d::D,publicview=staticfalse) where {D<:AbstractDomain}
         ref = references(d)
         i = integral(d)
         m = mesh(i)#d)
         b = DeepNeighborData(ref,m)    
-        return new{typeof(m),typeof(b)}(m,publicview*length(ref),b)
+        return new{typeof(m),typeof(b)}(m,(publicview==true)*length(ref),b)
     end
 end 
 
@@ -265,14 +292,36 @@ struct OrientationsVector{P,N<:HVNodes{P},AV,S<:StaticBool} <: AbstractVector{Or
     boundary::Boundary
     onboundary::S
     lmesh::Int64
-    function OrientationsVector(d::AD,onboundary,publicview=staticfalse;sorting=nothing) where {P,AD<:AbstractDomain{P}}
+    function OrientationsVector(d::AD,onboundary,publicview,sorting) where {P,AD<:AbstractDomain{P}}
         m = mesh(integral(d))
         n = nodes(m)
         _nei = DeepVectorNeighbor(d,false) # gets external representation of full neighbor matrix
+        #println(typeof(_nei))
         o = publicview==true ? length(references(d)) : 0
         shift_sorting(a,o) = a
         shift_sorting(a::SortingMatrix,o) = SortingMatrix(a,o)
         nei = DeepVector(_nei,0,staticfalse,Val(:deep),shift_sorting(sorting,o)) # gets a sorted view on the external full representation
+        #@descend getsubvector(_nei,shiftbonus(shift_sorting(sorting,o),1 + 0),Val(:deep),staticfalse,subbonus(shift_sorting(sorting,o),1),P,Nothing,0,shift_sorting(sorting,o))
+        #sub = getsubvector(_nei,shiftbonus(shift_sorting(sorting,o),1 + 0),Val(:deep),staticfalse,subbonus(shift_sorting(sorting,o),1),P,Nothing,0,shift_sorting(sorting,o))
+        #println("--------------------------------------------------------------------------------------")
+        #println(typeof(sub))
+        #=
+    function DeepVector(data::T, offset::Int64, w::WRITE, s::SUB ,bonus::B) where {P, T<:AbstractVector{P},WRITE,SUB,B, PP} 
+        sub = getsubvector(_nei,shiftbonus(shift_sorting(sorting,o),1 + 0),Val(:deep),staticfalse,subbonus(shift_sorting(sorting,o),1),P,Nothing,0,shift_sorting(sorting,o))
+        sub = getsubvector(_nei,shiftbonus(bonus,1 + offset),s,w,subbonus(bonus,1),P,Nothing,offset,bonus)
+        n1 = new{P, T, WRITE, SUB,B,typeof(sub)}(data, offset,bonus)
+        return n1
+    end
+
+=#
+        #println("--------------------------------------------------------------------------------------")
+        #println(typeof(nei))
+        #println("--------------------------------------------------------------------------------------")
+        #@descend nei[1]
+        #println(typeof(nei[1]))
+        #println("--------------------------------------------------------------------------------------")
+        #println(typeof(get_neighbors(_nei,0,shift_sorting,1)))
+        #println(nei[1])
         b = boundary(d)
         on = StaticBool(onboundary)
         l = length(m)
@@ -302,8 +351,8 @@ end
 # Dict project.....
 
 
-struct BNodesDict{P, S, onBoundary} <: AbstractDict{Int64, P}
-    active::SVector{S, Bool}
+struct BNodesDict{P, onBoundary} <: AbstractDict{Int64, P}
+    active::BitVector
     x::P
     boundary::Boundary
     offset::Int64 # = lmesh
@@ -316,7 +365,8 @@ function Base.values(d::BNodesDict)
     return MapIterator(keys_iter, k -> reflect(d.x, d.boundary, k - d.offset))
 end
 
-function Base.iterate(d::BNodesDict{P, S, onBoundary}, state=1) where {P, S, onBoundary}
+function Base.iterate(d::BNodesDict{P,  onBoundary}, state=1) where {P,  onBoundary}
+    S = length(d.active)
     while state <= S && !d.active[state]
         state += 1
     end
@@ -338,36 +388,37 @@ function Base.deepcopy(pi::BNodesDict,dict)
     return dict
 end
 
-Base.eltype(::Type{BNodesDict{P, S, onBoundary}}) where {P, S, onBoundary} = Pair{Int64, P}
-Base.length(d::BNodesDict) = count(d.active)
+@inline Base.eltype(::Type{BNodesDict{P,  onBoundary}}) where {P, onBoundary} = Pair{Int64, P}
+@inline Base.length(d::BNodesDict) = count(d.active)
 
 
 
-struct BNodesDictDict{P, S, onBoundary<:StaticBool, N,N2,M<:AbstractMesh{P}} <: AbstractDict{Int64, BNodesDict{P, S, onBoundary}}
+struct BNodesDictDict{P,  onBoundary<:StaticBool, N,N2,M<:AbstractMesh{P}} <: AbstractDict{Int64, BNodesDict{P, onBoundary}}
     neighbors::N
     nodes::N2
     boundary::Boundary
-    buffer::MVector{S, Bool}
+    buffer::BitVector #MVector{S, Bool}
     lmesh::Int64
     offset::Int64
     mesh::M
     function BNodesDictDict(d::AD,onboundary=false,publicview=false) where {P,AD<:AbstractDomain{P}}
         x0 = zeros(P)
+        #@descend DeepVectorNeighbor(d,false)
         n = DeepVectorNeighbor(d,false)
         m = mesh(integral(d))
         _nodes = nodes(m)#mesh(integral(d)))
         b = boundary(d)
-        buf = MVector{length(b),Bool}(falses(length(b)))
+        buf = falses(length(b)) #MVector{length(b),Bool}(falses(length(b)))
         lmesh = length(m)
         myob = StaticBool(onboundary)
         o = publicview==false ? 0 : length(references(d))
-        return new{P,length(b),typeof(myob),typeof(n),typeof(_nodes),typeof(m)}(n,_nodes,b,buf,lmesh,o,m)
+        return new{P,typeof(myob),typeof(n),typeof(_nodes),typeof(m)}(n,_nodes,b,buf,lmesh,o,m)
     end
 end
-
+@inline visible_length(bndd::BNodesDictDict) = bndd.lmesh-bndd.offset
 Base.haskey(d::BNodesDictDict, key::Int) = isassigned(d.neighbors,key+d.offset) ? d.neighbors[key+d.offset][end] > d.lmesh : false
 
-function Base.get(d::BNodesDictDict{P, S, onBoundary, N}, key::Int, default=nothing) where {P, S, onBoundary, N}
+function Base.get(d::BNodesDictDict{P, onBoundary, N}, key::Int, default=nothing) where {P, onBoundary, N}
     if haskey(d, key)
         neigh = d.neighbors[key+d.offset]
         n = length(neigh)
@@ -377,15 +428,15 @@ function Base.get(d::BNodesDictDict{P, S, onBoundary, N}, key::Int, default=noth
             d.buffer[neigh[n] - d.lmesh] = true
             n -= 1
         end
-        return BNodesDict{P, S, onBoundary}(SVector(d.buffer),d.nodes[key+d.offset], d.boundary, d.lmesh-d.offset)  # Example, adjust as necessary
+        return BNodesDict{P, onBoundary}(copy(d.buffer),d.nodes[key+d.offset], d.boundary, d.lmesh-d.offset)  # Example, adjust as necessary
     else
         return default
     end
 end
 
-Base.getindex(d::BNodesDictDict{P, S, onBoundary, N}, key::Int, default=nothing) where {P, S, onBoundary, N} = get(d,key)
+Base.getindex(d::BNodesDictDict{P, onBoundary, N}, key::Int, default=nothing) where {P, onBoundary, N} = get(d,key)
 
-function Base.iterate(d::BNodesDictDict{P, S, onBoundary, N}, state=1) where {P, S, onBoundary, N}
+function Base.iterate(d::BNodesDictDict{P, onBoundary, N}, state=1) where {P, onBoundary, N}
     while state <= length(d.neighbors) && !haskey(d, state)
         state += 1
     end
@@ -418,7 +469,7 @@ function Base.length(d::BNodesDictDict)
 end
 Base.keys(d::BNodesDictDict) = filter(k -> haskey(d, k), 1:length(d.neighbors))
 Base.values(d::BNodesDictDict) = MapIterator(keys(d),k -> get(d, k)) #map(k -> get(d, k), Base.keys(d))
-Base.eltype(::Type{BNodesDictDict{P, S, onBoundary, N}}) where {P, S, onBoundary, N} = Tuple{Int64, BNodesDict{P, S, onBoundary}}
+Base.eltype(::Type{BNodesDictDict{P, onBoundary, N}}) where {P, onBoundary, N} = Tuple{Int64, BNodesDict{P, onBoundary}}
 
 convert_to_vector(d::BNDD) where BNDD<:BNodesDictDict = begin
     SVV = SparseVectorWrapper{PointType(d.mesh)}
@@ -444,7 +495,15 @@ convert_to_vector(d::BNDD) where BNDD<:BNodesDictDict = begin
         end
         state += 1
     end
-    return sparsevec(inds,ret)
+    resize!(ret,count)
+    resize!(inds,count)
+    try 
+        sparsevec(inds,ret,visible_length(d))
+    catch
+        println(inds)
+        println(visible_length(d))
+    end
+    return sparsevec(inds,ret,visible_length(d))
 end
 
 
@@ -454,14 +513,24 @@ end
 
 ###############################################################################################################################
 
-struct ShiftVector{P}<:AbstractVector{P}
-    reference_shifts
-    shifts
+struct ShiftVector{P,R,S}<:AbstractVector{P}
+    reference_shifts::R
+    shifts::S
+    ShiftVector{PP}(a::A,b::B) where {PP,A,B} = new{PP,A,B}(a,b)
 end
 
 @inline Base.getindex(s::SV,index::Int64) where {P<:Point,SV<:ShiftVector{P}} = P(periodic_shift(s.reference_shifts[index],s.shifts))
 @inline Base.size(s::SV) where {P<:Point,SV<:ShiftVector{P}} = size(s.reference_shifts)
+@inline Base.eltype(s::SV) where {P<:Point,SV<:ShiftVector{P}} = P
 
+function convert_to_vector(v::SV) where {P,SV<:ShiftVector{P}}
+    lv = length(v)
+    ret = Vector{P}(undef,lv)
+    for i in 1:lv 
+        ret[i] = v[i]
+    end
+    return ret
+end
 
 ###############################################################################################################################
 
@@ -473,24 +542,32 @@ function VoronoiDataShift(s,offset,references)
     return s<=offset ? references[s]-offset : s-offset # das wäre in problem in C++ ;-)
 end
 
-struct VoronoiData
-    nodes
-    vertices
-    boundary_vertices # referred to by boundary_verteces
-    boundary_nodes
+struct VoronoiData{A,B,C,D,E,F,G,H,J,K,L,M,N}
+    nodes::A
+    vertices::B
+    boundary_vertices::C # referred to by boundary_verteces
+    boundary_nodes::D
     boundary_nodes_on_boundary::Bool
-    neighbors
-    orientations
-    volume
-    area
-    bulk_integral
-    interface_integral
+    neighbors::E
+    orientations::F
+    volume::G
+    area::H
+    bulk_integral::J
+    interface_integral::K
     offset::Int64
-    references
-    reference_shifts
-    geometry
-    boundary
+    references::L
+    reference_shifts::M
+    geometry::N
+    boundary::Boundary
 end
+
+deepversion(::StaticTrue,a) = convert_to_vector(a)
+deepversion(::StaticFalse,a) = a
+
+geo_only(::StaticTrue,val,other) = val
+geo_only(::StaticFalse,val,other) = other
+@inline deepcombine(s::S,::StaticFalse) where {S<:StaticBool} = s
+@inline deepcombine(s::S,::StaticTrue) where {S<:StaticBool} = staticfalse
 
 """
 Using the call 
@@ -541,35 +618,101 @@ The call of `VoronoiData(VG)` provides the following options:
 - `onboundary=false`: refer to `boundary_nodes` above 
 - `sorted=true`: During the reduction of the internal pseudo periodic mesh to the fully periodic output, the neighbors (jointly with their respective properties) get sorted by their numbers. This is only possible if `getarea`,`getneighbors` and `getinterfaceintegral` are `true`. Otherwise it will be ignored
 """
-function VoronoiData(VG::PGeometry{P};reduce_to_periodic=true,view_only=true,copyall=!view_only,getboundary=copyall,getbulk_integral=copyall,getreferences=copyall,getreference_shifts=copyall,getinterface_integral=copyall,getvolume=copyall,getarea=copyall,getneighbors=copyall,getnodes=copyall,getboundary_vertices=copyall,getorientations=copyall,getvertices=copyall,getboundary_nodes=copyall,onboundary=false,sorted=false) where P
+VoronoiData(VG::PGeometry{P};reduce_to_periodic=true, geometry_only=let val = first_assigned(integral(VG).neighbors); !(val!==nothing && val!=0 && val<=length(integral(VG).neighbors)) end, view_only=true,copyall=!view_only,getboundary=copyall,getbulk_integral=copyall,getreferences=copyall,getreference_shifts=copyall,getinterface_integral=copyall,getvolume=copyall,getarea=copyall,getneighbors=copyall,getnodes=copyall,getboundary_vertices=copyall,getorientations=copyall,getvertices=copyall,getboundary_nodes=copyall,onboundary=false,sorted=false) where P = VoronoiData(VG,reduce_to_periodic,getboundary,getbulk_integral,getreferences,getreference_shifts,getinterface_integral,getvolume,getarea,getneighbors,getnodes,getboundary_vertices,getorientations,getvertices,getboundary_nodes,onboundary,sorted,StaticBool(geometry_only))
+@inline FVVoronoiData(VG,copymode) = VoronoiData(VG,true,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode,copymode)
+function VoronoiData(VG::PGeometry{P},reduce_to_periodic,getboundary=staticfalse,getbulk_integral=staticfalse,getreferences=staticfalse,getreference_shifts=staticfalse,getinterface_integral=staticfalse,getvolume=staticfalse,getarea=staticfalse,getneighbors=staticfalse,getnodes=staticfalse,getboundary_vertices=staticfalse,getorientations=staticfalse,getvertices=staticfalse,getboundary_nodes=staticfalse,onboundary=staticfalse,sorted=staticfalse,geometry_only=staticfalse) where P
     domain = VDDomain(VG.domain)
     this_integral = integral(domain)
     #println(typeof(this_integral))
     #println(length(this_integral.volumes))
     #println(length(references(domain)))
-    offset = reduce_to_periodic * length(references(domain))
-    deepversion(::StaticTrue,a) = convert_to_vector(a)
-    deepversion(::StaticFalse,a) = a
+    offset = (reduce_to_periodic==true) * length(references(domain))
     _mesh = mesh(this_integral)
+
+
+    #bonus = nothing
+    #_area = deepversion(StaticBool(getarea),DeepVector(this_integral.area,offset,staticfalse,Val(:deep),bonus))
+    
     ___nodes = nodes(_mesh) 
     _nodes = deepversion(StaticBool(getnodes),view(___nodes,(offset+1):length(___nodes)))
     _vertices = deepversion(StaticBool(getvertices),Vertices_Vector(domain,reduce_to_periodic))
     _bv = deepversion(StaticBool(getboundary_vertices),Public_BV_Iterator(_mesh)) # referred to by boundary_verteces
+    
+    # BNodesDictDict(domain,onboundary,reduce_to_periodic)
+
     _bn = deepversion(StaticBool(getboundary_nodes),BNodesDictDict(domain,onboundary,reduce_to_periodic))
     #boundary_nodes_on_boundary = onboundary
-    __neighbors = deepversion(StaticBool(getneighbors),DeepVectorNeighbor(domain,reduce_to_periodic))
+
+    #println(length(DeepVectorNeighbor(domain,reduce_to_periodic)))
+    #println(length(integral(domain).neighbors))
+    #error()
+    __neighbors = deepversion(deepcombine(StaticBool(getneighbors), geometry_only),DeepVectorNeighbor(domain,reduce_to_periodic))
+#    test_deep_types(__neighbors)
+    #println(typeof(__neighbors))
     _neighbors, bonus = VoronoiData_neighbors(StaticBool(sorted),StaticBool(getneighbors),__neighbors)
-    ori = deepversion(StaticBool(getorientations),OrientationsVector(domain,onboundary,StaticBool(reduce_to_periodic),sorting=bonus))
+    ori = __ov = OrientationsVector(domain,onboundary,StaticBool(reduce_to_periodic),bonus)
+    #ori = deepversion(StaticBool(getorientations),__ov)
     _volume = deepversion(StaticBool(getvolume),DeepVectorFloat64(this_integral.volumes,offset))
-    _area = deepversion(StaticBool(getarea),DeepVector(this_integral.area,offset,staticfalse,Val(:deep),bonus))
-    _bi = deepversion(StaticBool(getbulk_integral),DeepVectorFloat64Vector(this_integral.bulk_integral,offset))
-    _ii = deepversion(StaticBool(getinterface_integral),DeepVector(this_integral.interface_integral,offset,staticfalse,Val(:deep),bonus))
-    _boun = reduce_to_periodic ? boundary(domain) : internal_boundary(domain)
-    boun = getboundary ? deepcopy(_boun) : _boun
+#    test_deep_types(_volume)
+    _area = deepversion(deepcombine(StaticBool(getarea), geometry_only),DeepVector(this_integral.area,offset,staticfalse,Val(:deep),bonus))
+    #@descend _area[1]
+#    test_deep_types(_area)
+#    test_deep_types(_area[1])
+    _bi = deepversion(deepcombine(StaticBool(getbulk_integral),geometry_only),DeepVectorFloat64Vector(this_integral.bulk_integral,offset))
+#    test_deep_types(_bi)
+#    test_deep_types(_bi[1])
+    _ii = deepversion(deepcombine(StaticBool(getinterface_integral),geometry_only),DeepVector(this_integral.interface_integral,offset,staticfalse,Val(:deep),bonus))
+#    test_deep_types(_ii)
+#    test_deep_types(_ii[1])
+#    test_deep_types(_ii[1][1])
+    _boun = (reduce_to_periodic==true) ? boundary(domain) : internal_boundary(domain)
+    boun = getboundary==true ? deepcopy(_boun) : _boun
     _references = deepversion(StaticBool(getreferences),references(domain))
+    rs_ = reference_shifts(domain)
+    ss_ = shifts(domain)
+    #_reference_shifts = ShiftVector{P}(rs_,ss_)
     _reference_shifts = deepversion(StaticBool(getreference_shifts),ShiftVector{P}(reference_shifts(domain),shifts(domain)))
+    
+    return  VoronoiData{typeof(_nodes),typeof(_vertices),typeof(_bv), typeof(_bn), typeof(_neighbors), typeof(ori), typeof(_volume), typeof(_area), typeof(_bi), typeof(_ii), typeof(_references), typeof(_reference_shifts), typeof(VG)}(_nodes,_vertices,_bv,_bn,onboundary==true,_neighbors,ori,_volume,_area,    _bi,_ii,length(references(domain)),_references,_reference_shifts,VG,boun)
+    
+#=    domain = VG.domain
+    offset = reduce_to_periodic * length(references(domain))
+    deepversion(::StaticTrue,a) = convert_to_vector(a)
+    deepversion(::StaticFalse,a) = a
+    ___nodes = nodes(mesh(domain)) 
+    _nodes = deepversion(StaticBool(getnodes),view(___nodes,(offset+1):length(___nodes)))
+    _vertices = deepversion(StaticBool(getvertices),Vertices_Vector(domain,reduce_to_periodic))
+    _bv = deepversion(StaticBool(getboundary_vertices),Public_BV_Iterator(mesh(domain))) # referred to by boundary_verteces
+    _bn = deepversion(StaticBool(getboundary_nodes),BNodesDictDict(domain,onboundary,reduce_to_periodic))
+    #boundary_nodes_on_boundary = onboundary
+    dvn = DeepVectorNeighbor(domain,reduce_to_periodic)
+    __neighbors = deepversion(StaticBool(getneighbors),dvn)
+    _neighbors, bonus = VoronoiData_neighbors(StaticBool(sorted),StaticBool(getneighbors),__neighbors)
+    ori = deepversion(StaticBool(getorientations),OrientationsVector(domain,onboundary,StaticBool(reduce_to_periodic),bonus))
+    _volume = deepversion(StaticBool(getvolume),DeepVectorFloat64(integral(domain).volumes,offset))
+    _area = deepversion(StaticBool(getarea),DeepVector(integral(domain).area,offset,staticfalse,Val(:deep),bonus))
+    _bi = deepversion(StaticBool(getbulk_integral),DeepVectorFloat64Vector(integral(domain).bulk_integral,offset))
+    _ii = deepversion(StaticBool(getinterface_integral),DeepVector(integral(domain).interface_integral,offset,staticfalse,Val(:deep),bonus))
+    _boun = reduce_to_periodic ? boundary(VG.domain) : internal_boundary(VG.domain)
+    boun = getboundary ? deepcopy(_boun) : _boun
+    _references = deepversion(StaticBool(getreferences),references(VG.domain))
+    _reference_shifts = deepversion(StaticBool(getreference_shifts),ShiftVector{P}(reference_shifts(VG.domain),shifts(VG.domain)))
     return  VoronoiData(_nodes,_vertices,_bv,_bn,onboundary,_neighbors,ori,_volume,_area,_bi,_ii,length(references(domain)),_references,_reference_shifts,VG,boun)
+=#
 end
+
+test_deep_types(_) = nothing
+function test_deep_types(a::DV) where {A,B,C,D,E,F,DV<:DeepVector{A,B,C,D,E,F}}
+    t1 = typeof(a[1])
+    if t1!=F
+        println(t1)
+        println(F)
+        println("-----------------------------------------------------------------------------")
+        println(DV)
+        error() 
+    end 
+end
+
 function VoronoiData_neighbors(::StaticTrue,getneighbors::StaticBool,__neighbors)
     deepversion(::StaticTrue,a) = convert_to_vector(a)
     deepversion(::StaticFalse,a) = a
@@ -591,8 +734,12 @@ end
     lv = length(v)
     fa = first_assigned(v)
     r = Vector{R}(undef,lv)
-    r[1:(fa-1)] .= R(0)
-    r[fa:lv] .= view(v,fa:lv)
+    for i in 1:(fa-1)
+        r[i] = R(0)
+    end
+    for i in fa:lv
+        r[i] = v[i]
+    end
     return r
 end
 @inline convert_to_vector(v::AVR) where {R<:Real,II, AVR<:SVector{II,R}} = v
@@ -600,8 +747,16 @@ end
 convert_to_vector(v::AVR) where {R, AVR<:AbstractVector{R}} = begin
     lv = length(v)
     fa = first_assigned(v)
-    r = [convert_to_vector(subv) for subv in view(v,fa:lv)]
-    (fa>1) && prepend!(r,Vector{eltype(r)}(undef,fa-1))
+    conv1 = convert_to_vector(v[fa])
+    r = Vector{typeof(conv1)}(undef,lv)
+    if fa<=lv 
+        r[fa] = conv1 
+    end
+    for i in (fa+1):lv 
+        r[i] = convert_to_vector(v[i])
+    end
+    #r = [convert_to_vector(subv) for subv in view(v,fa:lv)]
+    #(fa>1) && prepend!(r,Vector{R}(undef,fa-1))
     return r
 end
 @inline convert_to_vector(v) = v
@@ -619,9 +774,54 @@ function extract_discretefunctions(VD::VoronoiData, FC)#::FunctionComposer)
     return (bulk=vol,interface=inter)
 end
 
-function _get_midpoint_for_discrete_functions(data::VoronoiData,i,j,l)
+
+struct CheapVoronoiData{A,B,C,D}
+    neighbors::A 
+    boundary_nodes::B 
+    nodes::C 
+    orientations::D 
+end
+CheapVoronoiData(vd)=CheapVoronoiData(vd.neighbors,vd.boundary_nodes,vd.nodes,vd.orientations)
+
+function _get_midpoint_for_discrete_functions(data::VD,i,j,l) where {VD<:Union{VoronoiData,CheapVoronoiData}}
     n=data.neighbors[i][j]
     return  n>l ? data.boundary_nodes[i][n] : data.nodes[i] + 0.5*data.orientations[i][j]
+end
+
+struct Discrete_FunctionsPseudoTuple{TUP,P}
+    functions::TUP 
+    point::P
+    Discrete_FunctionsPseudoTuple(f::FF,p::PP) where {FF,PP} = new{FF,PP}(f,p)
+end
+@inline Base.getindex(df::Discrete_FunctionsPseudoTuple,index) = df.functions[index](df.point) 
+@inline Base.haskey(df::Discrete_FunctionsPseudoTuple,index) = haskey(df.functions,index)
+
+struct Discrete_Functions{F,VD}
+    functions::F 
+    data::VD 
+    l::Int64 
+    function Discrete_Functions(f::FF,d::VDD) where {FF,VDD} 
+        vdd = CheapVoronoiData(d)
+        return new{FF,typeof(vdd)}(f,vdd,length(d.nodes))
+    end
+end
+Base.getproperty(df::Discrete_Functions, sym::Symbol) = nothing
+Base.setproperty!(df::Discrete_Functions, sym::Symbol,val) = nothing
+#Base.setfield!(df::Discrete_Functions, sym::Symbol,val) = nothing
+
+function (df::Discrete_Functions)(i::Int64)
+    functions = getfield(df, :functions)
+    data = getfield(df, :data)
+    ni = data.nodes[i]
+    return Discrete_FunctionsPseudoTuple(functions,ni) #map(f -> f(ni), values(functions))
+end
+
+function (df::Discrete_Functions)(i::Int64, j::Int64)
+    functions = getfield(df, :functions)
+    data = getfield(df, :data)
+    l = getfield(df, :l)
+    midpoint = _get_midpoint_for_discrete_functions(data, i, j, l)
+    return Discrete_FunctionsPseudoTuple(functions,midpoint) #map(f -> f(midpoint), values(functions))
 end
 
 function extract_discretefunctions(data::VoronoiData;functions...)
@@ -629,5 +829,7 @@ function extract_discretefunctions(data::VoronoiData;functions...)
     l=length(data.nodes)
     inter = (i,j)->map(f->f(_get_midpoint_for_discrete_functions(data,i,j,l)),values(functions))
     return (bulk=vol,interface=inter)
+    #df = Discrete_Functions(functions,data) 
+    #return (bulk=df,interface=df)
 end
 

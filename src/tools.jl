@@ -276,6 +276,10 @@ struct CompoundVector{P, T <: Union{AbstractVector{P}, Nothing}} <: AbstractVect
     start::Int64
     length::Int64
 end
+@inline Base.eltype(::Type{CompoundVector{P,Nothing}}) where {P} = Nothing
+@inline Base.eltype(::Type{CompoundVector{P,T}}) where {P,T} = eltype(T)
+@inline Base.eltype(::CompoundVector{P,Nothing}) where {P} = Nothing
+@inline Base.eltype(v::CompoundVector{P,T}) where {P,T} = eltype(v.data)
 
 ################################################################################################################
 
@@ -349,6 +353,9 @@ end
     error("Index out of bounds")
 end
 
+@inline Base.eltype(::Type{SerialVector{P,T}}) where {P,T} = P
+@inline Base.eltype(sv::SerialVector{P,T}) where {P,T} = P
+
 ################################################################################################################
 
 ## MeshViewVector 
@@ -379,7 +386,7 @@ end
 #end
 
 @inline Base.size(mvv::MeshViewVector) = (length(mvv.mesh),)
-
+@inline Base.eltype(mvv::MVV) where {MVV<:MeshViewOnVector} = eltype(mvv.data)
 
 ################################################################################################################
 

@@ -255,6 +255,24 @@ const RCCombined = Raycast_Combined()
 abstract type Raycast_HP end
 struct Raycast_Non_General_HP<:Raycast_HP end
 const RCNonGeneralHP = Raycast_Non_General_HP()
+struct Raycast_Non_General_Asymptotic_General_HP<:Raycast_HP 
+    cutoff_non_general::Float64 
+    cutoff_all::Float64
+end
+const RCNonGeneralCutoff = Raycast_Non_General_Asymptotic_General_HP(1E-8,1E-12)
+@inline test_for_Raycast_Non_General_Asymptotic_General_HP(cast::Raycast_Non_General_Asymptotic_General_HP,u,_r,x0) = test_for_Raycast_Non_General_Asymptotic_General_HP(cast,u,_r,x0, staticfalse)
+function test_for_Raycast_Non_General_Asymptotic_General_HP(cast::Raycast_Non_General_Asymptotic_General_HP,u,_r,x0, cut_all) 
+    delta = _r-x0 
+    ref = sum(abs2,delta)
+    vert = dot(u,delta)^2
+    hori = ref-vert 
+    return cut_all==true ? hori/vert < cast.cutoff_all : hori/vert<cast.cutoff_non_general
+end
+
+@inline test_for_Raycast_Non_General_Asymptotic_General_HP(a,args...) = false
+
+const HPUnion = Union{Raycast_Non_General_Asymptotic_General_HP,Raycast_Non_General_HP} 
+
 const RCNonGeneral = RCNonGeneralHP
 struct Raycast_Original_HP<:Raycast_HP end
 const RCOriginalHP = Raycast_Original_HP()

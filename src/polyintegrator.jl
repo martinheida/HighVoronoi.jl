@@ -1,7 +1,7 @@
 # We provide the Polygon_Integrator. It is defined and initialized similar to 
 # the MC 
 
-struct Polygon_Integrator{T<:Union{Nothing,Function},TT,IDC<:IterativeDimensionChecker} 
+struct Polygon_Integrator{T<:Union{Nothing,Function,CombiFunction},TT,IDC<:IterativeDimensionChecker} 
     _function::T
     bulk::Bool
     # If i!=nothing, then area has to be true. Otherwise values are taken as given
@@ -113,7 +113,8 @@ function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Polyg
     #inter_inte .*= 0
     iterative_volume(I._function, I.bulk, _Cell, V, bulk_inte, ar, inter_inte, dim, neigh, 
                 _length,verteces,emptydict,emptydict,xs[_Cell],empty_vector,all_dd,all_determinants,calculate,Integral,xs,taboo,I.iterative_checker)
-    #println()
+    #error()
+                #println()
     try
         return V[1]
     catch
@@ -171,7 +172,7 @@ function queue_integral_edge(dd,edge,r,_Cell,neigh,lproto,le)
 end
 
 function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh,_length,verteces,verteces2,
-                            emptylist,vector,empty_vector,all_dd,all_determinants,calculate,Full_Matrix,xs,taboo,dc)
+                            emptylist,vector,empty_vector,all_dd,all_determinants,calculate,Full_Matrix,xs::HVN,taboo,dc) where {P,HVN<:HVNodes{P}}
     space_dim=length(vector)
     if (dim==1) # this is the case if and only if we arrived at an edge
         #print(length(verteces)," ")
@@ -271,7 +272,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
 
         taboo[dim]=_Cell
         AREA=zeros(Float64,1)
-        _Center = MVector{dim}(zeros(Float64,dim))
+        _Center = zeros(MVector{size(P)[1],Float64})
 #        println(y)
         for k in 1:_length
             buffer=neigh[k] # this is the (further) common node of all verteces of the next iteration
@@ -356,8 +357,8 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
     else        
         # the next three lines get the center of the current dim-dimensional face. this center is taken 
         # as the new coordinate to construct the currenct triangle. The minors are stored in place space_dim-dim+1 
-        _Center=midpoint(verteces,verteces2,empty_vector,vector)
-        k_minor(all_determinants,space_dim-dim,_Center)
+        this___Center=midpoint(verteces,verteces2,empty_vector,vector)
+        k_minor(all_determinants,space_dim-dim,this___Center)
         dd=all_dd[dim-1] # dd will store to each remaining neighbor N a sublist of verteces which are shared with N
 
         _count=1

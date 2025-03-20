@@ -24,6 +24,7 @@ struct SparseVectorWrapper{T} <: AbstractDict{Int64, T}
     data::Vector{Pair{Int64, T}}
 end
 
+Base.zero(::Type{SparseVectorWrapper{T}}) where T = SparseVectorWrapper(Vector{Pair{Int64, T}}())
 # Konstruktor
 #function SparseVectorWrapper(data::Vector{Pair{Int64, T}}) where T
 #    return SparseVectorWrapper{T}(data)

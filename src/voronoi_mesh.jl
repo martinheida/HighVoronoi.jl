@@ -144,8 +144,11 @@ ClassicMesh(xs::Points) = Voronoi_MESH(xs,nothing)
 
 @inline set_offset(vdb::VM,i) where {VM<:Voronoi_MESH} = set_offset(vdb.vertices,i)
 
-@inline vertices_iterator(m::VM, i::Int64, ::StaticTrue) where {P,VDB,VM<:Voronoi_MESH{P,VDB}} =  VertexIterator(m,vertices_iterator(m.vertices,i,statictrue),0)  
-@inline vertices_iterator(m::VM, i::Int64, ::StaticTrue) where {P,VDB<:VertexDBReference{P}, VM<:Voronoi_MESH{P,VDB}} =  vertices_iterator(m.vertices,i,statictrue)  
+@inline vertices_iterator(m::VM, i::Int64, ::StaticTrue) where VM<:Voronoi_MESH = vertices_iterator(m.vertices,i,statictrue)
+
+#@inline vertices_iterator(m::VM, i::Int64, ::StaticTrue) where {P,VDB,VM<:Voronoi_MESH{P,VDB}} =  VertexIterator(m,vertices_iterator(m.vertices,i,statictrue),0)  
+#@inline vertices_iterator(m::VM, i::Int64, ::StaticTrue) where {P,VDB<:VertexDBReference{P}, VM<:Voronoi_MESH{P,VDB}} =  vertices_iterator(m.vertices,i,statictrue)  
+
 #@inline vertices_iterator(m::VM, i::Int64, internal::StaticFalse) where VM<:Voronoi_MESH = VertexIterator(m,vertices_iterator(m.vertices,i,staticfalse))
 @inline all_vertices_iterator(m::VM,i::Int64,static::StaticTrue) where VM<:Voronoi_MESH = all_vertices_iterator(m.vertices,i,static) #VertexIterator(m,all_vertices_iterator(m.vertices,i,static),0) 
 @inline number_of_vertices(m::VM,i::Int64,static::StaticFalse) where VM<:Voronoi_MESH = number_of_vertices(m.vertices,internal_index(m,i),statictrue)

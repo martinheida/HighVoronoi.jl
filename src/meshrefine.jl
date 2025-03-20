@@ -180,7 +180,7 @@ This function is intended to be used in scenarios where the mesh needs to be ref
 # Returns
 Internal indices of modified cells
 """
-function systematic_refine!( mesh::AbstractMesh, new_xs::HVNodes, domain=Boundary(); settings=NamedTuple(),  subroutine_offset=0, intro="Refine with $(length(new_xs)) points: ", pdomain=StaticBool{false}(), obligatories=Int64[])
+function systematic_refine!( mesh::AM, new_xs::HVNodes, domain=Boundary(); settings=NamedTuple(),  subroutine_offset=0, intro="Refine with $(length(new_xs)) points: ", pdomain=StaticBool{false}(), obligatories=Int64[]) where (AM<:AbstractMesh)
     s_offset = subroutine_offset+sys_refine_offset
     iter = obligatories # array to store all old cells that are affected
     lxs = length(mesh)
