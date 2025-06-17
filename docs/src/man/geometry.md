@@ -1,4 +1,4 @@
-# Voronoi: Nodes and Geometry, Integrators
+# Voronoi: Nodes and Geometry, Integrators, Data Access
 
 ## [Nodes](@id differentnodegenerators)
 The most basic thing is the creation of a list of Points. We advise to use the following:
@@ -126,7 +126,28 @@ load_Voronoi_info()
 
 ## Extraction of `VoronoiData` data for further processing
 
+The `VoronoiData` is THE wrapper for users to access relevant data. This is because 
+1. The internal data structure is very complex and depends on various parameters that the user has given for constructing the geometry
+2. The internal data structure contains a lot of information on periodicity and its consequences as well as on boundaries and their consequences
+3. The internal representation of neighbors and vertices is cryptic and in most cases does not coincide with the data a user would expect
+
+The `VoronoiData` object provides an intuitive view on all data.
+
 ```@docs
 VoronoiData
+```
+
+# Extraction of `VoronoiData` data for further processing
+
+You may want to get more knowledge about the edges, i.e. if they are internally "crossing the periodic boundary". For a pure "edge data view" the following is suggested.
+
+```@docs
+VoronoiEdgeData
+```
+
+or
+
+```@docs
+VoronoiEdgeDataMatrix
 ```
 

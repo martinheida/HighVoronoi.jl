@@ -158,12 +158,16 @@ function search_vertex2(tree::ExtendedTree,point::MV,idx,dist) where {S,FLOAT<:R
     exs = tree.extended_xs
     s = tree.size
     lm=tree.mirrors
+    old_r = data.new_r
         for j in 1:lm
             #b_skip(s+j)
             x_new = exs[s+j]
             mydist = sum(abs2, data.new_r - x_new)
             skip_nodes_on_search(data,x_new,s+j,mydist,statictrue)
         end
+    if  old_r!=data.new_r
+        data.r = data.new_r
+    end
         #=for j in 1:6
             #b_skip(s+j)
             x_new = exs[j]

@@ -143,6 +143,7 @@ function periodize!(domain::VD,sr_offset=0;returnitems=staticfalse,iter=Int64[],
         mesh = HighVoronoi.mesh(domain)
         lint = length(mesh)
         new_xs = reflect_nodes(domain,periodize_mirrors(domain))
+        lnxs = length(new_xs)
         modified_planes = expand_internal_boundary(domain,new_xs) # shifts the periodic part of the boundary such that new_xs lies completely inside the 
         modified_planes .+= lint
         modified = falses(lint-lref)
@@ -150,9 +151,13 @@ function periodize!(domain::VD,sr_offset=0;returnitems=staticfalse,iter=Int64[],
         obligatories2 = findall(modified)
         #append!(iter,add_virtual_points(domain,new_xs,intro="",subroutine_offset=sr_offset, obligatories = obligatories2 ))
         #println("periodize:")
-        new_iter = add_virtual_points(domain,new_xs,intro="Include $(length(new_xs)) new nodes",subroutine_offset=sr_offset, obligatories = obligatories2, search_settings=search_settings )
-        if returnitems==true
-            append!(iter,new_iter)
+        if length(new_xs)>0
+            new_iter = add_virtual_points(domain,new_xs,intro="Include $(length(new_xs)) new nodes",subroutine_offset=sr_offset, obligatories = obligatories2, search_settings=search_settings )
+            if returnitems==true
+                iter .+= lnxs
+                append!(iter,new_iter)
+                #println(new_iter)
+            end
         end
          
         vp_print(sr_offset,"$(length(new_xs)) new nodes included in grid                                                                                                ")
@@ -171,6 +176,17 @@ end
 
 
 
+function has_periodic_boundary(domain)
+    boundary= domain.boundary
+    periodic_bc=false
+    for i in 1:length(boundary.planes)
+        if boundary.planes[i].BC>0 
+            periodic_bc=true
+        end
+    end
+    return periodic_bc
+end
+
 ## main routine to set up the discrete domain
 function Create_Discrete_Domain(mesh,_boundary::Boundary; offset=0,intro="Adjusting mesh to boundary conditions...",search_settings=RaycastParameter(Float64))
     c_offset=offset+BC_offset
@@ -181,13 +197,7 @@ function Create_Discrete_Domain(mesh,_boundary::Boundary; offset=0,intro="Adjust
     #println("first here: ",verify_mesh(mesh,_boundary))
     #println(typeof(mesh))
     domain = Domain(mesh,boundary)
-    periodic_bc=false
-    for i in 1:length(boundary.planes)
-        if boundary.planes[i].BC>0 
-            periodic_bc=true
-        end
-    end
-
+    periodic_bc = has_periodic_boundary(domain)
     if periodic_bc
         vp_print(c_offset,"Calculating nodes on periodic boundary part: ",c_offset+45,"...")
         
@@ -290,8 +300,7 @@ end
 
 
 # Takes the BitVector reference_shifts to calculate a shift based on the vectorlist "shifts" """
-function periodic_shift(reference_shifts,shifts)
-    result=zeros(Float64,length(shifts[1]))
+function periodic_shift(reference_shifts,shifts,result=zeros(Float64,length(shifts[1])))    
     for i in 1:length(reference_shifts)
         if !reference_shifts[i] continue end
         result.+=shifts[i]

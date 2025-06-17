@@ -517,6 +517,7 @@ function clear_double_lists_iterative_vol(::PolyBuffer,dd,_count,data,_my_neigh)
 
 end
 
+#=
 function keep_similars!(sig::Vector{Int64},sig2::Vector{Int64},lsig=length(sig))
     k=1
     lsig2=length(sig2)
@@ -530,6 +531,7 @@ function keep_similars!(sig::Vector{Int64},sig2::Vector{Int64},lsig=length(sig))
     end
     return sig
 end
+=#
 
 function keep_similars!(sig::Vector{Int64},itr)
     lsig = length(sig)

@@ -196,4 +196,3 @@ function Base.copy(sd::SD;resize = 0, kwargs...) where SD<:Serial_Domain
     return SD(copy(sd.boundary),deepcopy(sd.shifts),copy(sd.references),copy(sd.reference_shifts),copy(sd.internal_boundary),
                 M(public_mesh),IM(newmesh),I(public_integral),II(newintegral),copy(sd.reflections),sd._lref)
 end 
-

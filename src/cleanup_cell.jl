@@ -54,7 +54,6 @@ function cleanup_cell(vol,ar,bulk,inter,_Cell,iterate, calculate, data,Integrato
     cdw = cell_data_writable(Integral,_Cell,dfvb,dfvvb)
     old_neighbors = cdw.neighbors
     activate_data_cell(data,_Cell,old_neighbors)
-
     xs = data.extended_xs
     vector = xs[_Cell]
     dim = length(vector)
