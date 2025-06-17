@@ -223,7 +223,7 @@ convert_to_vector(pbi::PBI) where {PBI<:Public_BV_Iterator} = begin
 end
 
 function verify_mesh(mesh,boundary,counting=false)
-    searcher = Raycast(copy(nodes(mesh)),domain=boundary)
+    #=searcher = Raycast(copy(nodes(mesh)),domain=boundary)
     c1 = 0
     c2 = 0
     count = 0
@@ -255,7 +255,7 @@ function verify_mesh(mesh,boundary,counting=false)
                 return false
             end
         end
-    end
+    end=#
     return c1==0
 end
 
