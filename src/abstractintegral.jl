@@ -24,14 +24,14 @@ end
 @inline function cell_data_writable(I::HVI,_Cell,vec,vecvec;printshit=false,get_integrals=statictrue) where HVI<:HVIntegral 
     cdw = cell_data_writable(I,internal_index(mesh(I),_Cell),vec,vecvec,staticfalse,get_integrals=get_integrals)
     new_neigh = copy(cdw.neighbors)
-    indices = collect(1:length(cdw.neighbors))
     printshit && println(new_neigh)
     _external_indeces(mesh(I),new_neigh)
     printshit && println(new_neigh)
+
+    indices = collect(1:length(cdw.neighbors))
     quicksort!(new_neigh,indices,indices)
     printshit && println(indices)
-    #println(typeof(cdw.area))
-    #println(typeof(cdw.interface_integral))
+
     return (volumes = cdw.volumes, area = ShuffleViewVector(indices,cdw.area), bulk_integral = get_integrals==true ? cdw.bulk_integral : nothing, interface_integral=get_integrals==true ? ShuffleViewVector(indices,cdw.interface_integral) : nothing, neighbors = new_neigh,indices=indices)
 end
 

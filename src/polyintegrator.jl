@@ -111,6 +111,8 @@ function    integrate(neighbors,_Cell,iterate, calculate, data,Integrator::Polyg
     taboo = zeros(Int64,dim)
     #typeof(data.buffer_data)==Int64 && error("fehler")
     #inter_inte .*= 0
+    #length(inter_inte)!=length(neighbors) && error("$(length(inter_inte)) vs. $(length(neighbors))")
+
     iterative_volume(I._function, I.bulk, _Cell, V, bulk_inte, ar, inter_inte, dim, neigh, 
                 _length,verteces,emptydict,emptydict,xs[_Cell],empty_vector,all_dd,all_determinants,calculate,Integral,xs,taboo,I.iterative_checker)
     #error()
@@ -188,6 +190,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
             #if abs(val[1]-1.0)>0.00000001
             #    error("$val")
             #end
+                
                 Ay .+= vol .* val
                 #println("a :$(Ay) ")
             #end
@@ -266,6 +269,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
                     pe.value .= _function(pe.r1)
                     pe.value .+= _function(pe.r2)
                     pe.value .*= 0.5
+                    
                 end
             end
         end
@@ -298,6 +302,7 @@ function iterative_volume(_function, _bulk, _Cell::Int64, V, y, A, Ay, dim,neigh
                     _Center2=midpoint(bufferlist,emptylist,empty_vector,vector)
                     _Center2.+=vector # midpoint shifts the result by -vector, so we have to correct that .... 
                     _Center .= _Center2
+                    
                     iterative_volume(_function, _bulk, _Cell, V, y, AREA, AREA_Int, dim-1, neigh, _length, bufferlist, emptylist, emptylist,vector,empty_vector,all_dd,all_determinants,calculate,Full_Matrix,xs,taboo,dc)
                     neigh[k]=buffer
                     #if abs(AREA_Int[1]/AREA[1]-1.0)>0.00000001

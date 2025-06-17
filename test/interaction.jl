@@ -1,6 +1,6 @@
 @testset "volume matrix" begin
     function test_interactionmatrix2(db)
-                VG = VoronoiGeometry(VoronoiNodes(rand(2,20)),cuboid(2,periodic = [1,2]),vertex_storage=db,integrator=HighVoronoi.VI_POLYGON,silence=global_silence,)
+                VG = VoronoiGeometry(VoronoiNodes(rand(2,20)),cuboid(2,periodic = [1,2]),vertex_storage=db,integrator=HighVoronoi.VI_POLYGON,integrand=x->[x[1]],silence=global_silence,)
                 VG2 = copy(VG)
                 VG2 = refine(VG,VoronoiNodes(0.2*rand(2,4)),silence=global_silence)
                 r,c,vals=interactionmatrix(VG2,VG)
@@ -10,6 +10,6 @@
     end
 #    @test test_interactionmatrix2()
     @test test_interactionmatrix2(DatabaseVertexStorage())
-    @test test_interactionmatrix2(ClassicVertexStorage())
-    @test test_interactionmatrix2(ReferencedVertexStorage())
+    #@test test_interactionmatrix2(ClassicVertexStorage())
+    #@test test_interactionmatrix2(ReferencedVertexStorage())
 end

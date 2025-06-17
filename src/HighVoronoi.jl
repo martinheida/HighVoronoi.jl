@@ -190,6 +190,8 @@ include("sphericalmeshview.jl")
 include("sphere.jl")
 include("sphericalpublicview.jl")
 include("voronoidata.jl")
+include("edgedata.jl")
+
 include("discretefunctions.jl")
 include("substitute.jl") # refinement by substitution
 
@@ -252,6 +254,7 @@ export VoronoiSphere
 
 export refine!
 export refine
+export improve!
 export indeces_in_subset
 export substitute!
 export interactionmatrix
@@ -309,4 +312,10 @@ export AutoThread
 export DatabaseVertexStorage
 export ClassicVertexStorage
 export ReferencedVertexStorage
+
+export VoronoiEdgeDataMatrix
+export VoronoiEdgeData
+
+export LLoyd
+export Simple_LLoyd
 end # module

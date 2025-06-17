@@ -19,6 +19,8 @@
         print("$sig, ")
     end
     println()
+#    println(vd.volume)
+    println(typeof(vd.volume))
     @test sum(vd.volume)>6.0
 end
 
