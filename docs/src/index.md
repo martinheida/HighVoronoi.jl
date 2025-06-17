@@ -2,7 +2,7 @@
 CurrentModule = HighVoronoi
 ```
 
-# HighVoronoi 1.4.1: $N\log N$ complexity Parallel Computed Voronoi Grids in $\mathbb{R}^d$ and on $\mathbb{S}^d$
+# HighVoronoi 1.5.0: $N\log N$ complexity Parallel Computed Voronoi Grids in $\mathbb{R}^d$ and on $\mathbb{S}^d$
 
 Documentation for [HighVoronoi](https://github.com/martinheida/HighVoronoi.jl). Voronoi mesh generation in arbitrary dimensions + Finite Volume setup, also for vertices with $d+k$, $k>1$ generators.
 
@@ -10,9 +10,10 @@ Documentation for [HighVoronoi](https://github.com/martinheida/HighVoronoi.jl). 
 - [QUICK START on FINITE VOLUME methods: Click here](@ref QuickFV) / [The ABSTRACT WORKFLOW is here](@ref workflowfv)  
 - [Toy file for testing numerical solver](@ref toyfile)
 
-### News to version 1.4.1:
+### News to version 1.5.0:
 
-- Patches for increased performance and improved stability on unbounded domains. New parameter `RCNonGeneralFast` (See [here](@ref boostedraycast)). 
+- alternative for improving geometric properties of nodes (keyword `improving`)
+- Additional data access structure `VoronoiEdgeDataMatrix` which could be used for GNN.
 
 ### News to version 1.4.0:
 
@@ -136,7 +137,7 @@ savefig("plot.pdf")
 - Set up the linear equation for a finite volume Voronoi discretization of a given elliptic PDE with Neumann, Dirichlet or periodic boundary conditions
 - other functionalities like 2D data export in Metapost, storing and loading data.
 
-## Important data structures and methods
+## [Important data structures and methods](@id mostimportantdatastructures)
 
 ### Data structures
 - `VoronoiGeometry`: Creating, loading, updating, refining and managing the mesh

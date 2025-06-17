@@ -124,21 +124,14 @@ end
         @inbounds tiz = tree.indices[z]
         idx = tree.reordered ? z : tiz
         @inbounds x_new = tree.data[idx]
-        debug = tiz==48
-        #debug && error()
-        #idx!=tiz && error()
         dist_d = sum(abs2,x_new-data.new_r)#myevaluate(tree.metric, x_new, data.new_r, do_end)
-        #if !data.new_mode
-            #correction = data.dist_new_r_x0_2 * 1000 * data.plane_tolerance
-            if dist_d <= data.dist_new_r_x0_2 + data.full_error_t
-                #println("old_r: $old_r")
-                #debug && error(norm(data.r-HighVoronoi.global_179)^2)
+        if !data.new_mode
+            correction = data.dist_new_r_x0_2 * 1000 * data.plane_tolerance
+            if dist_d <= data.dist_new_r_x0_2 + correction
                 HighVoronoi.skip_nodes_on_search(data,x_new,tiz,dist_d,HighVoronoi.staticfalse)
-                #println("new_r: $(data.new_r)")
-
                 data.bestnode[1] in data.taboo && error("$(data.taboo) vs. $(data.bestnode[1])")
             end
-        #=elseif dist_d<=data.dist_new_r_x0_2 && dot(x_new,u)>data.c
+        elseif dist_d<=data.dist_new_r_x0_2 && dot(x_new,u)>data.c
             if data.visited<data.lt
                 id = HighVoronoi.findfirstassured_sorted(tiz,data.taboo)
                 if id>0 
@@ -155,25 +148,114 @@ end
                 push!(data.cs,0.0)
             end
             #HighVoronoi.cast_nodes_on_search(data,x_new,tiz,idx,dist_d,HighVoronoi.staticfalse)
-        end=#
+        end
     end
     if !data.new_mode 
-        #println("hier, aber.... $old_r, $(data.new_r)")
-        
         if old_r!=data.new_r
             #data.dist_new_r_x0_2 = norm(r-x0)^2 needs no change
             data.r = data.new_r
-            #println("compare: $(norm(data.r-data.x0)), $(best_dists[1])")
-            
-            #data.bestdist[1] = myevaluate(tree.metric, data.x0, data.new_r, false)*(1+1000*data.plane_tolerance)
-            #data.dist_r_x0_2 = data.bestdist[1]
+            data.bestdist[1] = myevaluate(tree.metric, data.x0, data.new_r, false)*(1+1000*data.plane_tolerance)
+            data.dist_r_x0_2 = data.bestdist[1]
             #println("r=$(data.r), bestdist=$(data.bestdist[1]), sig=$(data.sigma)")
-            #@inbounds x_new = tree.data[data.sigma[1]]
+            @inbounds x_new = tree.data[data.sigma[1]]
             #println("     RESULT: $(norm(x_new-data.r))")
             return false
         end
         return true
     end
+    lsig == length(data.sigma) && return true
+    #println("--------------------------------------------------------------------------------")
+    ts = data.ts 
+    sigma = data.sigma 
+    sigma_buffer = data.sigma_buffer
+    full_errors = data.full_errors 
+    cs = data.cs 
+    HighVoronoi.parallelquicksort_trust!(ts,cs,sigma,full_errors,sigma_buffer)
+    upper_t = ts[1] + HighVoronoi.upper_t_error(data.x0,full_errors[1])
+    c_min = typemin(Float64)
+    i = 0
+    gen = 0
+    l_ts = length(ts)
+    #println("ts=$ts, cs=$cs, upper_t=$upper_t, error=$(HighVoronoi.upper_t_error(data.x0,full_errors[1]))")
+    #println("sig=$sigma, lsig=$lsig, full_error=$(full_errors[1]), du=$(data.du)")
+    while (i+1<=l_ts && ts[i+1]<=upper_t)
+        i += 1 
+        cc = cs[i]
+        if (cc>c_min)
+            c_min = cc 
+            gen = sigma_buffer[i]
+        end
+    end
+    HighVoronoi.cut!(sigma,i)
+    HighVoronoi.cut!(data.sigma_buffer,i)
+    HighVoronoi.cut!(cs,i)
+    HighVoronoi.cut!(ts,i)
+    HighVoronoi.cut!(full_errors,i)
+    #println("ts=$ts, cs=$cs, sigma=$sigma, sigma_buffer=$sigma_buffer")
+    _vvv = r0 + ts[1]*u
+    scale = HighVoronoi.get_scale(u, x0,_vvv)
+
+    full_error = full_errors[1]
+    relative_error = full_error/ts[1]
+
+    full_mode = (relative_error>1E-10 || full_error>1E-8/max(scale,1E-4))
+    data_gen = gen#tree.reordered ? gen : tree.indices[gen]
+    #println("gen=$gen, data_gen=$data_gen, l_ts=$l_ts")
+    #println("ts=$ts, upper_t=$upper_t")
+
+#    rethrow()
+#try
+    @inbounds     x_new = tree.data[data_gen]
+    #catch 
+    #end
+    HighVoronoi.prepare_vertex_calculation(data,full_mode)
+    r2 = HighVoronoi.vertex_calculation_hp(data,_vvv,u,x_new,full_mode)
+    #base_dist = sum(abs2,r2-x0)
+    #print("base_dist=$base_dist, ")
+    minmeas = maxmeas = sum(abs2,x_new-r2)
+    #println("minmeas1=$minmeas,  ")
+    for xx in data.edge 
+        n2 = sum(abs2,xx-r2) 
+        #print("$n2, ")
+        minmeas = min(minmeas,n2)
+        maxmeas = max(maxmeas,n2)
+    end
+    #println()
+    #print("minmeas2=$minmeas,  maxmeas2=$maxmeas,  ")
+    measure2 = maxmeas + 100 * scale * max((maxmeas-minmeas),maxmeas*relative_error)
+    #println("measure2=$measure2,  ")
+    #println("")
+    #println("maxmeas=$maxmeas, minmeas=$minmeas, scla=$scale")
+    #println(measure2)
+    data.upper_t = upper_t 
+    data.dist_new_r_x0_2 = dist_new_r_x0_2 = measure2
+    data.new_r = r2
+    data.bestdist[1] = dist_new_r_x0_2
+    data.dist_r_x0_2 = data.bestdist[1]
+    for i in 1:length(sigma)
+        @inbounds s = sigma_buffer[i]
+        x_n = tree.data[s]
+        @inbounds cs[i] = sum(abs2,r2-x_n)
+    end
+    HighVoronoi.parallelquicksort_trust!(cs,ts,sigma,full_errors,sigma_buffer)
+    i = length(sigma)
+    #println("ts=$ts, cs=$cs, sigma=$sigma, sigma_buffer=$sigma_buffer, dist_new_r_x0_2=$dist_new_r_x0_2, sq=$(norm(x_new-r2)^2)")
+    while cs[i]>dist_new_r_x0_2 
+        #println(i)
+        i -= 1
+    end
+    HighVoronoi.cut!(sigma,i)
+    HighVoronoi.cut!(data.sigma_buffer,i)
+    HighVoronoi.cut!(cs,i)
+    HighVoronoi.cut!(ts,i)
+    HighVoronoi.cut!(full_errors,i)
+    data.r = data.new_r
+    #println("r=$(data.r), bestdist=$(data.bestdist[1]), sig=$(data.sigma), sig_buf=$(data.sigma_buffer), reorder=$(tree.reordered)")
+    #println()
+    #println("     RESULT: $(norm(x_new-data.r))")
+
+    return false 
+    #TODO: globale routine zum Auslesen der Daten.
 end
 
 const global_i2 = MVector{1,Int64}([0])

@@ -61,17 +61,31 @@ end
 function filter!( condition, mesh::M,_depsig=StaticBool{true}(),_depr=StaticBool{true}(), _sig_internal=!_depsig; affected = 1:length(mesh),searcher=nothing) where {M<:AbstractMesh} 
     my_affected, _filter = filter_data( condition, mesh,_depsig,_depr, affected)
     range = typeof(searcher)==Nothing ? (1:2) : ((length(mesh)+1):length(mesh)+length(searcher.domain))
+    #println(range)
     #println("filter start")
+    #full_dict = Dict{Vector{Int64},typeof(nodes(mesh)[1])}()
+    #for i in my_affected 
+    #    for (sig,r) in vertices_iterator(mesh,i)
+    #        push!(full_dict,sig=>r)
+    #    end
+    #end
+    #println("Das ist die aktuelle version")
     for i in my_affected
         #print("1") 
+        #searcher.tree.active .= false
         activate_cell(searcher,i,range)
+        #print(nodes(mesh)[i],",  ")
+        #println(searcher.tree.extended_xs[21])
         avi = all_vertices_iterator(_filter.mesh,internal_index(_filter.mesh,i),statictrue)
         #print("2")
         for (sig,r) in avi
             #print("a")
             ext_sig = external_sig(_filter.mesh,sig,statictrue)
+            #!haskey(full_dict,ext_sig) && error(ext_sig)
+            #haskey(full_dict,ext_sig) && full_dict[ext_sig]!=r && error("$r vs $(full_dict[ext_sig])")
+            #haskey(full_dict,ext_sig) && full_dict[ext_sig]==r && print("+")
             #print("b")
-            if _sig_internal==statictrue ? !_filter.condition(sig,r) : !_filter.condition(ext_sig,r)
+            if _sig_internal==true ? !_filter.condition(sig,r) : !_filter.condition(ext_sig,r)
                 #print("A")
                 mark_sig(_filter,ext_sig)
                 #print("B")

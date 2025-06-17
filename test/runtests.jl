@@ -1,6 +1,6 @@
 using Test
-#using Revise
 using HighVoronoi
+using HighVoronoi: statictrue, staticfalse
 
 using SpecialFunctions
 using LinearAlgebra
@@ -24,6 +24,7 @@ const global_silence = false
     include("convexhull.jl")
     include("sphere.jl")
     include("voronoidata.jl")
+    include("voronoiedgedata.jl")
     include("statistics.jl")
     include("fraud.jl")
     include("periodicgrids.jl")
