@@ -332,40 +332,6 @@ function vertex_calculation_hp_searchdata(edge,searcher,r,u,xn)
     return r+P(first_corrector)        
 end
 
-function teste_neu(xs,search_settings)
-    search=RaycastParameter(eltype(eltype(xs));search_settings...)
-    searcher1=Raycast(xs;domain=Boundary(),options=search)
-    searcher2=Raycast(xs;domain=Boundary(),options=search)
-    switch_mode(searcher2)
-    data1 = (full_edge=[53, 22425, 27958, 29451, 42047], r=[0.7128823913455041, 0.6316139449082003, 0.7919043412091288, 0.689173502555895, 0.9905998046940904], u=[-0.7787804456539928, -0.3076200195381304, 0.1661239627022374, 0.10541667638729993, 0.5100598929556112], sig=[53, 15214, 22425, 27958, 29451, 42047], du=4.163336342344337e-16)
-    data2 = (full_edge=[53, 22425, 27958, 29451, 42047], r=[0.7128823913455041, 0.6316139449082003, 0.7919043412091288, 0.689173502555895, 0.9905998046940904], u=[-0.7787804456539928, -0.3076200195381304, 0.1661239627022374, 0.10541667638729993, 0.5100598929556112], sig=[53, 15214, 22425, 27958, 29451, 42047], du=4.163336342344337e-16)
-    #data1 = (full_edge=[10, 1306, 13060, 14528, 20068], r=[0.8972680254827956, -0.07280851123185665, -9.68426805636252, 0.7069907560301997, 0.5145278533160068], u=[-0.016132797777595576, -0.029128403007150305, 0.999343552271506, -0.009122645825393051, 0.010977742966224988], sig=[10, 1306, 4436, 13060, 14528, 20068], du=3.75025531462736e-16)
-    #data2 = (full_edge=[10, 1306, 13060, 14528, 20068], r=[0.8972680254827956, -0.07280851123185665, -9.68426805636252, 0.7069907560301997, 0.5145278533160068], u=[-0.016132797777595576, -0.029128403007150305, 0.999343552271506, -0.009122645825393051, 0.010977742966224988], sig=[10, 1306, 4436, 13060, 14528, 20068], du=3.75025531462736e-16)
-    data = data1
-    searcher = searcher1
-    generator, t, r2 = raycast_des(data.full_edge, data.r, data.u, xs, searcher, 0,copy(data.full_edge),data.sig,Raycast_By_Walkray(),data.du)
-    println("generator=$generator, t=$t, r2=$r2")
-    println("     -------------------")
-    #error()
-    data = data2
-    searcher = searcher2
-    generator, t, r2 = raycast_des(data.full_edge, data.r, data.u, xs, searcher, 0,copy(data.full_edge),data.sig,Raycast_By_Walkray(),data.du)
-    println("generator=$generator, t=$t, r2=$r2")
-    println("-----------------------------")
-
-     for i in 1:1000 
-        data1 = (full_edge=[10, 1306, 13060, 14528, 20068], r=[0.8972680254827956, -0.07280851123185665, -9.68426805636252, 0.7069907560301997, 0.5145278533160068], u=[-0.016132797777595576, -0.029128403007150305, 0.999343552271506, -0.009122645825393051, 0.010977742966224988], sig=[10, 1306, 4436, 13060, 14528, 20068], du=3.75025531462736e-16)
-        data = data1
-        searcher = searcher1
-        raycast_des(data.full_edge, data.r, data.u, xs, searcher, 0,copy(data.full_edge),data.sig,Raycast_By_Walkray(),data.du)
-    end
-     for i in 1:1000 
-        data2 = (full_edge=[10, 1306, 13060, 14528, 20068], r=[0.8972680254827956, -0.07280851123185665, -9.68426805636252, 0.7069907560301997, 0.5145278533160068], u=[-0.016132797777595576, -0.029128403007150305, 0.999343552271506, -0.009122645825393051, 0.010977742966224988], sig=[10, 1306, 4436, 13060, 14528, 20068], du=3.75025531462736e-16)
-        data = data2
-        searcher = searcher2
-        raycast_des(data.full_edge, data.r, data.u, xs, searcher, 0,copy(data.full_edge),data.sig,Raycast_By_Walkray(),data.du)
-    end
-end
 
 function cast_nodes_on_search(data::NNSearchData{T},x_new,i,z, dist,boundarymode::S) where {T,S<:StaticBool}
     #=if data.visited<data.lt
