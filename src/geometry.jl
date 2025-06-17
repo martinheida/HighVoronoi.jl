@@ -28,9 +28,9 @@ end
 const PGeometry{P} = VoronoiGeometry{T,TT,SNP,DT,MC,HVF} where {P,T,TT,SNP,DT<:AbstractDomain{P},MC,HVF}
 const ClassicGeometry = VoronoiGeometry{T,TT,SNP,DT,MC,HVF} where {T,TT,SNP,DT<:Voronoi_Domain,MC,HVF}
 @inline Base.getproperty(cd::VoronoiGeometry, prop::Symbol) = dyncast_get(cd,Val(prop))
-@inline @generated dyncast_get(cd::VoronoiGeometry, ::Val{:nodes}) =  :(nodes(mesh(integral(getfield(cd,:domain)))))
-@inline @generated dyncast_get(cd::VoronoiGeometry, ::Val{:mesh}) =  :(mesh(integral(getfield(cd,:domain))))
-@inline @generated dyncast_get(cd::VoronoiGeometry, ::Val{:integral}) =  :(integral(getfield(cd,:domain)))
+#@inline @generated dyncast_get(cd::VoronoiGeometry, ::Val{:nodes}) =  :(nodes(mesh(integral(getfield(cd,:domain)))))
+#@inline @generated dyncast_get(cd::VoronoiGeometry, ::Val{:mesh}) =  :(mesh(integral(getfield(cd,:domain))))
+#@inline @generated dyncast_get(cd::VoronoiGeometry, ::Val{:integral}) =  :(integral(getfield(cd,:domain)))
 @inline @generated dyncast_get(cd::VoronoiGeometry, ::Val{:refined}) =  :(getfield(cd,:status)[1])
 @inline @generated dyncast_get(cd::VoronoiGeometry, d::Val{S}) where S = :( getfield(cd, S))
 
@@ -38,7 +38,7 @@ const ClassicGeometry = VoronoiGeometry{T,TT,SNP,DT,MC,HVF} where {T,TT,SNP,DT<:
 @inline @generated dyncast_set(cd::VoronoiGeometry, ::Val{:refined},val) =  :(getfield(cd,:status)[1]=val)
 @inline @generated dyncast_set(cd::VoronoiGeometry, d::Val{S},val) where S = :( setfield(cd, S,val))
 
-@inline mesh(vg::VoronoiGeometry) = mesh(vg.domain)
+#@inline mesh(vg::VoronoiGeometry) = mesh(vg.domain)
 @inline integral(vg::VoronoiGeometry) = integral(vg.domain)
 
 @inline function Base.open(func::Function,vg::VG) where {VG<:VoronoiGeometry}
@@ -136,6 +136,70 @@ function cast_mesh(gs,xs::HVNodes{P}) where {P}
     return get_mesh(gs,mesh)
 end
  
+"""
+    VoronoiGeometry(xs::Points, b::Boundary;
+                    vertex_storage::VertexStorage = DatabaseVertexStorage(),
+                    improving::NamedTuple = (max_iterations = 0, tolerance = 1.0),
+                    search_settings::NamedTuple = NamedTuple(),
+                    integrator = VI_GEOMETRY,
+                    integrand = nothing,
+                    mc_accurate::Tuple{Int,Int,Int} = (1000, 5, 20),
+                    periodic_grid = nothing,
+                    silence::Bool = false,
+                    printevents::Bool = false,
+                    integrate::Bool = true)
+
+Compute the Voronoi tessellation of a given set of points within a specified boundary, with options for storage, refinement, and integration.
+
+# Arguments
+- `xs::Points`
+  The input points (sites) that define the Voronoi cells.
+
+- `b::Boundary`
+  The boundary of the computational domain. Must enclose all points in `xs` for stability.  
+  Use `Boundary()` to denote the entire ℝᵈ space.
+
+# Keyword Arguments
+- `vertex_storage::VertexStorage = DatabaseVertexStorage()`
+  Internal storage scheme for Voronoi vertices. In descending performance:
+  `DatabaseVertexStorage()`, `ReferencedVertexStorage()`, `ClassicVertexStorage()`.
+
+- `improving::NamedTuple = (max_iterations = 0, tolerance = 1.0)`
+  Method for node refinement to improve geometric quality. Fields:
+  - `:max_iterations` (Int): maximum number of refinement iterations.
+  - `:tolerance` (Float64): convergence threshold.
+  Examples of methods: `LLoyd`, `Simple_LLoyd`.
+
+- `search_settings::NamedTuple = NamedTuple()`
+  Parameters for the ray‐casting algorithm used in cell construction.
+
+- `integrator = VI_GEOMETRY`
+  Integration method for determining neighbors, computing volumes, and evaluating integrals.
+
+- `integrand`
+  A function to integrate over each cell, if supported by the chosen `integrator`.  
+  Default is `nothing`.
+
+- `mc_accurate::Tuple{Int,Int,Int} = (1000, 5, 20)`
+  Parameters for Monte‐Carlo integration when `integrator == VI_MONTECARLO`:
+  `(n_samples, param2, param3)`.
+
+- `periodic_grid = nothing`
+  See manual for information on usage. If provided, generates a periodic grid in a "fast" way out of 'xs' by repeating periodically.
+
+- `silence::Bool = false`
+  When `true`, suppresses all terminal output.
+
+- `printevents::Bool = false`
+  When `true`, prints detailed event logs (useful for debugging).
+
+- `integrate::Bool = true`
+  If `true`, performs integration; if `false`, skips all integral computations.
+
+# Returns
+A `VoronoiGeometry` object containing geometric information on the Voronoi diagram, as well as (upon request) volumes, interface areas, integrals, ...
+use `VoronoiData(...)` as an interface to extract this information porperly!! 
+"""
 function VoronoiGeometry(xs::Points,b=Boundary(); vertex_storage=DatabaseVertexStorage(),improving=(max_iterations=0, tolerance=1.0,), search_settings::NamedTuple=NamedTuple(), integrator=VI_GEOMETRY,integrand=nothing,mc_accurate=(1000,5,20),periodic_grid=nothing,silence=false,printevents=false,integrate=true)
     oldstd = stdout
     result = nothing
@@ -145,51 +209,28 @@ function VoronoiGeometry(xs::Points,b=Boundary(); vertex_storage=DatabaseVertexS
         if typeof(periodic_grid)!=Nothing
             return PeriodicVoronoiGeometry(xs,vertex_storage=vertex_storage, integrator=integrator,integrand=integrand,mc_accurate=mc_accurate,search_settings=search_settings,silence=silence;periodic_grid...)
         else
-            myintegrator = replace_integrator(IntegratorType(integrator))
             redirect_stdout(silence ? devnull : oldstd)
-            #vertex_storage = haskey(search_settings,:threading) ? change_db_type(vertex_storage,search_settings.threading) : vertex_storage
             !silence && println(Crayon(foreground=:red,underline=true), "Initialize bulk mesh with $(length(xs)) points",Crayon(reset=true))
 
             search=RaycastParameter(eltype(eltype(xs));search_settings...)
-            #println(typeof(search))
             mmm = cast_mesh(vertex_storage,copy(xs))
             voronoi(mmm,searcher=Raycast(xs;domain=b,options=search),intro="",printsearcher=printevents, silence=silence)
             
-            #mmm2 = cast_mesh(vertex_storage,copy(xs))
-            #search2=RaycastParameter(eltype(eltype(xs));method=RCCombined,threading=SingleThread())
-            #voronoi(mmm2,searcher=Raycast(xs;domain=b,options=search2),intro="",printsearcher=printevents, silence=silence)
-
-            #error(compare(mmm,mmm2))
-            #=
-            nod = nodes(mmm)
-            for i in 1:10
-                print("$i: ")
-                for (sig,r) in vertices_iterator(mmm,i)
-                    for s in sig
-                        s>length(nod) && break
-                        print("$(norm(r-nod[s])), ")
-                    end
-                    print(" || ")
-                end
-                println()
-            end
-            error() =#
-
             d2 = Create_Discrete_Domain(mmm,b,intro="",search_settings=search) # periodized version including all boundary data 
+            #println(integral(d2).neighbors)
 
-            improve_mesh(d2; improving..., printevents=printevents,search=search)
-            
+
+            improve_mesh(d2, improving, printevents, search)
+
+            #println("Valid: ",verify_mesh(mesh(d2),internal_boundary(d2)))
+
             lboundary = length(b)
             relevant = collect(1:public_length(d2))
             modified = collect(1:(length(mesh(d2))+lboundary))
-            #@descend integrate_geo(integrate,d2,myintegrator,integrand,mc_accurate,relevant,modified,silence)
-            #error()
+
+            myintegrator = replace_integrator(IntegratorType(integrator))
             integrate_geo(integrate,d2,myintegrator,integrand,mc_accurate,relevant,modified,silence)
-            #=m2,i2 = integrate_view(d2)
-            println(i2.neighbors)
-            for (sig,r) in vertices_iterator(m2,1)
-                print("$sig, ")
-            end=#
+
             result = VoronoiGeometry(myintegrator,d2,integrand,search,mc_accurate,nothing)#NoFile())
             end
     catch err
@@ -246,6 +287,7 @@ parallelize_integrators(myintes2) = myintes2
 @inline integrate_geo(integrate::SingleThread,d2,myintegrator,integrand,mc_accurate,relevant,modified,silence=false) = integrate_geo(true,d2,myintegrator,integrand,mc_accurate,relevant,modified,silence)
 @inline function integrate_geo(integrate::Bool,d2,myintegrator,integrand,mc_accurate,relevant,modified,silence=false)
     !integrate && return 
+
     II2=Integrator(integrate_view(d2).integral,myintegrator,integrand=integrand,mc_accurate=mc_accurate)
     
     mmm = mesh(integrate_view(d2).integral)
@@ -262,6 +304,176 @@ parallelize_integrators(myintes2) = myintes2
     return 
 end
 
+"""
+    improve!(vg::VG;
+             improving::NamedTuple = (max_iterations = 0, tolerance = 1.0),
+             search_settings::NamedTuple = NamedTuple(),
+             overwrite_integral_settings::Bool = false,
+             overwrite_search_settings::Bool = false,
+             integrator = vg.Integrator,
+             integrand = vg.integrand,
+             mc_accurate::Tuple{Int,Int,Int} = vg.mc_accurate,
+             silence::Bool = false,
+             printevents::Bool = false,
+             integrate::Bool = true) where {VG<:VoronoiGeometry}
+
+Refine the node positions of a Voronoi geometry according to the specified algorithm `improving`,
+and optionally update its search or integration settings.
+
+The nodes, volumes, areas, .... of original object will be modified!!! If you do not want that, make a copy first!
+
+# Arguments
+- `vg::VG`
+  An existing `VoronoiGeometry` instance whose nodes will be modified.
+
+# Keyword Arguments
+- `improving::NamedTuple = (max_iterations = 0, tolerance = 1.0)`
+  Refinement method parameters:
+  - `:max_iterations` (Int): number of iterations to apply.
+  - `:tolerance` (Float64): stopping threshold.
+
+- `search_settings::NamedTuple = NamedTuple()`
+  Parameters for the ray‐casting cell construction algorithm
+  (see `VoronoiGeometry(...; search_settings=…)`).
+
+- `overwrite_integral_settings::Bool = false`
+  If `true`, replace the geometry’s `Integrator`, `integrand`, and `mc_accurate`
+  fields with the values provided here before (re)integrating.
+
+- `overwrite_search_settings::Bool = false`
+  If `true`, rebuild the internal search structures using the given
+  `search_settings`.
+
+- `integrator`
+  Integration method to apply; defaults to `vg.Integrator`.
+
+- `integrand`
+  Function to integrate over each cell; defaults to `vg.integrand`.
+
+- `mc_accurate::Tuple{Int,Int,Int} = vg.mc_accurate`
+  Monte Carlo integration parameters `(n_samples, param2, param3)`.
+
+- `silence::Bool = false`
+  Suppress terminal output when `true`.
+
+- `printevents::Bool = false`
+  Print detailed event logs for debugging when `true`.
+
+- `integrate::Bool = true`
+  If `true`, perform integration after refinement; if `false`, skip integrals.
+
+# Returns
+A new `VoronoiGeometry` instance with nodes refined according to `improving`.  
+If `overwrite_search_settings` is `true`, the search structures are rebuilt.  
+If `overwrite_integral_settings` is `true` and `integrate` is `true`, integrals  
+are recomputed with the new integration settings.  
+"""
+function improve!(vg::VG; improving=(max_iterations=0, tolerance=1.0,), search_settings::NamedTuple=NamedTuple(), overwrite_integral_settings=false, overwrite_search_settings=false, integrator=vg.Integrator,integrand=vg.integrand,mc_accurate=vg.mc_accurate,silence=false,printevents=false,integrate=true) where {VG<:VoronoiGeometry}
+    oldstd = stdout
+    try
+            redirect_stdout(silence ? devnull : oldstd)
+            d2 = vg.domain
+            #println("Bli: ",VoronoiData(vg).neighbors[1])
+            lboundary = length(boundary(d2))
+            myintegrator = replace_integrator(IntegratorType(integrator))
+            search = overwrite_search_settings ? RaycastParameter(eltype(eltype(nodes(mesh(d2))));search_settings...) : vg.searcher
+            improve_mesh(d2, improving, printevents,search)
+            #println("Bla: ",VoronoiData(vg).neighbors[1])
+
+            relevant = collect(1:public_length(d2))
+            modified = collect(1:(length(mesh(d2))+lboundary))
+
+            if overwrite_integral_settings
+                integrate_geo(integrate,d2,myintegrator,integrand ,mc_accurate,relevant,modified,silence)
+            else
+                integrate_geo(integrate,d2,vg.Integrator,vg.integrand,vg.mc_accurate,relevant,modified,silence)
+            end
+            redirect_stdout(oldstd)
+            #println("Blub: ",VoronoiData(vg).neighbors[1])
+
+            if overwrite_integral_settings
+                return VoronoiGeometry(myintegrator,d2,integrand,search,mc_accurate,nothing) 
+            else
+                return VoronoiGeometry(vg.Integrator,d2,vg.integrand,search,vg.mc_accurate,nothing) 
+            end
+
+    catch
+        redirect_stdout(oldstd)
+        rethrow()
+    end
+    return vg
+end
+
+
+"""
+    VoronoiGeometry(file::String, proto=nothing;
+                    _myopen = jldopen,
+                    offset::AbstractString = "",
+                    search_settings::NamedTuple = (__useless = 0,),
+                    integrate::Bool = false,
+                    volume::Bool = true,
+                    area::Bool = true,
+                    bulk::Bool = false,
+                    interface::Bool = false,
+                    integrator = VI_GEOMETRY,
+                    integrand = nothing,
+                    mc_accurate::Tuple{Int,Int,Int} = (1000, 100, 20),
+                    periodic_grid = nothing,
+                    silence::Bool = false)
+
+Load a Voronoi geometry from a saved file and optionally perform recomputation or integration.
+
+# Arguments
+- `file::String`  
+  Path to the JLD2 file containing a serialized `VoronoiGeometry` object.
+
+- `proto`  
+  **Deprecated** placeholder for backward compatibility; ignored in current versions.
+
+# Keyword Arguments
+- `_myopen`  
+  Function used to open the file; defaults to `jldopen`. Must accept the same signature as `JLD2.jldopen`.
+
+- `offset::AbstractString`  
+  Internal path or prefix within the JLD2 file under which the geometry is stored. Default is `""`.
+
+- `search_settings::NamedTuple = (__useless = 0,)`  
+  Legacy placeholder for ray‐casting parameters; currently has no effect.
+
+- `integrate::Bool = false`  
+  If `true`, perform integration routines after loading.
+
+- `volume::Bool = true`  
+  Compute cell volumes when (re)building or integrating.
+
+- `area::Bool = true`  
+  Compute cell surface areas (2D) or analogous measures.
+
+- `bulk::Bool = false`  
+  Compute bulk properties (e.g., centroids, moments) if `true`.
+
+- `interface::Bool = false`  
+  Compute interface metrics (shared face areas) if `true`.
+
+- `integrator`  
+  Integration method to use; defaults to `VI_GEOMETRY`.
+
+- `integrand`  
+  Function to integrate over each cell; defaults to `nothing`.
+
+- `mc_accurate::Tuple{Int,Int,Int} = (1000, 100, 20)`  
+  Monte Carlo parameters `(n_samples, param2, param3)` for `VI_MONTECARLO` integrator.
+
+- `periodic_grid`  
+  Has no meaning, only accepted to provide clashes when switching between variants.
+
+- `silence::Bool = false`  
+  Suppress terminal output when `true`.
+
+# Returns
+A `VoronoiGeometry` object restored from the file, with any requested computations
+(refinement, integration, volume/area/bulk/interface metrics) applied before returning.
+"""
 function VoronoiGeometry(file::String,proto=nothing; _myopen=jldopen, offset="", search_settings=(__useless=0,), integrate=false, volume=true,area=true,bulk=false,interface=false,integrator=VI_GEOMETRY,integrand=nothing,mc_accurate=(1000,100,20),periodic_grid=nothing,silence=false)
     oldstd = stdout
     result = nothing
@@ -270,7 +482,6 @@ function VoronoiGeometry(file::String,proto=nothing; _myopen=jldopen, offset="",
             @warn "The parameter 'periodic_grid' makes no sense when a geometry is loaded..."
         end
         println(Crayon(foreground=:red,underline=true), "Load geometry from file $file:",Crayon(reset=true))
-        myintegrator = replace_integrator(IntegratorType(integrator))
         I2=UndefInitializer
         _domain=UndefInitializer
         xs=UndefInitializer
@@ -292,10 +503,15 @@ function VoronoiGeometry(file::String,proto=nothing; _myopen=jldopen, offset="",
         end
         d2 = _domain
         b = boundary(_domain)
-        II2=Integrator(integrate_view(d2).integral,myintegrator,integrand=integrand,mc_accurate=mc_accurate)
-        lboundary = length(b)
-        myinte = backup_Integrator(II2,true)
-        integrate && HighVoronoi.integrate(myinte,domain=internal_boundary(d2),relevant=collect(1:public_length(d2)),modified=collect(1:(length(mesh(d2))+lboundary)))
+
+                    lboundary = length(b)
+            relevant = collect(1:public_length(d2))
+            modified = collect(1:(length(HighVoronoi.mesh(d2))+lboundary))
+
+            myintegrator = replace_integrator(IntegratorType(integrator))
+            
+            integrate_geo(integrate,d2,myintegrator,integrand,mc_accurate,relevant,modified,silence)
+
         result = VoronoiGeometry(myintegrator,d2,integrand,RaycastParameter(Float64),mc_accurate,nothing)#NoFile())
         redirect_stdout(oldstd)
     catch
@@ -307,7 +523,78 @@ end
 
 @inline Base.copy(VG::VoronoiGeometry) = VoronoiGeometry(VG,silence=true,integrate=false)
 
-function VoronoiGeometry(VG::VoronoiGeometry; search_settings=NamedTuple(), periodic_grid=nothing, integrate=false, volume=true,area=true,bulk=false,interface=false, integrator=VG.Integrator,integrand=VG.integrand,mc_accurate=VG.mc_accurate,silence=false)
+"""
+    VoronoiGeometry(VG::VoronoiGeometry;
+                    search_settings::NamedTuple = NamedTuple(),
+                    improving::NamedTuple = (max_iterations = 0, tolerance = 1.0),
+                    periodic_grid = nothing,
+                    integrate::Bool = false,
+                    volume::Bool = true,
+                    area::Bool = true,
+                    bulk::Bool = false,
+                    interface::Bool = false,
+                    integrator = VG.Integrator,
+                    integrand = VG.integrand,
+                    mc_accurate::Tuple{Int,Int,Int} = VG.mc_accurate,
+                    silence::Bool = false,
+                    printevents::Bool = false)
+
+Create a modified copy of an existing `VoronoiGeometry`, optionally overriding computation settings,
+and, if requested, perform node refinement and/or integration on the new geometry.
+
+# Arguments
+- `VG::VoronoiGeometry`
+  An existing Voronoi geometry instance to be cloned and modified.
+
+# Keyword Arguments
+- `search_settings::NamedTuple = NamedTuple()`
+  Parameters to pass to the ray‐casting algorithm when (re)building cells.
+
+- `improving::NamedTuple = (max_iterations = 0, tolerance = 1.0)`
+  Refinement method for improving node placement on the new geometry.
+  - `:max_iterations` (Int): number of Lloyd (or other) iterations to apply.
+  - `:tolerance` (Float64): convergence threshold for the refinement.
+
+- `periodic_grid = nothing`
+  no meaning in this context, only for compatibility with 'xs'-mode
+
+- `integrate::Bool = false`
+  If `true`, perform integration routines on the new geometry.
+
+- `volume::Bool = true`
+  Compute cell volumes when rebuilding or integrating.
+
+- `area::Bool = true`
+  Compute cell surface areas (in 2D) or analogous measures.
+
+- `bulk::Bool = false`
+  Compute bulk properties (e.g., cell centroids, moments) if `true`.
+
+- `interface::Bool = false`
+  Compute interface metrics (e.g., shared face areas) if `true`.
+
+- `integrator`
+  Integration method to use; defaults to `VG.Integrator`.
+
+- `integrand`
+  Function to integrate over each cell; defaults to `VG.integrand`.
+
+- `mc_accurate::Tuple{Int,Int,Int} = VG.mc_accurate`
+  Monte Carlo parameters when using a Monte Carlo integrator:
+  `(n_samples, param2, param3)`.
+
+- `silence::Bool = false`
+  Suppress all terminal output if `true`.
+
+- `printevents::Bool = false`
+  Print detailed event logs for debugging if `true`.
+
+# Returns
+A new `VoronoiGeometry` instance that is a copy of `VG`, with any overridden settings applied.
+If `improving` was modified or `integrate == true`, the corresponding refinement and/or
+integration routines are executed on this new geometry before it is returned.
+"""
+function VoronoiGeometry(VG::VoronoiGeometry; search_settings=NamedTuple(), improving=(max_iterations=0,tolerance=1.0), periodic_grid=nothing, integrate=false, volume=true,area=true,bulk=false,interface=false, integrator=VG.Integrator,integrand=VG.integrand,mc_accurate=VG.mc_accurate,silence=false,printevents=false)
     oldstd = stdout
     result = nothing
     try
@@ -315,20 +602,28 @@ function VoronoiGeometry(VG::VoronoiGeometry; search_settings=NamedTuple(), peri
             warning("feature 'periodic_grid' not implemented for 'VoronoiGeometry(VG::VoronoiGeometry;kwargs...)'. I will simply ignore this...")
         end
         search = merge(VG.searcher,search_settings)
-        myintegrator = replace_integrator(IntegratorType(integrator)) 
         println(Crayon(foreground=:red,underline=true), "Copy geometry ...",Crayon(reset=true))
         _integrate = integrate # || (typeof(integrand)!=Nothing )
         println("    mesh with $(length(mesh(VG.domain))) nodes copied")
         d2 = deepcopy(VG.domain)
+        improve_mesh(d2, improving, printevents, search)
+        if improving != (max_iterations=0,tolerance=1.0) && integrate==false 
+            @warn "Improving is active but seemingly integration is set to 'false'. This can severly mess up the data. Proceed on your own risk!"
+        end
 
         b = boundary(d2)
         vp_print(boundary(d2),offset=4)
     
+            lboundary = length(b)
+            relevant = collect(1:public_length(d2))
+            modified = collect(1:(length(mesh(d2))+lboundary))
+
+            myintegrator = replace_integrator(IntegratorType(integrator))
+            integrate_geo(integrate,d2,myintegrator,integrand,mc_accurate,relevant,modified,silence)
+
+
         redirect_stdout(silence ? devnull : oldstd)
-        II2=Integrator(integrate_view(d2).integral,myintegrator,integrand=integrand,mc_accurate=mc_accurate)
-        lboundary = length(b)
-        myinte=backup_Integrator(II2,true)
-        integrate && HighVoronoi.integrate(myinte,domain=internal_boundary(d2),relevant=collect(1:public_length(d2)),modified=collect(1:(length(mesh(d2))+lboundary)))
+
         result = VoronoiGeometry(myintegrator,d2,integrand,search,mc_accurate,VG.file)
         redirect_stdout(oldstd)
     catch
@@ -400,7 +695,37 @@ end
 ###############################################################################################################################
 
 
+"""
+    refine!(VG::VoronoiGeometry, xs::Points;
+            update::Bool = true,
+            silence::Bool = false,
+            search_settings::NamedTuple = NamedTuple())
 
+Insert additional sites into an existing Voronoi geometry and update its tessellation.
+
+# Arguments
+- `VG::VoronoiGeometry`  
+  The Voronoi geometry to be modified in place.
+
+- `xs::Points`  
+  A collection of new points to insert into `VG`.
+
+# Keyword Arguments
+- `update::Bool = true`  
+  If `true`, after inserting `xs`, recompute all dependent quantities  
+  (cell integrals, volumes, areas, neighbor relations, etc.).  
+  If `false`, only the topology and vertex positions are updated.
+
+- `silence::Bool = false`  
+  When `true`, suppress all terminal output.
+
+- `search_settings::NamedTuple = NamedTuple()`  
+  Parameters for the internal ray-casting algorithm used to rebuild cells  
+  after insertion. See `VoronoiGeometry(...; search_settings=…)` for options.
+
+# Returns
+`VG`.
+"""
 function refine!(VG::VoronoiGeometry,xs::Points,update=true;silence=false,search_settings=NamedTuple())
     println(Crayon(foreground=:red,underline=true), "Refine discrete geometry with $(length(xs)) points:",Crayon(reset=true))
     domain = VG.domain
@@ -417,7 +742,7 @@ function refine!(VG::VoronoiGeometry,xs::Points,update=true;silence=false,search
             MESH, Integral = integrate_view(domain)
             sort!(_external_indeces(MESH,_modified))
             lmesh = length(MESH)
-            append!(_modified,collect((1+lmesh):(lmesh+length(boundary(domain)))),collect((old_length+1):(old_length+length(xs))))
+            append!(_modified,collect((old_length+1):(lmesh+length(boundary(domain)))))#,collect((old_length+1):(old_length+length(xs))))
             sort!(unique!(_modified))
             _relevant=Base.intersect(_modified,collect(1:public_length(domain)))
             sort!(_relevant)
@@ -482,7 +807,7 @@ function integrate!(VG::VoronoiGeometry)
     VG.refined[1]=false
 end
 
-function copy_Integral_content(Inte,I2,volume,area,bulk,interface)
+#=function copy_Integral_content(Inte,I2,volume,area,bulk,interface)
     Inte2=I2.Integral
     empty!(Inte2.neighbors)
     append!(Inte2.neighbors,deepcopy(Inte.neighbors))
@@ -504,7 +829,7 @@ function copy_Integral_content(Inte,I2,volume,area,bulk,interface)
         empty!(Inte2.interface_integral)
         append!(Inte2.interface_integral,deepcopy(Inte.interface_integral))
     end    
-end
+end=#
 
 ###############################################################################################################################
 

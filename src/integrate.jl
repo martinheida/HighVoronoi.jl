@@ -52,6 +52,7 @@ function integrate_cell(vol::Bool,ar::Bool,bulk::Bool,inter::Bool,  _Cell::Int, 
     #_Cell == 10 && error("")
 #    lneigh2 = length(I.neighbors[_Cell])
 #    HighVoronoi.decreases_neigh += lneigh2<lneigh1 ? 1 : 0 
+    return 0.0
 end
 
 
@@ -371,6 +372,7 @@ function integrate_cell(vol::Bool,ar::Bool,bulk::Bool,inter::Bool,  _Cell, itera
     #@descend integrate(cdw.neighbors,_Cell,iterate, calculate, data,Integrator, cdw.area , cdw.bulk_integral , cdw.interface_integral)
     #error("")
     V=integrate(cdw.neighbors,_Cell,iterate, calculate, data,Integrator, cdw.area , cdw.bulk_integral , cdw.interface_integral,cdw.volumes)
+    
     #println("-")
     #V=integrate(old_neighbors,_Cell,iterate, calculate, data,Integrator, ar ? I.area[_Cell] : dfvb , bulk ? I.bulk_integral[_Cell] : dfvb , inter ? I.interface_integral[_Cell] : dfvvb)
 #    println(I.area[_Cell])

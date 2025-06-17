@@ -13,6 +13,7 @@ struct RefineMesh{P <: Point, VDB <: VertexDB{P}, T <: AbstractMesh{P}} <: Abstr
     end
 end
 const TrackAffectedMesh = RefineMesh
+@inline modified(rm::RefineMesh) = rm.affected
 
 filter!( condition, mesh::RefineMesh,_depsig=StaticBool{true}(),_depr=StaticBool{true}(); affected = nodes_iterator(mesh) ) = filter!(condition,mesh.data,_depsig,_depr,affected=affected)
 
@@ -84,6 +85,7 @@ function push!(m::RefineMesh{T, VDB, T1}, vertex::Pair{Vector{Int64}, T}) where 
 end
 
 function _push_affected!(m::RefineMesh{T, VDB, T1}, sig) where {T<:Point, VDB<:HighVoronoi.VertexDB{T}, T1<:AbstractMesh{T, VDB} }
+    #print(" ! ")
     for j in sig
         j>m.length && break
         if !(m.affected[j])    m._count+=1    end

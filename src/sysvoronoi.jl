@@ -354,7 +354,6 @@ function systematic_explore_vertex_multithread(xs::Points,sig,r,_Cell,edgecount,
             full_edge, u2 = get_full_edge(sig,r,edge,edgeIterator,xs)
             du2 = delta_u(searcher,searcher.parameters.method,edgeIterator,u2)
             u, du = correct_du(u2,du2,edgeIterator,searcher.parameters.method,searcher)
-    
         sig2, r2, success = walkray(full_edge, r, xs, searcher, sig, u, edge, du ) # provide missing node "j" of new vertex and its coordinate "r" 
 
         if sig2 == sig
@@ -461,12 +460,12 @@ end
 end=#
 @inline get_full_edge_indexing(sig,r,edge,::General_EdgeIterator,xs) = edge
 
-@inline delta_u(searcher,method::HPUnion,edgeIterator,u2) = delta_u(edgeIterator,u2)
+@inline delta_u(searcher,method::Raycast_HP,edgeIterator,u2) = delta_u(edgeIterator,u2)
 @inline delta_u(a,b,c,u2) = 0.0
 @inline correct_du(u2,du,edgeIterator,method,searcher) = u2, du
 
-correct_du(u2,du,edgeIterator::General_EdgeIterator,method::HPUnion,searcher) = u2, du
-function correct_du(u2,du2,NF_::FastEdgeIterator,method::HPUnion,searcher)
+correct_du(u2,du,edgeIterator::General_EdgeIterator,method::Raycast_HP,searcher) = u2, du
+function correct_du(u2,du2,NF_::FastEdgeIterator,method::Raycast_HP,searcher)
     u = u2
     if du2>1E-13
         onb = NF_.iterators[1].rays
@@ -487,6 +486,7 @@ function correct_du(u2,du2,NF_::FastEdgeIterator,method::HPUnion,searcher)
     return u2, du2
 end
 
+
 function systematic_explore_vertex(xs::Points,sig,r,_Cell,edgecount,mesh,queue,boundary,searcher,edgeIterator)
     k=0
     dim = size(eltype(xs))[1]
@@ -495,12 +495,45 @@ function systematic_explore_vertex(xs::Points,sig,r,_Cell,edgecount,mesh,queue,b
         b = pushedge!(edgecount,edge,_Cell)
         (edge[1]!=_Cell || b ) && continue
         full_edge, u2 = get_full_edge(sig,r,edge,edgeIterator,xs)
+        
+        
+        
+        (full_edge==sig) && continue
+        
+        
+        
         du2 = delta_u(searcher,searcher.parameters.method,edgeIterator,u2)
         #du2 = delta_u(searcher,Raycast_Non_General_HP(),edgeIterator,u2)
         #du2>1E-10 && error(du2)
         #typeof(u2)==Int64 && error("")
         u, du = correct_du(u2,du2,edgeIterator,searcher.parameters.method,searcher)
+        #du!=0.0 && print("+")
         sig2, r2, success = walkray(full_edge, r, xs, searcher, sig, u, edge, du ) # provide missing node "j" of new vertex and its coordinate "r" 
+         #=if !verify_vertex(sig2,r2,xs,searcher,statictrue) 
+            d1 = 0.0 
+            for s in sig
+                d1 = max(d1,norm(xs[s]-r))
+            end
+            idx = _inrange(searcher.tree,r,d1*(1+1E-12))
+            println(idx)
+            all_ = 0.0
+            for s1 in sig 
+                for s2 in sig
+                    all_ += abs(dot(xs[s1]-xs[s2],u)) 
+                end
+                println(xs[s1])
+            end
+            println(all_,",",u," , ",du)
+            println(searcher.tree.tree.data.taboo,)
+            println(success)
+            println(full_edge)
+            println(edge)
+            println(sig)
+            println(r)
+            HighVoronoi.global_search = searcher
+            HighVoronoi.global_xs = xs
+            error("$sig2, $r2, comming from $sig, $r $(verify_vertex(sig,r,xs,searcher)) at $_Cell")
+         end=#
         if sig2 == sig
             try
                 pushray!(mesh,full_edge,r,u,_Cell)

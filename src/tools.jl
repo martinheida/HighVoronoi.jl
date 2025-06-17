@@ -261,7 +261,7 @@ end
 @inline Base.setproperty!(cd::CompoundData, prop::Symbol, val) = dyncast_set(cd,Val(prop),val)
 @inline @generated dyncast_set(cd::CompoundData, ::Val{:start},val) =  :(getfield(cd,:mutables)[1]=val)
 @inline @generated dyncast_set(cd::CompoundData, ::Val{:length},val) =  :(getfield(cd,:mutables)[2]=val)
-@inline @generated dyncast_set(cd::CompoundData, d::Val{S},val) where S = :( setfield(cd, S,val))
+#@inline @generated dyncast_set(cd::CompoundData, d::Val{S},val) where S = :( setfield(cd, S,val))
 
 ################################################################################################################
 
@@ -292,7 +292,7 @@ struct SerialVector{P , T } <: AbstractVector{P}
     vectors::T
 end
 const SerialVector_Vector{P} = SerialVector{P,Vector{CompoundVector{P,Vector{P}}}} where {P}
-@inline Base.size(sv::SerialVector) = (sum(d->d.length,sv.vectors))
+@inline Base.size(sv::SerialVector) = (sum(d->d.length,sv.vectors),)
 # Constructor for SerialVector with a single CompoundVector
 function SerialVector{P}(d::DD, c::CompoundData) where {P,DD<:Union{AbstractVector{P}, Nothing}}
     cv = CompoundVector{P, typeof(d)}(d, c._start, c._length)
@@ -477,7 +477,7 @@ end
 ## ShortVector 
 
 ################################################################################################################
-#=
+
 mutable struct ShortVector{T} <: AbstractVector{T}
     data::T
 end
@@ -490,7 +490,7 @@ Base.getindex(v::ShortVector{T}, i::Int) where {T} = (i == 1) ? v.data : throw(B
 Base.setindex!(v::ShortVector{T}, value::T, i::Int) where {T} = (i == 1) ? (v.data = value) : throw(BoundsError(v, i))
 Base.iterate(v::ShortVector{T}, state=1) where {T} = state == 1 ? (v.data, 2) : nothing
 Base.show(io::IO, v::ShortVector{T}) where {T} = print(io, "ShortVector(", v.data, ")")
-=#
+
 
 ################################################################################################################
 
@@ -800,7 +800,7 @@ function u_qr_onb(onb,x0::P) where {P}
     u = -Q[:,end]  * sign(R[end,end])
     return P(u)
 end
-
+ 
 #=
 function u_with_base(sig, xs::HN, i) where {P, HN<:AbstractVector{P}}
     n = length(sig)

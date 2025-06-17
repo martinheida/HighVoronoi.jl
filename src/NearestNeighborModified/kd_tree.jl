@@ -82,25 +82,6 @@ function HVKDTree(data::AbstractVector{V},
     HVKDTree(storedata ? data : similar(data, 0), hyper_rec, indices, metric, nodes, tree_data, reorder)
 end
 
-#=
- function HVKDTree(data::AbstractVecOrMat{T},
-                 metric::M = Euclidean();
-                 leafsize::Int = 10,
-                 storedata::Bool = true,
-                 reorder::Bool = true,
-                 reorderbuffer::Matrix{T} = Matrix{T}(undef, 0, 0)) where {T <: AbstractFloat, M <: MinkowskiMetric}
-    dim = size(data, 1)
-    npoints = size(data, 2)
-    points = copy_svec(T, data, Val(dim))
-    if isempty(reorderbuffer)
-        reorderbuffer_points = Vector{SVector{dim,T}}()
-    else
-        reorderbuffer_points = copy_svec(T, reorderbuffer, Val(dim))
-    end
-    HVKDTree(points, metric, leafsize = leafsize, storedata = storedata, reorder = reorder,
-           reorderbuffer = reorderbuffer_points)
-end
-=#
 
 function build_HVKDTree(index::Int,
                       data::AbstractVector{V},
@@ -213,13 +194,35 @@ function _knn_flex(tree::HVKDTree,
     best_dists::AbstractVector,
     skip::F,d::D) where {F,D}
 
-    init_min = get_min_distance(tree.hyper_rec, point)
+    init_min = get_min_distance(tree.hyper_rec, d.r)
+    #println(init_min)
+    #println(best_dists[1])
+    #println("-------------------")
     while !knn_kernel_flex!(tree, 1, d.r, best_idxs, best_dists, init_min, skip,d)
+        #println("On top again")
         d.maxs .= tree.hyper_rec.maxes
         d.mins .= tree.hyper_rec.mins
+        init_min = get_min_distance(tree.hyper_rec, d.r)
     end
     d.maxs .= tree.hyper_rec.maxes
     d.mins .= tree.hyper_rec.mins
+    lsig = length(d.sigma)
+    if d.new_mode && lsig>1
+        c_max=typemin(Float64)
+        u = d.u 
+        sigma = d.sigma
+        id_max = 0
+        for i in 1:length(sigma)
+            c_new = dot(u,data.tree[sigma[i]])
+            if c_new>c_max
+                id_max = i 
+                c_max = c_new 
+            end
+        end
+        d.bestnode[1] = id_max
+    elseif lsig==1
+        d.bestnode[1] = d.sigma[1]
+    end
 end
 
 
@@ -264,6 +267,7 @@ end
     end
     #return max_dot>data.c && intersects_cuboid_ball(data.new_r,data.mins,data.maxs,data.dist_new_r_x0_2*(1+1E-10)), ov, sd, r
     return max_dot>data.c , ov, sd, r
+    #return true , ov, sd, r
 end
 
 function knn_kernel_flex!(tree::HVKDTree{V},
@@ -277,19 +281,7 @@ function knn_kernel_flex!(tree::HVKDTree{V},
     if isleaf(tree.tree_data.n_internal_nodes, index)
         old_r = data.new_r
         safe_expandable_bitvector!(data.visited_leafs,index, true)
-        #if HighVoronoi.intersects_cuboid_ball(data.new_r,data.mins,data.maxs,data.dist_new_r_x0_2*(1+1E-10))
-        #if !valid_end_leaf(data)
-        #    return true
-        #end
-        add_points_knn_flex!(best_dists, best_idxs, tree, index, point, false, skip,data)
-        if old_r!=data.new_r
-            #data.dist_new_r_x0_2 = norm(r-x0)^2 needs no change
-            data.r = data.new_r
-            data.bestdist[1] = myevaluate(tree.metric, data.x0, data.new_r, false)*(1+1000*data.plane_tolerance)
-            data.dist_r_x0_2 = data.bestdist[1]
-            return false
-        end
-        return true
+        return add_points_knn_flex!(best_dists, best_idxs, tree, index, point, false, skip,data)
     end
         
     node = tree.nodes[index]
@@ -315,10 +307,15 @@ function knn_kernel_flex!(tree::HVKDTree{V},
     success = true
     valid, p1,p2,p3 = valid_leaf(data,split_val, node.split_dim,right)
     !valid && (safe_expandable_bitvector!(data.visited_leafs,close,true))
+    data.r!=data.new_r && error()
     if (!safe_expandable_bitvector(data.visited_leafs,close)) 
+        #println("down $index-1: $min_dist vs. $(best_dists[1])")
         success &= knn_kernel_flex!(tree, close, point, best_idxs, best_dists, min_dist, skip, data)
+        #println("up $index-1")
         (!success) && (return false)
     end
+    data.r!=data.new_r && error()
+    data.r!=point && error()
     switch_leaf(data,p1,p2,p3)
     split_diff_pow = eval_pow(M, split_diff)
     ddiff_pow = eval_pow(M, ddiff)
@@ -326,9 +323,14 @@ function knn_kernel_flex!(tree::HVKDTree{V},
     new_min = eval_reduce(M, min_dist, diff_tot)
     valid, p1,p2,p3 = valid_leaf(data,split_val, node.split_dim,!right)
     !valid && (safe_expandable_bitvector!(data.visited_leafs,far,true))
+    #println("down $index-2: $new_min vs. $(best_dists[1]),  and $(norm(HighVoronoi.global_179-data.new_r)^2), $(norm(point-data.x0)^2)")
+    #println("split_diff=$split_diff, p_dim=$p_dim, split_val=$split_val")
+    #println("split_dim=$(node.split_dim), x_dim = $(HighVoronoi.global_179[node.split_dim]), hi=$hi")
+    #println("diff_tot=$diff_tot, ddiff_pow=$ddiff_pow, split_diff_pow=$split_diff_pow, min_dist=$min_dist")
     if new_min < best_dists[1] && !safe_expandable_bitvector(data.visited_leafs,far)
         success &= knn_kernel_flex!(tree, far, point, best_idxs, best_dists, new_min, skip,data)
         (!success) && (return false)
+    #    println("up $index-2")
     end
     switch_leaf(data,p1,p2,p3)
     safe_expandable_bitvector!(data.visited_leafs,index, true)

@@ -10,7 +10,7 @@ mutable struct qs_data
 end
 
 function qs_data(len::Int64)
-    return qs_data(Vector{qs_data}(undef,len),0,len)
+    return qs_data(Vector{qs_step}(undef,len),0,len)
 end
     
 function add_qs(left,right,data::qs_data)
@@ -57,7 +57,13 @@ function parallelquicksort!(x...)
     end
     _parallelquicksort!(1,length(first(x2)),x2)
 end
+
+@inline parallelquicksort_trust!(x...) = _parallelquicksort!(1,length(first(x)),x)
+
 function _parallelquicksort!(left,right,x::Tuple)
+    if right==2 
+        return _parallelsplit!(left, right,x) 
+    end
     lsteps = round(Int64,right/2)
     data = qs_data(lsteps)
     while (left<right)
@@ -77,39 +83,49 @@ end
     end
 end=#
 
-function _parallelsplit!(left,right,x::T) where T<:Tuple
+# Generative Funktion, um einen Tausch von x[k][i] und x[k][j] für alle k zu generieren:
+@inline @generated function swap_indices!(x::T, i, j) where T <: Tuple
+    nt = length(T.parameters)
+    exs = [:((x[$k][i], x[$k][j]) = (x[$k][j], x[$k][i])) for k in 1:nt]
+    return Expr(:block, exs...)
+end
+
+# Generative Funktion, um einen Tausch mit Zwischenspeicherung zu generieren:
+@inline @generated function swap_with_buffer!(x::T, i, j) where T <: Tuple
+    nt = length(T.parameters)
+    exs = [:(begin
+               buffer = x[$k][i]
+               x[$k][i] = x[$k][j]
+               x[$k][j] = buffer
+            end) for k in 1:nt]
+    return Expr(:block, exs...)
+end
+
+# Angepasste Version der _parallelsplit!-Funktion, die die generativen Funktionen nutzt:
+function _parallelsplit!(left, right, x::T) where T <: Tuple
     i = left
-    # start with j left from the Pivotelement
     j = right - 1
-    neigh=x[1]
+    neigh = x[1]
     pivot = neigh[right]
 
     while i < j  
-        # start from left to look for an element larger than the Pivotelement 
+        # Von links: Suche das erste Element, das größer als das Pivot ist.
         while i < j && neigh[i] <= pivot
-            i = i + 1
+            i += 1
         end
-        # start from right to look for an element larger than the Pivotelement 
+        # Von rechts: Suche das erste Element, das kleiner oder gleich dem Pivot ist.
         while j > i && neigh[j] > pivot
-            j = j - 1
+            j -= 1
         end
 
         if neigh[i] > neigh[j]
-            for k in 1:length(x)
-                x[k][i], x[k][j] = x[k][j], x[k][i]
-            end
+            swap_indices!(x, i, j)
         end
     end
    
-    # switch Pivotelement (neigh[right]) with neu final Position (neigh[i])
-    # and return the new Position of  Pivotelements, stop this iteration
+    # Tausch des Pivotelements in seine finale Position:
     if neigh[i] > pivot 
-            #switch data[i] with data[right] :
-            for k in 1:length(x)
-                buffer=x[k][i]
-                x[k][i]=x[k][right]
-                x[k][right]=buffer
-            end
+        swap_with_buffer!(x, i, right)
     else
         i = right
     end

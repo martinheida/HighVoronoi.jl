@@ -285,6 +285,7 @@ function append!(Integral::Voronoi_Integral, len::Int64)
     return Integral
 end
 
+#=
 function keepat!(Integral::Voronoi_Integral,entries)
     for I in 1:length(Integral)
         if !isassigned(Integral.area,I) && length(Integral.area)>=I
@@ -307,7 +308,7 @@ function keepat!(Integral::Voronoi_Integral,entries)
     if length(Integral.neighbors)>0 keepat!(Integral.neighbors,entries) end
     keepat!(Integral.MESH,entries)
 end
-
+=#
 
 @inline _has_cell_data(I::Voronoi_Integral,_Cell) = isassigned(I.area,_Cell)#_Cell<=length(I.volumes)
 
@@ -363,24 +364,46 @@ end
 
 function set_neighbors(I::Voronoi_Integral,_Cell,new_neighbors,proto_bulk,proto_interface,::StaticFalse)
     old_neighbors = isassigned(I.neighbors,_Cell) ? I.neighbors[_Cell] : Int64[]
+    mylen(::Nothing) = 0 
+    mylen(x) = length(x)
+    l_pb = mylen(proto_bulk)
+    l_pi = mylen(proto_interface)
     bulk = enabled_bulk(I) && proto_bulk!=nothing
     ar = enabled_area(I)
     inter = enabled_interface(I) && proto_interface!=nothing
     vol = enabled_volumes(I)
-
+    #ar && bulk && !inter && error()
 
     if ar && !isassigned(I.area,_Cell)
         I.area[_Cell]=zeros(Float64,length(old_neighbors))
+    end
+    if inter
+    if  !isassigned(I.interface_integral,_Cell)
+        I.interface_integral[_Cell]=Vector{Vector{Float64}}(undef,length(old_neighbors))
+        for i in 1:(length(old_neighbors)) 
+            (I.interface_integral[_Cell])[i]=copy(proto_interface) 
+        end
+    end
+    lac = length(I.area[_Cell])
+    if lac!=length(I.interface_integral[_Cell])
+        lic = length(I.interface_integral[_Cell] )
+        resize!(I.interface_integral[_Cell],lac)
+        for i in (lic+1):lac 
+            I.interface_integral[_Cell][i] = copy(proto_interface)
+        end
+    end
     end
     #if ar && !isdefined(I.area,_Cell)
     #    I.area[_Cell]=zeros(Float64,length(old_neighbors))
     #end
     if (length(old_neighbors)>0)
         #print(" ho  ")
-        if bulk && (!(isdefined(I.bulk_integral,_Cell)) || length(I.bulk_integral[_Cell])!=length(proto_bulk))
+        #bulk && isdefined(I.bulk_integral,_Cell)
+        #bulk && length(I.bulk_integral[_Cell])!=length(proto_bulk)
+        if bulk && (!(isassigned(I.bulk_integral,_Cell)) || length(I.bulk_integral[_Cell])!=length(proto_bulk))
             I.bulk_integral[_Cell]=copy(proto_bulk)
         end
-        if inter && !(isdefined(I.interface_integral,_Cell))
+        if inter && !(isassigned(I.interface_integral,_Cell))
             I.interface_integral[_Cell]=Vector{Vector{Float64}}(undef,length(old_neighbors))
             for i in 1:(length(old_neighbors)) 
                 (I.interface_integral[_Cell])[i]=copy(proto_interface) 
@@ -419,6 +442,10 @@ function set_neighbors(I::Voronoi_Integral,_Cell,new_neighbors,proto_bulk,proto_
             resize!(areas,lnn)
             inter && resize!(I.interface_integral[_Cell],lnn)
         end
+        if ar && inter && length(I.interface_integral[_Cell])!=length(I.area[_Cell]) 
+            println("$knn, ",length(I.interface_integral[_Cell])," ",length(I.area[_Cell]))
+            error()
+        end
     else
         old_neighbors=new_neighbors
         I.neighbors[_Cell]=new_neighbors
@@ -429,8 +456,21 @@ function set_neighbors(I::Voronoi_Integral,_Cell,new_neighbors,proto_bulk,proto_
         inter && (for i in 1:(length(old_neighbors)) 
             (I.interface_integral[_Cell])[i]=copy(proto_interface) 
         end)
+    ar && inter && length(I.interface_integral[_Cell])!=length(I.area[_Cell]) && error()
     end
-
+    ar && inter && length(I.interface_integral[_Cell])!=length(I.area[_Cell]) && error()
+    if bulk && length(I.bulk_integral[_Cell])!=l_pb
+        resize!(I.bulk_integral[_Cell], l_pb) 
+        I.bulk_integral[_Cell] .= 0.0
+    end
+    if ar && inter 
+        for vek in I.interface_integral[_Cell]
+            if length(vek) != l_pi  
+                resize!(vek, l_pi)
+                vek .= 0.0
+            end
+        end
+    end
 end
 
 
