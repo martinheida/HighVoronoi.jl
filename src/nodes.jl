@@ -19,6 +19,7 @@ function copynodes(nodes::HVN) where {P<:Point,HVN<:HVNodes{P}}
     return result
 end
 
+#=
 abstract type AbstractCombinedNodes{P<:Point} <: AbstractVector{P} end
 #abstract type AbstractCombinedNodes{P} <: AbstractVector{P} where P <: Point end
 #Base.eltype(nodes::PrependedNodes) = eltype(nodes.first)
@@ -55,7 +56,7 @@ function Base.iterate(nodes::AbstractCombinedNodes, state=1)
         return nothing
     end
 end
-
+=#
 
 SearchTree(nodes::Vector{<:Point},type=HVKDTree()) = HVTree(nodes,type)
 

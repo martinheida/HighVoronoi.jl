@@ -1,4 +1,4 @@
-# [Improving Voronoi meshes for FV ](@id toyfile)
+# [Improving Voronoi meshes for FV ]
 
 [It has been shown](https://wias-berlin.de/publications/wias-publ/run.jsp?template=abstract&type=Preprint&year=&number=2913) that finite volume methods for elliptic PDE should be more accurate if for each generator the distance to its vertices is approximately equal. This can be achieved as follows:
 
@@ -22,3 +22,42 @@ The following pictures illustrate the improvement of the mesh for standard setti
 
 ### Modified Mesh
 ![nodes versus time in 5D](./assets/images/regular.png)
+
+
+## `improving` Syntax
+
+### `Simple_LLoyd`
+When called as above, `HighVoronoi` will call the `improving`-mode called `Simple_LLoyd`. That is a method that calculates for each cell the average of all vertices and takes this as the new center of the cell if the shift is more than `tolerance`. The two equivalent calls are
+
+```@julia
+mynodes = VoronoiNodes(rand(2,200))
+VG1 = VoronoiGeometry(copy(mynodes), cuboid(2,periodic=[]), integrator=VI_GEOMETRY, improving=(max_iterations=5,tolerance=0.1))
+draw2D(VG1)
+VG2 = VoronoiGeometry(copy(mynodes), cuboid(2,periodic=[]), integrator=VI_GEOMETRY, improving=( method=Simple_LLoyd(5,0.1), silence=false))
+draw2D(VG2)
+```
+
+Note that the second call introduces `silence` to optionally suppress output during improving.
+
+
+### `LLoyd`
+
+This is the actual implementation of the classical LLoyd Algorithm. 
+
+```@julia
+mynodes = VoronoiNodes(rand(2,200))
+VG1 = VoronoiGeometry(copy(mynodes),cuboid(2,periodic=[]),integrator=VI_GEOMETRY,improving=(method=LLoyd(1,0.9;tolerance_function = (x,y,v)->v*norm(x-y)^2),silence=false))
+draw2D(VG1)
+VG2 = VoronoiGeometry(copy(mynodes),cuboid(2,periodic=[]),integrator=VI_GEOMETRY,improving=Simple_LLoyd(1,0.9))
+draw2D(VG2)
+```
+
+```@docs
+LLoyd
+```
+
+## `improving!` method
+
+```@docs
+improving!
+```

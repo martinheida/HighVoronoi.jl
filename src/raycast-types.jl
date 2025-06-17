@@ -249,10 +249,12 @@ struct Raycast_Non_General end
 const RCNonGeneralFast = Raycast_Non_General()
 struct Raycast_Non_General_Skip end 
 const RCNonGeneralSkip = Raycast_Non_General_Skip()
-struct Raycast_Combined end
-const RCCombined = Raycast_Combined()
 
 abstract type Raycast_HP end
+
+struct Raycast_Combined<:Raycast_HP end
+const RCCombined = Raycast_Combined()
+
 struct Raycast_Non_General_HP<:Raycast_HP end
 const RCNonGeneralHP = Raycast_Non_General_HP()
 struct Raycast_Non_General_Asymptotic_General_HP<:Raycast_HP 
@@ -405,6 +407,7 @@ struct HP_corrector_data{CORRECTOR_FLOAT}
     end
 end
 HPCorrector(dim,::RCHP) where {RCHP<:Raycast_HP} = HP_corrector_data(dim,Double64)
+HPCorrector(dim,::Type{RCHP}) where {RCHP<:Raycast_HP} = HP_corrector_data(dim,Double64)
 HPCorrector(dim,_) = nothing
 
 CORRECTOR_FLOAT(::RCHP) where {RCHP<:Raycast_HP} = Double64
