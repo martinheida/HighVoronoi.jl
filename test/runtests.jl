@@ -1,4 +1,5 @@
 using Test
+using Revise
 using HighVoronoi
 using HighVoronoi: statictrue, staticfalse
 
@@ -7,6 +8,7 @@ using LinearAlgebra
 using SparseArrays
 using StaticArrays
 using JLD2
+using DoubleFloats
 
 
 const global_silence = false
@@ -39,3 +41,4 @@ const global_silence = false
     include("fv.jl")
 
 end
+

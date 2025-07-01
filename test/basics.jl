@@ -66,7 +66,7 @@ end
 
 @testset "improving" begin
     VG = VoronoiGeometry(VoronoiNodes(rand(3,200)),cuboid(3,periodic=[1]),improving=(max_iterations=5,),integrator=VI_FAST_POLYGON,integrand=x->[x[1]^2],integrate=true,)
-    HighVoronoi.improve!(VG,search_settings=(method=RCCombined,threading=SingleThread()),overwrite_search_settings=true,integrator=VI_FAST_POLYGON,integrand=x->[1.0],integrate=true,improving = (method=HighVoronoi.LLoyd(1,0.9;tolerance_function = (x,y,v)->v*norm(x-y)^2),silence=false))
+    HighVoronoi.improve!(VG,search_settings=(method=RCCombined,threading=SingleThread()),overwrite_search_settings=true,integrator=VI_FAST_POLYGON,integrand=x->[1.0],integrate=true,improving = (method=HighVoronoi.LLoyd(1,0.7;tolerance_function = (x,y,v)->v*norm(x-y)^2),silence=false))
 #vg2 = VoronoiGeometry(VoronoiNodes(rand(3,200)),cuboid(3,periodic=[1]),improving=(max_iterations=5,))
     @test true
 end
