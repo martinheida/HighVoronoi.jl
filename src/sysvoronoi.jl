@@ -508,9 +508,9 @@ function systematic_explore_vertex(xs::Points,sig,r,_Cell,edgecount,mesh,queue,b
         #typeof(u2)==Int64 && error("")
         u, du = correct_du(u2,du2,edgeIterator,searcher.parameters.method,searcher)
         #du!=0.0 && print("+")
-        HighVoronoi.global_data = (copy(full_edge),r,xs,searcher,copy(sig),u,copy(edge),du)
+        #HighVoronoi.global_data = (copy(full_edge),r,xs,searcher,copy(sig),u,copy(edge),du)
         sig2, r2, success = walkray(full_edge, r, xs, searcher, sig, u, edge, du ) # provide missing node "j" of new vertex and its coordinate "r" 
-         if !verify_vertex(sig2,r2,xs,searcher,statictrue) 
+         #=if !verify_vertex(sig2,r2,xs,searcher,statictrue) 
             d1 = 0.0 
             for s in sig2
                 d1 = max(d1,norm(xs[s]-r2))
@@ -534,7 +534,7 @@ function systematic_explore_vertex(xs::Points,sig,r,_Cell,edgecount,mesh,queue,b
             HighVoronoi.global_search = searcher
             HighVoronoi.global_xs = xs
             error("$sig2, $r2, comming from $sig, $r $(verify_vertex(sig,r,xs,searcher)) at $_Cell")
-         end
+         end=#
         if sig2 == sig
             try
                 pushray!(mesh,full_edge,r,u,_Cell)
