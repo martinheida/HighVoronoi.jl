@@ -140,6 +140,7 @@ include("boundary.jl")
 
 include("nodes.jl") # HVNodes, AbstractCombinedNodes, NodesContainer, UnsortedNodes, 
                     # ExtendedNodes, SortedNodes, NodesView
+include("bounding_box.jl")
 include("extended.jl")
 include("abstractmesh.jl")  # AbstractMesh, MeshContainer
 include("filter.jl")
@@ -190,6 +191,8 @@ include("sphericalmeshview.jl")
 include("sphere.jl")
 include("sphericalpublicview.jl")
 include("voronoidata.jl")
+include("edgedata.jl")
+
 include("discretefunctions.jl")
 include("substitute.jl") # refinement by substitution
 
@@ -252,6 +255,7 @@ export VoronoiSphere
 
 export refine!
 export refine
+export improve!
 export indeces_in_subset
 export substitute!
 export interactionmatrix
@@ -309,4 +313,10 @@ export AutoThread
 export DatabaseVertexStorage
 export ClassicVertexStorage
 export ReferencedVertexStorage
+
+export VoronoiEdgeDataMatrix
+export VoronoiEdgeData
+
+export LLoyd
+export Simple_LLoyd
 end # module

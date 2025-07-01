@@ -92,7 +92,7 @@ end
 
 
 #_abbort::Threads.Atomic{Bool} = Threads.Atomic{Bool}(false)
-const _abbort = Threads.Atomic{Bool}(false)
+#=const _abbort = Threads.Atomic{Bool}(false)
 un_abbort() = atomic_and!(_abbort,false)
 abbort() = atomic_or!(_abbort,true)
 const _threads_waiting = Threads.Atomic{Int64}(0)
@@ -101,6 +101,8 @@ function reset_lock_counter()
     atomic_xchg!(_threads_waiting,0)
     atomic_xchg!(number_of_locks,0)
 end
+=#
+
 
 #=struct ReadWriteLock
     lock::ReentrantLock

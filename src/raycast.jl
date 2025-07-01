@@ -42,7 +42,7 @@ end
 
 
 """ starting at given points, run the ray shooting descent to find vertices """
-function descent(xs::Points, searcher::RaycastIncircleSkip, start) 
+function descent(xs::Points, searcher::RaycastIncircleSkip, start,circle::Int64=5) 
     searcher.rare_events[SRI_descent] += 1
     dim = searcher.dimension
     sig = [start]
@@ -69,15 +69,28 @@ function descent(xs::Points, searcher::RaycastIncircleSkip, start)
                 loop_counter += 1
                 #println("$k ---------------------------------------------------- ")
                 u2 = 0*r
-                u = u2 + randray(xs[minimal_edge[1:k]],map(i->view(searcher.vectors,:,i),1:(dim-1)),count,xs,start)
+                u3 = randray(xs[minimal_edge[1:k]],map(i->view(searcher.vectors,:,i),1:(dim-1)),count,xs,start)
+                u = u2 + u3
                 #=if k==1
                     u = -r
                     u = normalize(u)
                 end=#
+                #=if any(x->isnan(x) || isinf(x),u)
+                    println("hier schon!")
+                    println(u)
+                    println(u2)
+                    println(u3)
+                    println(r)
+                    println(start)
+                    println(xs[start])
+                    println("neuer Versuch")
+                end=#
+                #HighVoronoi.global_data=(copy(sig),r,u,xs,searcher,0,copy(sig),copy(sig),Raycast_By_Descend())
                 generator, t, r2 = raycast_des(sig, r, u, xs, searcher,0,sig,sig,Raycast_By_Descend())
                 b = false
                 if t == Inf
                     u = -u
+                #HighVoronoi.global_data=(copy(sig),r,u,xs,searcher,0,copy(sig),copy(sig),Raycast_By_Descend())
                     generator, t, r2 = raycast_des(sig, r, u, xs, searcher,0,sig,sig,Raycast_By_Descend())
                 end
                 if t == Inf
@@ -105,6 +118,7 @@ function descent(xs::Points, searcher::RaycastIncircleSkip, start)
     sort!(sig)
     r = project(r,searcher.domain)
     r_final,_ = walkray_correct_vertex(r, sig, searcher, minimal_edge,minimal_edge[dim+1])
+    !verify_vertex(sig,r_final,xs,searcher,statictrue) && error()
     return (sig, r_final)
 end
 
@@ -120,6 +134,11 @@ end
 ####################################################################################################################################
 ####################################################################################################################################
 
+@inline switch_mode(searcher::RaycastIncircleSkip) = switch_mode(searcher.tree)
+@inline switch_mode(tree::ExtendedTree) = switch_mode(tree.tree)
+@inline switch_mode(x) = nothing
+@inline switch_mode(tree::UnstructuredTree) = switch_mode(tree.data)
+@inline switch_mode(data::NNSearchData) = (data.new_mode = !data.new_mode) 
 
 """ find the vertex connected to `v` by moving away from its `i`-th generator """
 function walkray(full_edge::Sigma, r::Point, xs::Points, searcher, sig, u, edge, du)
@@ -140,8 +159,11 @@ function walkray(full_edge::Sigma, r::Point, xs::Points, searcher, sig, u, edge,
 
     #fe2 = copy(full_edge)
     #_generator, _t, _r2 = raycast_des(fe2, r, u, xs, searcher, Rest,edge,sig,Raycast_By_Walkray(),RCNonGeneralFast,du)
-    
+    #switch_mode(searcher)
+    #print("+")
+    #println("    full_edge=$full_edge, r=$r, u=$u, sig=$sig, du=$du")
     generator, t, r2 = raycast_des(full_edge, r, u, xs, searcher, Rest,edge,sig,Raycast_By_Walkray(),du)
+    #switch_mode(searcher)
     #if fe2!=full_edge
     #    for e in fe2
     #        println("$e: $(norm(r2-xs[e]))") 
@@ -156,6 +178,8 @@ function walkray(full_edge::Sigma, r::Point, xs::Points, searcher, sig, u, edge,
 
     if t < Inf
         sig2 = full_edge
+        sort!(full_edge)
+        full_edge==sig && success && println("hier schon Mist")
         r2,success,vv = walkray_correct_vertex(r2, sig2, searcher, edge, generator) 
         return sig2, r2, success
     else
@@ -226,7 +250,7 @@ function randray(xs::HVN,v,count::Int64=0,base=xs,start=1) where {P,HVN<:HVNodes
         normalize!(v[i])
     end
 
-    u = count<8 ? randn(d) : rand_oriented(dim,base,start)
+    u = randn(d) 
     for i in 1:k-1
         u .-= dot(u, v[i]) .* v[i]
     end
@@ -366,7 +390,7 @@ end
 
 @Base.propagate_inbounds function activate_mirror(searcher,i,plane)
     if searcher.tree.active[plane] 
-        return false 
+        #return false 
     end
     searcher.tree.active[plane]=true
     searcher.tree.extended_xs[searcher.tree.size+plane]=reflect(searcher.tree.extended_xs[i],searcher.domain,plane)
@@ -397,17 +421,19 @@ function get_t(r,u,x0,x_new)
 end
 
 function get_t_hp_(r,u,x0,x_new,du=1E-14)
-    Dx = normalize(x_new-x0)
+    dx = x_new-x0
+    Dx = normalize(dx)
     denominator =  u' * Dx
     xx = x0+x_new-2*r
 
     value = dot(Dx,xx) / (2 * denominator) 
 
-    _error = (value * du + norm(r)*1E-15)/denominator
+    _error = (abs(value) * du + norm(r)*1E-15)/denominator
     return value,_error
     # r^2 - 2 r x_new + x_new^2 - r^2 + 2 r x0 -x0^2 = 2 r (x0 - x_new) + x_new^2 - x0^2
 end
 
+#=
 function get_t_hp_sig(r,u,sig,x_new,xs)
     lsig = length(sig)
     #x0 = sum(i->xs[i], sig)/lsig
@@ -423,6 +449,7 @@ function get_t_hp_sig(r,u,sig,x_new,xs)
     return t/lsig
     # r^2 - 2 r x_new + x_new^2 - r^2 + 2 r x0 -x0^2 = 2 r (x0 - x_new) + x_new^2 - x0^2
 end
+=#
 
 function get_t_hp(r,u,x0::P,x_new) where P
     Dx = x_new-x0
@@ -475,7 +502,15 @@ end
 =#
 
 function verify_vertex(sig,r,xs,searcher,output=StaticBool{false})
+    nnn = _nn(searcher.tree,r)[1]
+    if !(nnn in sig  )
+        output==true && println("$nnn not in $sig")
+        return false
+    end
     idx = sort!(_inrange(searcher.tree,r,norm(r-xs[sig[1]])*(1+1E-8)))
+    if idx==Int64[]
+        output==true && println("Problem in $r with radius $(norm(r-xs[sig[1]])) at sig=$sig")
+    end
     b = true
     for i in eachindex(sig)
         b &= sig[i] in idx
@@ -483,9 +518,24 @@ function verify_vertex(sig,r,xs,searcher,output=StaticBool{false})
     for i in eachindex(idx)
         b &= idx[i] in sig
     end
+    var_sig = vertex_variance(sig,r,xs,length(sig)-1)
+    var_idx = vertex_variance(idx,r,xs,length(idx)-1)
+    b |= var_sig <1E-15 && var_idx>1E-10
+    b |= var_sig <1E-15 && var_sig/var_idx<1E-5
     output==true && !b && println("  $sig and $idx not identical in list with $(length(xs)) entries!")
-    b &= vertex_variance(sig,r,xs,length(sig)-1)<1E-20
-    output==true && !b && println("  var_sig = $(vertex_variance(sig,r,xs,length(sig)-1)),  var_idx = $(vertex_variance(idx,r,xs,length(idx)-1))")    
+    b &= var_sig<1E-20
+    output==true && !b && println("  var_sig = $var_sig,  var_idx = $var_idx")    
+    if output==true && !b
+        for s in sig 
+            print("$s($(norm(xs[s]-r))), ")
+        end
+        println() 
+        for s in idx
+            s in sig && continue 
+            print("$s($(norm(xs[s]-r))), ")
+        end
+        println() 
+    end
     dim = length(xs[1])
     
     AA = zeros(Float64,length(sig),dim)
@@ -501,6 +551,17 @@ function verify_vertex(sig,r,xs,searcher,output=StaticBool{false})
     return b
 end
 
+global_search = nothing
+global_xs = nothing
+global_cast_type = nothing
+global_u = nothing
+global_old_r = nothing 
+global_old = nothing 
+global_edge = nothing 
+global_origin = nothing
+global_du = nothing
+global_data = nothing
+
 function raycast_des2(sig::Sigma, old_r, u, xs, searcher::RaycastIncircleSkip, old ,edge,origin,cast_type,::Raycast_Combined,debug=false,du=0.0)
     data = searcher.tree.tree.data
     plane_tolerance = searcher.plane_tolerance
@@ -508,26 +569,45 @@ function raycast_des2(sig::Sigma, old_r, u, xs, searcher::RaycastIncircleSkip, o
     old_r_ = old_r + u * dot(u , (x0-old_r))
     r = old_r_ + u * dot(u , (x0-old_r_))
     searcher.rare_events[SRI_raycast] += 1
-    reset!(data,origin,r,x0,u,plane_tolerance,xs)
+    reset!(data,origin,r,x0,u,plane_tolerance,xs,edge,du,cast_type,sig)
 
-    search_vertex2(searcher.tree,data.r,data.bestnode,data.bestdist)
+    #try
+        search_vertex2(searcher.tree,data.r,data.bestnode,data.bestdist)
+    #=catch
+        HighVoronoi.global_data = (sig, old_r, u, xs, searcher, old ,edge,origin,cast_type, RCCombined, debug, du)
+        HighVoronoi.global_xs = xs 
+        HighVoronoi.global_search = searcher
+        HighVoronoi.global_cast_type = cast_type
+        println("Raycast_Combined-error: ", origin,", ",edge,", ",old_r,", ",u,", ",du)
+            if any(x->isnan(x) || isinf(x),old_r)
+                println("hier final: ",old_r)
+            end
 
+        rethrow()
+    end=#
     generator = data.bestnode[1]
 
-    t = generator!=0 ? 1.0 : Inf64 #get_t(r,u,x0,xs[generator]) : Inf64
+    t = generator!=0 && !(generator in origin) ? 1.0 : Inf64 #get_t(r,u,x0,xs[generator]) : Inf64
+    generator in origin && (return generator, t, old_r)
     generator == 0 && (return generator, t, old_r)
-    ll = length(sig)+length(data.sigma)
-    unique!(sort!(append!(sig,data.sigma)))
-    #if ll>length(sig)
-    #    error("")
-    #end
     new_r = data.new_r
-    r2 = correct_cast(r,new_r,u,edge,generator,origin,searcher,cast_type)
+        
+
+    unique!(sort!(append!(sig,data.sigma)))
+    
+    vv_correct = variance_tol(eltype(eltype(xs)))*1E-5<vertex_variance(sig,new_r,xs,length(sig)-1,searcher.ts)
+
+    vv_correct && prepare_vertex_calculation(edge,xs,searcher.hp_vars)
+
+    r2 = correct_cast_hp(edge,xs,searcher.hp_vars,new_r,u,generator,cast_type, vv_correct)
+
+    #r2 = correct_cast(r,new_r,u,edge,generator,origin,searcher,cast_type)
+    #!verify_vertex(edge,r2,xs,searcher) && error()
     return generator, t, r2
 
 end
 
-function get_scale(u, x0,_r)
+function get_scale(u, x0,_r,xn)
     delta = _r-x0 
     ref = sum(abs2,delta)
     vert = dot(u,delta)^2
@@ -570,7 +650,7 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     old_measure = measure
 
     upper_t = t+2*measure
-    scale = get_scale(u, x0,_r)
+    scale = get_scale(u, x0,_r,x)
     idss = _inrange(searcher.tree,_r,(1+max(1E-12,searcher.b_nodes_tol*100*scale))*measure)
     lidss = length(idss)
 #    println("1: ",map(k->k<max_int ? k : 0,idss))
@@ -661,6 +741,7 @@ function prepare_vertex_calculation(sig,xs,searcher)
 end
 
 function vertex_calculation_hp(sig,xs,searcher,r,u,generator)
+    #println("hier2")
     dim=length(xs[1])
     x0 = xs[sig[1]]
     P = typeof(r)
@@ -706,6 +787,7 @@ function vertex_calculation_hp(sig,xs,searcher,r,u,generator)
     return r+P(first_corrector)        
 end
 
+#=
 function ts_skip(i,buffer,xs,edge,x0,r,u,du)
     #i in edge && return true
     t = buffer[1]
@@ -715,6 +797,7 @@ function ts_skip(i,buffer,xs,edge,x0,r,u,du)
     t2__<=t && (buffer[1] = t2__)
     return t2__>t
 end
+=#
 
 function get__r(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,full_error,du,debug,first_t)
     _i0 = edge[1]
@@ -790,12 +873,26 @@ end
     return _r,t
 end=#
 
+"""
+    in_bounds(mins, maxs, v)
+
+Gibt `true` zurück, wenn für alle i gilt  
+`mins[i] ≤ v[i] ≤ maxs[i]`, andernfalls `false`.
+Die drei Vektoren müssen die gleiche Länge haben.
+"""
+@inline in_bounds(mins, maxs, v) = all((mins .<= v) .& (v .<= maxs))   # <– elementweise Vergleich + Gesamt-AND
+
+
+@inline upper_t_error(x0,full_error) = min(10E-8,(10+size(x0)[1])*full_error)
+
 @inline debugprint(a) = nothing
 function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,edge,origin,cast_type,method::HPUnion,debug=false,du=1E-14)
     max_int = typemax(Int64)
     #println(sig)
     #csig = copy(sig)
+    #println("hier???")
     x0 = xs[edge[1]]
+    dim = size(x0)[1]
     
     full_mode = typeof(cast_type)==Raycast_By_Walkray
     
@@ -814,14 +911,14 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     #__t2 = t
     first_t = t
     _vvv = r+t*u
-    scale = get_scale(u, x0,_vvv)
+    scale = in_bounds(searcher.mins,searcher.maxs,_vvv) ? 1.0 : get_scale(u, x0,_vvv,x)
     relative_error = full_error / norm(_vvv-r)
 
     debugprint("b")
     full_mode &= (relative_error>1E-10 || full_error>1E-8/max(scale,1E-4))
     t += get_t_hp_(_vvv,u,x0,x,du)[1]
     _vvv_tu = _vvv+t*u
-    full_mode && prepare_vertex_calculation(sig,xs,searcher.hp_vars)
+    full_mode && prepare_vertex_calculation(edge,xs,searcher.hp_vars)
     vvv = full_mode ? vertex_calculation_hp(edge,xs,searcher.hp_vars,_vvv_tu,u,i) : _vvv_tu
     debug && println(vvv,t)
     _r, t, new_i = get__r(vvv,edge,searcher,skip,t,xs,u,r,x0,full_mode,full_error,du,debug,first_t)
@@ -868,7 +965,7 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     #debug && println(vvv-_r)
     upper_t = t*1.0000000001 #+2*measure
     idss = _inrange(searcher.tree,_r,(1+max(relative_error,searcher.b_nodes_tol*10*scale))*measure)
-    #println(idss)
+    #println(13 in idss)
     lidss = length(idss)
     debug && println(idss)
     #lidss==0 && error("")
@@ -893,13 +990,13 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
             upper_t = ts[k] 
         end
     end
+    #println(13 in idss)
     #println(idss)
     debug && println(ts,", ",t)
     debug && println(idss)
     max_dist = 0.0
     generator = 0
-    
-        upper_t += min(10E-8,(10+size(x0)[1])*full_error)#searcher.plane_tolerance
+        upper_t += upper_t_error(x0,full_error) #searcher.plane_tolerance
         k=0
         while k<lidss
             k += 1
@@ -922,7 +1019,15 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     debugprint("e")
 
     t = get_t_hp(r,u,x0,xs[generator])# (sum(abs2, r - xs[generator]) - sum(abs2, r - x0)) / (2 * u' * (xs[generator]-x0))
-    r2 = correct_cast_hp(edge,xs,searcher.hp_vars,r+t*u,u,generator,cast_type,full_mode)
+    pre_r2 = r+t*u
+    vv_correct = variance_tol(eltype(eltype(xs)))*1E-5<vertex_variance(edge,pre_r2,xs,min(dim,length(edge)-1),searcher.ddd)
+    #println(vv_correct)
+    #println(pre_r2,vertex_variance(edge,pre_r2,xs,min(dim,length(edge)-1),searcher.ddd))
+    #println(edge)
+    #println(full_mode)
+    vv_correct && !full_mode && prepare_vertex_calculation(edge,xs,searcher.hp_vars)
+    r2 = correct_cast_hp(edge,xs,searcher.hp_vars,pre_r2,u,generator,cast_type,full_mode || vv_correct)
+    #println(r2,vertex_variance(edge,r2,xs,min(dim,length(edge)-1),searcher.ddd))
     minmeas = maxmeas = norm(xs[generator]-r2)
     for s in sig 
         n2 = norm(xs[s]-r2) 
@@ -931,9 +1036,18 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     end
     #measure2 = max(maximum(norm(xs[s]-r2) for s in sig),norm(xs[generator]-r2))
     #max_delta = max(maximum(abs(norm(xs[s]-r2)-measure2) for s in sig),abs(norm(xs[generator]-r2)-measure2))
-    measure2 = maxmeas+scale*(maxmeas-minmeas)
+    measure2 = maxmeas+10*dim*scale*max((maxmeas-minmeas),full_error)
 #    measure2 = max(measure2, norm(xs[generator]-r2)) * (1+scale*searcher.b_nodes_tol)#+1E-16)
     k=0
+        #println(21 in idss)
+        #println(du)
+        #println(maxmeas-minmeas)
+        #println(maxmeas)
+        #println(full_error)
+        #println(scale)
+        #println(get_scale(u,xs[generator],r2,xs[generator]))
+        #println(idss)
+
     while k<lidss
         k += 1
         if (idss[k]<max_int && norm(xs[idss[k]]-r2)>measure2) #|| ts[k]==0.0
@@ -942,6 +1056,7 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
             debug && println(idss[k],": ",norm(xs[idss[k]]-r2),", ",measure2,", ",scale) 
         end
     end
+    #println(21 in idss)
     #println(idss)
     #println("---------------------------------------------")
 
@@ -985,7 +1100,7 @@ function raycast_des2(sig::Sigma, r, u, xs, searcher::RaycastIncircleSkip, old ,
     first_t, full_error = get_t_hp_(r,u,x0,xs[i],du) #(sum(abs2, r - x) - sum(abs2, r - x0)) / (2 * u' * (x-x0))
     current_t = Inf64
     _vvv = r+first_t*u
-    scale = get_scale(u, x0,_vvv)
+    scale = get_scale(u, x0,_vvv,xs[i])
     relative_error = full_error / norm(_vvv)
 
     full_mode = (relative_error>1E-10 || full_error>1E-8/max(scale,1E-4))

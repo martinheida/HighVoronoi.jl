@@ -58,6 +58,7 @@ function _external_indeces(m::AM,inds::AVI,buffer::AVII) where {AM<:AbstractMesh
     end
     return ret
 end
+#=
 @inline function _external_indeces_fit(m::AM,inds::AVI,buffer::AVII) where {AM<:AbstractMesh,AVI<:AbstractVector{Int64},AVII<:AbstractVector{Int64}} 
     li = length(inds)
     #ret = buffer
@@ -66,6 +67,7 @@ end
     end
     sort!(buffer)
 end
+=#
 
 @inline function _external_indeces(m::AM,inds::AVI) where {AM<:AbstractMesh,AVI<:AbstractVector{Int64}} 
     _external_indeces(m,inds,inds) 
@@ -145,12 +147,14 @@ This function checks if the provided external representation `v` corresponds to 
     return haskey(m,iv,iv[1])
 end
 
+#=
 @inline function haskey_multithread(m::AM, v::AVI) where {AM<:AbstractMesh, AVI<:AbstractVector{Int64}} 
     c = copy(v)
     _internal_indeces(m,v,c)
     sort!(c)
     return haskey(m,c,c[1])
 end
+=#
 
 """
 internal_sig(mesh::M, sig::AVI) where {M<:AbstractMesh, AVI<:AbstractVector{Int64}}
@@ -218,10 +222,11 @@ convert_to_vector(pbi::PBI) where {PBI<:Public_BV_Iterator} = begin
     return ret
 end
 
-function verify_mesh(mesh,boundary)
-    searcher = Raycast(copy(nodes(mesh)),domain=boundary)
+function verify_mesh(mesh,boundary,counting=false)
+    #=searcher = Raycast(copy(nodes(mesh)),domain=boundary)
     c1 = 0
     c2 = 0
+    count = 0
     for i in 1:length(mesh)
         searcher.tree.active .= false
         activate_cell( searcher, i, collect((searcher.lmesh+1):(searcher.lmesh+searcher.lboundary) ))
@@ -231,6 +236,7 @@ function verify_mesh(mesh,boundary)
                 error("")
             end
             if !verify_vertex(sig,r,searcher.tree.extended_xs,searcher,true)
+                
                 xs = searcher.tree.extended_xs
                 idx = sort!(_inrange(searcher.tree,r,norm(r-xs[sig[1]])*(1+1E-8)))
                 neigh = Int64[]
@@ -240,7 +246,7 @@ function verify_mesh(mesh,boundary)
                     count += 1
                 end
                 #unique!(sort!(neigh))
-                error("$i, $sig, $idx, $r, $(nn(searcher.tree.tree,r)), $count, $neigh")
+                !counting && error("$i, $sig, $idx, $r, $(nn(searcher.tree.tree,r)), $count, $neigh")
                 c1 += 1
             else
                 c2 += 1
@@ -249,8 +255,8 @@ function verify_mesh(mesh,boundary)
                 return false
             end
         end
-    end
-    return true
+    end=#
+    return c1==0
 end
 
 function compare(mesh1::AM1,mesh2::AM2,full=false) where {AM1<:AbstractMesh,AM2<:AbstractMesh}
@@ -421,6 +427,7 @@ end
     return default
 end
 
+#=
 struct VertexIndIterator{AM<:AbstractMesh,AVR<:AbstractVector{Int64},L}
     m::AM
     refs::AVR
@@ -450,7 +457,7 @@ end
     readunlock(vi.lock)
     return default
 end
-
+=#
 
 struct VertexDictIterator{T,AVR<:AbstractVector{Pair{Vector{Int64},T}},L}
     pairs::AVR

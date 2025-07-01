@@ -1,12 +1,14 @@
 using Test
 #using Revise
 using HighVoronoi
+using HighVoronoi: statictrue, staticfalse
 
 using SpecialFunctions
 using LinearAlgebra
 using SparseArrays
 using StaticArrays
 using JLD2
+using DoubleFloats
 
 
 const global_silence = false
@@ -24,6 +26,7 @@ const global_silence = false
     include("convexhull.jl")
     include("sphere.jl")
     include("voronoidata.jl")
+    include("voronoiedgedata.jl")
     include("statistics.jl")
     include("fraud.jl")
     include("periodicgrids.jl")
@@ -38,3 +41,4 @@ const global_silence = false
     include("fv.jl")
 
 end
+

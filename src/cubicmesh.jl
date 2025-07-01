@@ -206,9 +206,13 @@ function first_cube(mesh,deviation,cell_size,searcher)
     end
 end
 
+
+
 function cubic_voronoi(domain,periodicity,deviation,cell_size,search,my_integrator,integrand,periodicview)
     extended_cube = internal_boundary(domain)
-    Integral = IntegralView(HighVoronoi.integral(domain),periodicview)
+    internal_integral = HighVoronoi.integral(domain)
+    #enable(internal_integral, enforced = true)
+    Integral = IntegralView(internal_integral,periodicview)
     mesh = HighVoronoi.mesh(Integral)
     xs = copy(nodes(mesh))
     dim = length(xs[1])
@@ -224,7 +228,7 @@ function cubic_voronoi(domain,periodicity,deviation,cell_size,search,my_integrat
     _function = integrand
     get_volumes = enabled_volumes(Integral)
     data = IntegrateData(xs,extended_cube,Integrator) 
-    
+    enable(internal_integral, enforced = true)    # unlocks all internal "integral" fields but comes with an unneccessary data overhead... 
     # data for first cell:
     vol_vector = deviation + cell_size 
     vol_vector2 = cell_size - deviation
@@ -243,6 +247,11 @@ function cubic_voronoi(domain,periodicity,deviation,cell_size,search,my_integrat
         neighbors[2*i-1] = index_from_array(index,periodicity)
         index[i]=1
     end
+    #NNN = nodes(HighVoronoi.mesh(integrate_view(domain).integral))
+    #for i in 1:length(NNN)
+    #    println(NNN[i])  
+    #end
+    #erro()
     set_neighbors(Integral,1,copy(neighbors),proto,proto)
     quicksort!(neighbors,neighbors,area)
     cdw = cell_data_writable(Integral,1,proto,[proto])
@@ -251,8 +260,8 @@ function cubic_voronoi(domain,periodicity,deviation,cell_size,search,my_integrat
         cdw.volumes[1] = prod(vol_vector)
     end
 
-    integrate_cube(1, data,Integrator,Integral,proto,_function)    
-    println(cell_data_writable(Integral,1,proto,[proto]))
+    integrate_cube(1, data,Integrator,Integral,proto,_function)  
+    #println(cell_data_writable(Integral,1,proto,[proto]))
     pc = Periodic_Counter(periodicity)
     increase(pc)
     indeces = zeros(Int64,3^(dim-1))

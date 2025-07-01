@@ -15,6 +15,14 @@
         deepcopy(vd.nodes)
         deepcopy(vd.vertices)
         deepcopy(vd.boundary_nodes)
+        #println(typeof(vd.boundary_nodes[1]))
+        #println(typeof(vd.boundary_nodes.neighbors.data))
+        #println(isassigned(vd.boundary_nodes.neighbors,vd.boundary_nodes.offset+1))
+        #println("key: ",HighVoronoi.haskey2(vd.boundary_nodes,1))
+        for i in 1:100 
+            print(length(vd.boundary_nodes[i]))
+        end
+        println()
         deepcopy(vd.boundary_vertices)
         deepcopy(vd.neighbors)
         deepcopy(vd.orientations)

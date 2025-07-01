@@ -260,6 +260,7 @@ end
 end
 
 @inline function enable(inte::III; neighbors=false,volume=false,integral=false,enforced=false) where III<:SerialIntegral
+    #println("hier enable: enforced=$enforced")
     volume |= integral
     neighbors |= volume 
     inte.enable_volume|=volume
@@ -308,10 +309,6 @@ end
 @inline function get_integral(I::SerialIntegral,c,n,::StaticTrue)
     found = meshindex_from_internal(mesh(I),c)
     c2 = c-I.integrals[found].data._start+1
-    try
         return get_integral(I.integrals[found].integral,c2,n,statictrue)
-    catch
-        error("$found, \n $c2, \n $c")
-    end
 end
 

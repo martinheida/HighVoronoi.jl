@@ -1,3 +1,12 @@
+#=vg2 = VoronoiGeometry(VoronoiNodes(rand(4,500)),cuboid(4,periodic=[1]),integrator=HighVoronoi.VI_POLYGON,integrand = x->[1.0,x[1],x[2]],silence=global_silence)
+#for i in 100:110 
+#    @test length(HighVoronoi.adjacents_of_cell(i, vg2.Integrator.Integral.MESH))>0
+#end
+vd = VoronoiData(vg2)
+println(length(vd.bulk_integral))
+println(vd.bulk_integral[1])
+error()
+=#
 
 @testset "VoronoiGeometry" begin
     function boundary_tests()
@@ -44,6 +53,7 @@
     #    @test length(HighVoronoi.adjacents_of_cell(i, vg2.Integrator.Integral.MESH))>0
     #end
     @test abs(sum( x->x[1], VoronoiData(vg2).bulk_integral)-1.0)<1.0E-2
+    #error()
 
     vg2b = VoronoiGeometry( vg2, integrator=HighVoronoi.VI_HEURISTIC, integrand = x->[1.0] ,silence=global_silence)
     @test abs(sum( abs, map(x->x[1],VoronoiData(vg2b).bulk_integral))-1.0)<1.0E-1
@@ -55,7 +65,9 @@
 end
 
 @testset "improving" begin
-    VG = VoronoiGeometry(VoronoiNodes(rand(2,20)),cuboid(2,periodic=[]),improving=(max_iterations=5,))
+    VG = VoronoiGeometry(VoronoiNodes(rand(3,200)),cuboid(3,periodic=[1]),improving=(max_iterations=5,),integrator=VI_FAST_POLYGON,integrand=x->[x[1]^2],integrate=true,)
+    HighVoronoi.improve!(VG,search_settings=(method=RCCombined,threading=SingleThread()),overwrite_search_settings=true,integrator=VI_FAST_POLYGON,integrand=x->[1.0],integrate=true,improving = (method=HighVoronoi.LLoyd(1,0.7;tolerance_function = (x,y,v)->v*norm(x-y)^2),silence=false))
+#vg2 = VoronoiGeometry(VoronoiNodes(rand(3,200)),cuboid(3,periodic=[1]),improving=(max_iterations=5,))
     @test true
 end
 

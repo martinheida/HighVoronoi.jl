@@ -249,10 +249,12 @@ struct Raycast_Non_General end
 const RCNonGeneralFast = Raycast_Non_General()
 struct Raycast_Non_General_Skip end 
 const RCNonGeneralSkip = Raycast_Non_General_Skip()
-struct Raycast_Combined end
-const RCCombined = Raycast_Combined()
 
 abstract type Raycast_HP end
+
+struct Raycast_Combined<:Raycast_HP end
+const RCCombined = Raycast_Combined()
+
 struct Raycast_Non_General_HP<:Raycast_HP end
 const RCNonGeneralHP = Raycast_Non_General_HP()
 struct Raycast_Non_General_Asymptotic_General_HP<:Raycast_HP 
@@ -370,7 +372,7 @@ function getMultiThreadRaycasters(rc::RR,meshes::PP) where {RR,PP}
     return rcs
 end
 
-mutable struct RaycastIncircleSkip{T,TTT,TTTTT,TTTTTT,FEI,PA,FLOAT,CORRECTOR_FLOAT,HP}
+mutable struct RaycastIncircleSkip{T,TTT,TTTTT,TTTTTT,FEI,PA,FLOAT,CORRECTOR_FLOAT,HP,P}
     tree::T
     lmesh::Int64
     lboundary::Int64
@@ -393,6 +395,8 @@ mutable struct RaycastIncircleSkip{T,TTT,TTTTT,TTTTTT,FEI,PA,FLOAT,CORRECTOR_FLO
     FEIStorage_global::FEI
     parameters::PA
     hp_vars::HP
+    mins::P
+    maxs::P
 end
 
 struct HP_corrector_data{CORRECTOR_FLOAT}
@@ -405,6 +409,7 @@ struct HP_corrector_data{CORRECTOR_FLOAT}
     end
 end
 HPCorrector(dim,::RCHP) where {RCHP<:Raycast_HP} = HP_corrector_data(dim,Double64)
+HPCorrector(dim,::Type{RCHP}) where {RCHP<:Raycast_HP} = HP_corrector_data(dim,Double64)
 HPCorrector(dim,_) = nothing
 
 CORRECTOR_FLOAT(::RCHP) where {RCHP<:Raycast_HP} = Double64
@@ -425,9 +430,11 @@ function RaycastIncircleSkip(xs_::HN,dom,parameters::NewRaycastParameter{FLOAT,T
     EI2 = FastEdgeIterator(zeros(P),1E-8)
     FEIStorage_global = ThreadSafeDict(Dict{Vector{Int64},DimFEIStorage{length(xs[1])}}(),parameters.threading)
     #sizehint!(FEIStorage_global,length(xs)*2^(length(xs[1])-1))    
+    mins, maxs = bounding_box(dom,xs_)
+    set_bounding_box(tree,mins,maxs)
     return RaycastIncircleSkip( tree, lxs, length(dom), zeros(Int64,lxs+length(dom)+3), z1d_1, 
     BitVector(zeros(Int8,length(xs))), z2d_1, z2d_2, z1d_2, z1d_3, z1d_4, dom, 
-    zeros(Int64,SRI_max),dim,EI,EI2,xs,General_EdgeIterator(P),General_EdgeIterator(P),FEIStorage_global,parameters,HPCorrector(dim,parameters.method))
+    zeros(Int64,SRI_max),dim,EI,EI2,xs,General_EdgeIterator(P),General_EdgeIterator(P),FEIStorage_global,parameters,HPCorrector(dim,parameters.method),mins,maxs)
 end
 
 function copy_RaycastIncircleSkip(original::RaycastIncircleSkip{T, TTT, TTTTT, TTTTTT, FEI, PA, FLOAT}) where {T, TTT, TTTTT, TTTTTT, FEI, PA, FLOAT}
