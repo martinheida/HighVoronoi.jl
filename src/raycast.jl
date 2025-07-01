@@ -90,7 +90,7 @@ function descent(xs::Points, searcher::RaycastIncircleSkip, start,circle::Int64=
                 b = false
                 if t == Inf
                     u = -u
-                HighVoronoi.global_data=(copy(sig),r,u,xs,searcher,0,copy(sig),copy(sig),Raycast_By_Descend())
+                #HighVoronoi.global_data=(copy(sig),r,u,xs,searcher,0,copy(sig),copy(sig),Raycast_By_Descend())
                     generator, t, r2 = raycast_des(sig, r, u, xs, searcher,0,sig,sig,Raycast_By_Descend())
                 end
                 if t == Inf
