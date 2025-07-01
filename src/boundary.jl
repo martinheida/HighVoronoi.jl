@@ -134,6 +134,8 @@ function Boundary()
     return Boundary(Plane[],true)
 end
 
+
+
 ####################  OUTPUT REPRESENTATION ####################################################################
 
 function boundaryToString(B::Boundary;offset=0)

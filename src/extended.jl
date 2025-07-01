@@ -104,6 +104,9 @@ struct ExtendedTree{P<:Point,T<:AbstractTree{P},TTT<:AbstractExtendedNodes{P}} <
         return new{P,T,TTT}(UnstructuredTree(old.tree),old.extended_xs,old.active,old.size,old.mirrors)
     end
 end
+    set_bounding_box(tree::ExtendedTree,mins,maxs) = set_bounding_box(tree.tree,mins,maxs)
+
+
 
 function nn(tree::ExtendedTree,x::Point,skip=(x->false))::Tuple{Int64,Float64}
     index, dist = nn(tree.tree,x,skip)

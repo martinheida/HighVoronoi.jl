@@ -260,6 +260,7 @@ end
 end
 
 @inline function enable(inte::III; neighbors=false,volume=false,integral=false,enforced=false) where III<:SerialIntegral
+    #println("hier enable: enforced=$enforced")
     volume |= integral
     neighbors |= volume 
     inte.enable_volume|=volume

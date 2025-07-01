@@ -140,6 +140,7 @@ include("boundary.jl")
 
 include("nodes.jl") # HVNodes, AbstractCombinedNodes, NodesContainer, UnsortedNodes, 
                     # ExtendedNodes, SortedNodes, NodesView
+include("bounding_box.jl")
 include("extended.jl")
 include("abstractmesh.jl")  # AbstractMesh, MeshContainer
 include("filter.jl")
